@@ -7,7 +7,7 @@ required.
 Tracing degrades gracefully:
 - a no-op when ``POSTHOG_TOKEN`` is unset, and
 - a no-op when the OpenTelemetry packages are not installed (e.g. before the
-  backend image has been rebuilt with the new requirements).
+  backend image has been rebuilt with the updated dependencies).
 """
 
 import os

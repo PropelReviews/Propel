@@ -46,10 +46,17 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  analyticsName,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /**
+     * Stable identifier for analytics, independent of the button's label text.
+     * Emitted as `data-ph-capture-attribute-name` so PostHog autocapture records
+     * a consistent name for the click event.
+     */
+    analyticsName?: string
   }) {
   const Comp = asChild ? Slot.Root : "button"
 
@@ -58,6 +65,12 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
+      // PostHog autocapture lifts `data-ph-capture-attribute-*` onto the
+      // `$autocapture` event, so every click carries structured metadata.
+      data-ph-capture-attribute-component="button"
+      data-ph-capture-attribute-variant={variant}
+      data-ph-capture-attribute-size={size}
+      data-ph-capture-attribute-name={analyticsName}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

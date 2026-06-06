@@ -43,13 +43,14 @@ Your tools (GitHub, Linear, Cursor)
 
 | Layer | Tool |
 |---|---|
+| Auth & multi-tenancy | FastAPI — users, tenants, roles ([data model](docs/backend/data-model.md)) |
 | Extraction | Meltano |
 | Database | Postgres |
 | Transformations | dbt |
 | Backend | FastAPI (Python) |
 | Frontend | React |
 
-Meltano extracts, Postgres stores, dbt transforms, and Propel presents. Each layer is either in this repository or a well-known open source project you can audit on your own.
+Meltano extracts, Postgres stores, dbt transforms, and Propel presents. The API includes a multi-tenant auth layer (users, organizations, role-based access) above the analytics pipeline. See [docs/backend/data-model.md](docs/backend/data-model.md) for entity relationships.
 
 ## Deployment
 

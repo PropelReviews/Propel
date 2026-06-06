@@ -89,6 +89,10 @@ task. Set it locally in `terraform.tfvars`, or wire specific GitHub **secrets**
 into `app.auto.tfvars.json` in the workflow. To diverge config per environment,
 use GitHub **Environment-scoped** variables.
 
+Include `JWT_SECRET` and OAuth client secrets (`OAUTH_GOOGLE_CLIENT_SECRET`,
+`OAUTH_GITHUB_CLIENT_SECRET`) in `app_secrets`; non-secret OAuth client IDs
+can live in `app_environment` (GitHub Actions variables).
+
 ---
 
 ## Deploy

@@ -8,8 +8,8 @@ for the API that is shipped to AWS.
 
 | Image / file | Where it runs | How it's built | Deployed to AWS? |
 |--------------|---------------|----------------|------------------|
-| `dev.Dockerfile` | Local dev container (editor) | `docker compose` (service `dev`) | No |
-| `backend.Dockerfile` | Local `backend` service | `docker compose`, source bind-mounted, `uvicorn --reload` | No |
+| `dev.Dockerfile` | Local dev container (editor) | `docker compose` (service `dev`; includes uv) | No |
+| `backend.Dockerfile` | Local `backend` service | `docker compose`, source bind-mounted, `uvicorn --reload` (deps via uv) | No |
 | `frontend.Dockerfile` | Local `frontend` service | `docker compose`, source bind-mounted, `vite dev` | No |
 | `postgres:16` | Local `postgres` service | Pulled image | No (RDS Aurora in AWS) |
 | `backend.prod.Dockerfile` | **ECS Fargate** | `docker build` (context `backend/`) -> ECR | **Yes** |
@@ -35,8 +35,15 @@ docker compose up
 | frontend-landing | 5174 | Vite dev server (HMR) for the marketing landing site (apex/www in prod), `./frontend` bind-mounted |
 
 The `dev`, `backend`, and `frontend` services share the workspace bind mount, so
-edits are picked up automatically via hot reload. `node_modules` for the
-frontend lives on a shared volume (installed by `scripts/setup.sh`).
+edits are picked up automatically via hot reload.
+
+| Layer | Shared artifact | Installed by |
+|---|---|---|
+| Frontend | `frontend/node_modules` | `scripts/setup.sh` (`npm install`) |
+| Backend (dev shell) | `backend/.venv` | `scripts/setup.sh` (`uv sync`, includes dev deps) |
+| Backend (API container) | `/opt/venv` in the container | `backend-entrypoint.sh` on start (`uv sync` from bind-mounted lockfile) |
+
+After `uv add`, restart the backend service — no image rebuild needed.
 
 ### Dev vs prod backend image
 

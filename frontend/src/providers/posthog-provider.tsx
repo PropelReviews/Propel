@@ -12,6 +12,16 @@ if (isPostHogEnabled && !posthog.__loaded) {
   posthog.init(posthogKey!, {
     api_host: posthogHost,
     person_profiles: "identified_only",
+    autocapture: true, // intentional: capture all element clicks
+    capture_pageview: true, // explicit (switch to "history_change" when a router is added)
+    capture_pageleave: true,
+    loaded: (ph) => {
+      ph.register({
+        app_environment: import.meta.env.VITE_APP_ENV ?? import.meta.env.MODE,
+        app_version: import.meta.env.VITE_APP_VERSION ?? "0.0.0",
+        git_sha: import.meta.env.VITE_GIT_SHA ?? "dev",
+      });
+    },
   });
 }
 

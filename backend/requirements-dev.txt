@@ -1,5 +1,0 @@
--r requirements.txt
-
-# Test tooling
-pytest
-httpx

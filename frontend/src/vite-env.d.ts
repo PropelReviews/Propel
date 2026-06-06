@@ -6,6 +6,9 @@ interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
   readonly VITE_APP_URL?: string;
   readonly VITE_GITHUB_URL?: string;
+  readonly VITE_APP_ENV?: string;
+  readonly VITE_APP_VERSION?: string;
+  readonly VITE_GIT_SHA?: string;
 }
 
 interface ImportMeta {

@@ -35,3 +35,5 @@ tcp_check  "Postgres" "postgres" "5432"
 echo
 echo "Host URLs:  backend http://localhost:8000  |  frontend http://localhost:5173"
 echo
+echo "Backend deps: edit in dev (uv add), then:  docker compose restart backend"
+echo

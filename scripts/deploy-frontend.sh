@@ -27,6 +27,9 @@ API_URL="$(terraform -chdir="$TF_DIR" output -raw api_url)"
 export VITE_API_URL="$API_URL"
 export VITE_POSTHOG_KEY="${VITE_POSTHOG_KEY:-${POSTHOG_TOKEN:-}}"
 export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://us.i.posthog.com}}"
+# Build-time analytics metadata so beta/prod builds are distinguishable in PostHog.
+export VITE_APP_ENV="$ENV"
+export VITE_GIT_SHA="${GITHUB_SHA:-$(git rev-parse --short HEAD)}"
 
 echo "==> Building SPA (VITE_API_URL=$VITE_API_URL)"
 npm --prefix "$FRONTEND_DIR" ci

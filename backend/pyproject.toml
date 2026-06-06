@@ -1,0 +1,31 @@
+[project]
+name = "propel-backend"
+version = "0.1.0"
+description = "Propel FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-fastapi",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "fastapi-users[sqlalchemy,oauth]",
+    "httpx-oauth",
+    "pydantic-settings",
+    "python-dotenv",
+    "email-validator",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
+
+[tool.uv]
+package = false

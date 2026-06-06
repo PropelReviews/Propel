@@ -1,7 +1,12 @@
+import { readFileSync } from "fs";
 import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+
+const pkg = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
+) as { version?: string };
 
 export default defineConfig(({ mode }) => {
   // Read env from the repo root (single shared .env for host dev) and from the
@@ -24,6 +29,17 @@ export default defineConfig(({ mode }) => {
       // (e.g. https://api.beta.propel.ninja); defaults to the local dev API.
       "import.meta.env.VITE_API_URL": JSON.stringify(
         env.VITE_API_URL ?? "http://localhost:8000",
+      ),
+      // Build-time metadata registered as PostHog super properties so every
+      // event is attributable to an environment, app version, and commit.
+      "import.meta.env.VITE_APP_ENV": JSON.stringify(
+        env.VITE_APP_ENV ?? mode,
+      ),
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(
+        env.VITE_APP_VERSION ?? pkg.version ?? "0.0.0",
+      ),
+      "import.meta.env.VITE_GIT_SHA": JSON.stringify(
+        env.VITE_GIT_SHA ?? env.GITHUB_SHA ?? "dev",
       ),
     },
     plugins: [react(), tailwindcss()],

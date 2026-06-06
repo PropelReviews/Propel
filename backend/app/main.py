@@ -1,9 +1,13 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import get_settings
+from app.routers import auth, invites, members, tenants
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
 
+settings = get_settings()
 tracer = get_tracer("propel-backend")
 
 
@@ -16,6 +20,21 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Propel", lifespan=lifespan)
+
+# Allow the browser SPA (a different origin) to call the API, including the
+# preflight OPTIONS request the browser sends before POSTs with a JSON body.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(tenants.router)
+app.include_router(members.router)
+app.include_router(invites.router)
 
 
 @app.get("/")

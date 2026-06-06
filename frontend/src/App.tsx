@@ -1,9 +1,15 @@
 import { useEffect } from "react";
 import { usePostHog } from "posthog-js/react";
+import { Link } from "react-router-dom";
+
 import { Button } from "@/components/ui/button";
+import { useAuthFlag } from "@/hooks/use-auth-flag";
+import { useAuth } from "@/providers/auth-provider";
 
 function App() {
   const posthog = usePostHog();
+  const authEnabled = useAuthFlag();
+  const { status, user, signOut } = useAuth();
 
   useEffect(() => {
     posthog?.capture("homepage_viewed");
@@ -16,7 +22,28 @@ function App() {
         Open source developer analytics for teams that want to trust their
         metrics.
       </p>
-      <Button>Get Started</Button>
+
+      {authEnabled && status === "authenticated" ? (
+        <div className="flex flex-col items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Signed in as {user?.name ?? user?.email}
+          </p>
+          <Button variant="outline" analyticsName="sign_out" onClick={signOut}>
+            Sign out
+          </Button>
+        </div>
+      ) : authEnabled ? (
+        <div className="flex items-center gap-3">
+          <Button asChild analyticsName="get_started">
+            <Link to="/signup">Get Started</Link>
+          </Button>
+          <Button asChild variant="outline" analyticsName="nav_sign_in">
+            <Link to="/signin">Sign in</Link>
+          </Button>
+        </div>
+      ) : (
+        <Button analyticsName="get_started">Get Started</Button>
+      )}
     </main>
   );
 }
