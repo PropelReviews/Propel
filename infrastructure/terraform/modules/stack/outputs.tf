@@ -6,6 +6,18 @@ output "frontend_url" {
   value = "https://${var.app_fqdn}"
 }
 
+output "landing_url" {
+  value = "https://${var.landing_fqdns[0]}"
+}
+
+output "landing_bucket" {
+  value = module.landing.bucket_name
+}
+
+output "landing_cloudfront_distribution_id" {
+  value = module.landing.distribution_id
+}
+
 output "ecr_repository_url" {
   value = module.api.ecr_repository_url
 }

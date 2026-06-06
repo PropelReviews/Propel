@@ -31,7 +31,8 @@ docker compose up
 |----------|------|-------|
 | postgres | 5432 | Postgres 16, named volume `pgdata` |
 | backend  | 8000 | FastAPI with `uvicorn --reload`, `./backend` bind-mounted |
-| frontend | 5173 | Vite dev server (HMR), `./frontend` bind-mounted |
+| frontend | 5173 | Vite dev server (HMR) for the app, `./frontend` bind-mounted |
+| frontend-landing | 5174 | Vite dev server (HMR) for the marketing landing site (apex/www in prod), `./frontend` bind-mounted |
 
 The `dev`, `backend`, and `frontend` services share the workspace bind mount, so
 edits are picked up automatically via hot reload. `node_modules` for the

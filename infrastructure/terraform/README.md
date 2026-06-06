@@ -4,7 +4,7 @@ Infrastructure-as-code for Propel's AWS deployment, in **us-east-1**:
 
 - **Aurora PostgreSQL Serverless v2** (private subnets)
 - **FastAPI on ECS Fargate** behind a **public HTTPS ALB**
-- **Vite SPA on S3 + CloudFront** (private bucket, Origin Access Control)
+- **Vite app + landing site on S3 + CloudFront** (private buckets, Origin Access Control)
 - **ACM + Route53** for TLS and DNS
 - **No CloudWatch** — the API ships observability to PostHog via OpenTelemetry
 
@@ -13,8 +13,10 @@ modules/
   network/    VPC (2 AZs, public/private), single NAT, ALB/ECS/RDS security groups
   database/   Aurora Serverless v2 cluster + writer, Secrets Manager DATABASE_URL
   api/        ECR, ECS Fargate cluster/task/service (no logConfiguration), ALB
-  frontend/   private S3 bucket + CloudFront (OAC, SPA fallback)
-  dns/        ACM cert (DNS-validated) for api + app FQDNs
+  frontend/   private S3 bucket + CloudFront (OAC, SPA fallback) for the app
+  landing/    private S3 bucket + CloudFront for the marketing site (apex + www,
+              www->apex redirect via CloudFront Function)
+  dns/        ACM cert (DNS-validated) for api + app + landing (apex/www) FQDNs
   stack/      composes all of the above + Route53 alias records
 environments/
   beta/       account 536270449640, zone beta.propel.ninja
@@ -23,10 +25,13 @@ environments/
 
 ## Accounts & domains
 
-| Env  | Account        | Zone                | API                       | Frontend                  |
-|------|----------------|---------------------|---------------------------|---------------------------|
-| beta | 536270449640   | `beta.propel.ninja` | `api.beta.propel.ninja`   | `app.beta.propel.ninja`   |
-| prod | 616938645090   | `propel.ninja`      | `api.propel.ninja`        | `app.propel.ninja`        |
+| Env  | Account        | Zone                | API                       | App                       | Landing (apex + www)                          |
+|------|----------------|---------------------|---------------------------|---------------------------|-----------------------------------------------|
+| beta | 536270449640   | `beta.propel.ninja` | `api.beta.propel.ninja`   | `app.beta.propel.ninja`   | `beta.propel.ninja`, `www.beta.propel.ninja`  |
+| prod | 616938645090   | `propel.ninja`      | `api.propel.ninja`        | `app.propel.ninja`        | `propel.ninja`, `www.propel.ninja`            |
+
+The landing site is served from the zone apex and `www`; `www.*` is 301-redirected
+to the apex (the canonical URL) by a CloudFront Function. The app stays on `app.*`.
 
 The prod config delegates `beta.propel.ninja` from the `propel.ninja` zone by
 reading the beta zone's name servers cross-account (read-only) and writing the
@@ -97,7 +102,8 @@ seeding the first API image + frontend.
 
 ```bash
 curl https://api.beta.propel.ninja/health   # {"status":"ok"}
-open https://app.beta.propel.ninja
+open https://app.beta.propel.ninja           # app (dashboard)
+open https://beta.propel.ninja               # landing (www redirects here)
 ```
 
 ---

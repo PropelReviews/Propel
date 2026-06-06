@@ -6,6 +6,18 @@ output "frontend_url" {
   value = module.stack.frontend_url
 }
 
+output "landing_url" {
+  value = module.stack.landing_url
+}
+
+output "landing_bucket" {
+  value = module.stack.landing_bucket
+}
+
+output "landing_cloudfront_distribution_id" {
+  value = module.stack.landing_cloudfront_distribution_id
+}
+
 output "ecr_repository_url" {
   value = module.stack.ecr_repository_url
 }

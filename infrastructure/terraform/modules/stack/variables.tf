@@ -18,6 +18,11 @@ variable "app_fqdn" {
   description = "Frontend FQDN, e.g. app.beta.propel.ninja."
 }
 
+variable "landing_fqdns" {
+  type        = list(string)
+  description = "Landing site FQDNs (apex + www), e.g. [\"propel.ninja\", \"www.propel.ninja\"]. The first entry is treated as the canonical apex."
+}
+
 variable "container_port" {
   type        = number
   description = "FastAPI container port."

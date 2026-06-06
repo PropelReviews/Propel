@@ -25,6 +25,7 @@ htmlcov/
 # Node
 node_modules/
 dist/
+dist-landing/
 .vite/
 *.tsbuildinfo
 

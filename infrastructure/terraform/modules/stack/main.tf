@@ -36,11 +36,12 @@ module "database" {
 }
 
 module "dns" {
-  source   = "../dns"
-  zone_id  = var.zone_id
-  api_fqdn = var.api_fqdn
-  app_fqdn = var.app_fqdn
-  tags     = var.tags
+  source        = "../dns"
+  zone_id       = var.zone_id
+  api_fqdn      = var.api_fqdn
+  app_fqdn      = var.app_fqdn
+  landing_fqdns = var.landing_fqdns
+  tags          = var.tags
 }
 
 module "api" {
@@ -69,6 +70,16 @@ module "frontend" {
   tags                = var.tags
 }
 
+# Marketing landing site served on the apex + www domains (separate S3 +
+# CloudFront from the app frontend so the two deploy independently).
+module "landing" {
+  source              = "../landing"
+  name_prefix         = var.name_prefix
+  domain_names        = var.landing_fqdns
+  acm_certificate_arn = module.dns.certificate_arn
+  tags                = var.tags
+}
+
 # api.<zone> -> ALB
 resource "aws_route53_record" "api" {
   zone_id = var.zone_id
@@ -91,6 +102,21 @@ resource "aws_route53_record" "app" {
   alias {
     name                   = module.frontend.distribution_domain_name
     zone_id                = module.frontend.distribution_hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# Landing FQDNs (apex + www) -> landing CloudFront. One alias per name.
+resource "aws_route53_record" "landing" {
+  for_each = toset(var.landing_fqdns)
+
+  zone_id = var.zone_id
+  name    = each.value
+  type    = "A"
+
+  alias {
+    name                   = module.landing.distribution_domain_name
+    zone_id                = module.landing.distribution_hosted_zone_id
     evaluate_target_health = false
   }
 }
