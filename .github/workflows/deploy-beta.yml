@@ -79,3 +79,6 @@ jobs:
 
       - name: Build & publish frontend
         run: ./scripts/deploy-frontend.sh beta
+
+      - name: Build & publish landing
+        run: ./scripts/deploy-landing.sh beta

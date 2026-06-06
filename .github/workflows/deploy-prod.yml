@@ -83,3 +83,6 @@ jobs:
 
       - name: Build & publish frontend
         run: ./scripts/deploy-frontend.sh prod
+
+      - name: Build & publish landing
+        run: ./scripts/deploy-landing.sh prod

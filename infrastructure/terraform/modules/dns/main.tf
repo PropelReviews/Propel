@@ -7,12 +7,13 @@ terraform {
   }
 }
 
-# One ACM certificate (us-east-1) covering both the API and frontend FQDNs.
-# Because the whole stack is in us-east-1, the same cert serves the ALB (api)
-# and CloudFront (app). DNS-validated against the environment's hosted zone.
+# One ACM certificate (us-east-1) covering the API, frontend, and landing FQDNs.
+# Because the whole stack is in us-east-1, the same cert serves the ALB (api),
+# the app CloudFront distribution, and the landing CloudFront distribution
+# (apex + www). DNS-validated against the environment's hosted zone.
 resource "aws_acm_certificate" "this" {
   domain_name               = var.api_fqdn
-  subject_alternative_names = [var.app_fqdn]
+  subject_alternative_names = concat([var.app_fqdn], var.landing_fqdns)
   validation_method         = "DNS"
 
   lifecycle {
