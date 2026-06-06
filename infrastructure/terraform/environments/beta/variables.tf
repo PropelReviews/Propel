@@ -1,0 +1,63 @@
+variable "aws_region" {
+  type        = string
+  default     = "us-east-1"
+  description = "Deployment region (also where the CloudFront ACM cert must live)."
+}
+
+variable "environment" {
+  type        = string
+  default     = "beta"
+  description = "Environment name; used in resource prefixes and tags."
+}
+
+variable "zone_name" {
+  type        = string
+  default     = "beta.propel.ninja"
+  description = "Existing Route53 hosted zone for this environment (manual prereq)."
+}
+
+variable "api_subdomain" {
+  type        = string
+  default     = "api"
+  description = "Subdomain label for the API."
+}
+
+variable "app_subdomain" {
+  type        = string
+  default     = "app"
+  description = "Subdomain label for the frontend."
+}
+
+variable "db_min_acu" {
+  type    = number
+  default = 0.5
+}
+
+variable "db_max_acu" {
+  type    = number
+  default = 2
+}
+
+variable "api_image_tag" {
+  type        = string
+  default     = "latest"
+  description = "ECR image tag the API service runs."
+}
+
+variable "api_desired_count" {
+  type    = number
+  default = 1
+}
+
+variable "app_environment" {
+  type        = map(string)
+  default     = {}
+  description = "Plain env vars for the API container. CI forwards all GitHub Actions variables here (e.g. POSTHOG_TOKEN, POSTHOG_HOST)."
+}
+
+variable "app_secrets" {
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+  description = "Sensitive key/value pairs stored in Secrets Manager and injected into the API container."
+}

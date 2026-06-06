@@ -76,6 +76,12 @@ No account required. No API keys phoning home. No telemetry unless you opt in.
 
 Best if you have compliance requirements, want to run on private infrastructure, or prefer to operate the stack yourself.
 
+## Documentation
+
+Full documentation lives in [`docs/`](docs/README.md), including the AWS
+[deployment bootstrap runbook](docs/deployment/bootstrap.md),
+[CI/CD](docs/deployment/cicd.md), and [local AWS SSO](docs/deployment/aws-sso.md).
+
 ## Contributing
 
 Propel welcomes contributions — code, metrics, documentation, and bug reports. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.

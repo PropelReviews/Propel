@@ -1,0 +1,96 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.5"
+    }
+  }
+}
+
+# Full per-environment stack: VPC + Aurora Serverless v2 + ECS/ALB API +
+# S3/CloudFront frontend + ACM cert + Route53 alias records. Shared by the
+# beta and prod environment roots so they stay (almost) identical.
+
+module "network" {
+  source         = "../network"
+  name_prefix    = var.name_prefix
+  container_port = var.container_port
+  tags           = var.tags
+}
+
+module "database" {
+  source                = "../database"
+  name_prefix           = var.name_prefix
+  subnet_ids            = module.network.private_subnet_ids
+  rds_security_group_id = module.network.rds_security_group_id
+  db_name               = var.db_name
+  min_acu               = var.db_min_acu
+  max_acu               = var.db_max_acu
+  skip_final_snapshot   = var.db_skip_final_snapshot
+  deletion_protection   = var.db_deletion_protection
+  tags                  = var.tags
+}
+
+module "dns" {
+  source   = "../dns"
+  zone_id  = var.zone_id
+  api_fqdn = var.api_fqdn
+  app_fqdn = var.app_fqdn
+  tags     = var.tags
+}
+
+module "api" {
+  source                  = "../api"
+  name_prefix             = var.name_prefix
+  vpc_id                  = module.network.vpc_id
+  public_subnet_ids       = module.network.public_subnet_ids
+  private_subnet_ids      = module.network.private_subnet_ids
+  alb_security_group_id   = module.network.alb_security_group_id
+  ecs_security_group_id   = module.network.ecs_security_group_id
+  acm_certificate_arn     = module.dns.certificate_arn
+  database_url_secret_arn = module.database.database_url_secret_arn
+  app_environment         = var.app_environment
+  app_secrets             = var.app_secrets
+  container_port          = var.container_port
+  image_tag               = var.api_image_tag
+  desired_count           = var.api_desired_count
+  tags                    = var.tags
+}
+
+module "frontend" {
+  source              = "../frontend"
+  name_prefix         = var.name_prefix
+  domain_name         = var.app_fqdn
+  acm_certificate_arn = module.dns.certificate_arn
+  tags                = var.tags
+}
+
+# api.<zone> -> ALB
+resource "aws_route53_record" "api" {
+  zone_id = var.zone_id
+  name    = var.api_fqdn
+  type    = "A"
+
+  alias {
+    name                   = module.api.alb_dns_name
+    zone_id                = module.api.alb_zone_id
+    evaluate_target_health = true
+  }
+}
+
+# app.<zone> -> CloudFront
+resource "aws_route53_record" "app" {
+  zone_id = var.zone_id
+  name    = var.app_fqdn
+  type    = "A"
+
+  alias {
+    name                   = module.frontend.distribution_domain_name
+    zone_id                = module.frontend.distribution_hosted_zone_id
+    evaluate_target_health = false
+  }
+}
