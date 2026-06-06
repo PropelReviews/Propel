@@ -53,4 +53,8 @@ git push origin v1.2.3      # triggers deploy-prod.yml; approve in the Environme
   container and the SPA build. Repository/org-level variables still work as a
   fallback when an environment does not override them.
 - **`prod` Environment** — add required reviewers to gate prod deploys.
-- Per-account OIDC provider + `PropelTerraform` role (bootstrap Step 4).
+- Per-account OIDC provider + `PropelTerraform` role (bootstrap Step 4). Deploy
+  jobs bind GitHub Environments, so the OIDC `sub` claim is
+  `environment:beta` / `environment:prod` — not the branch ref. After changing
+  workflow `environment:` keys, re-apply both IAM trust policies from
+  [`bootstrap/`](../../infrastructure/terraform/bootstrap/README.md).
