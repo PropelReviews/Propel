@@ -16,9 +16,11 @@ AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
 1. **`config` job** — binds the `beta` / `prod` GitHub Environment so
    environment-scoped Actions variables are available (and prod approval runs
    here). This job does **not** call AWS.
-2. **`deploy` job** — checks out the repo and assumes `PropelTerraform` via OIDC
-   using branch/tag subjects (`refs/heads/main` or `refs/tags/v*`), not
-   `environment:*` subjects.
+2. **`deploy` job** — checks out the repo and assumes `PropelTerraform` via OIDC.
+   **Beta** uses the `refs/heads/main` subject (deploy job has no Environment).
+   **Prod** binds the `prod` Environment on the deploy job so the OIDC subject is
+   `environment:prod` (matches `prod-trust.json`); approval still runs only on
+   the `config` job.
 3. **Forward Actions variables to env** — vars from the `config` job become shell
    env vars (consumed by the SPA build, e.g. `VITE_*`, `POSTHOG_*`).
 4. **Generate app config** — `{"app_environment": <all vars>}` is written to
@@ -56,6 +58,8 @@ git push origin v1.2.3      # triggers deploy-prod.yml; approve in the Environme
   build. Repository/org-level variables still work as a fallback.
 - **`prod` Environment** — add required reviewers to gate prod deploys (runs on
   the `config` job).
-- Per-account OIDC provider + `PropelTerraform` role (bootstrap Step 4). Prod
-  auto-promote (`workflow_run`) assumes AWS via `refs/heads/main` — re-apply
-  `prod-trust.json` if that path was added after initial bootstrap.
+- Per-account OIDC provider + `PropelTerraform` role (bootstrap Step 4). If prod
+  OIDC fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity`,
+  re-apply `infrastructure/terraform/bootstrap/prod-trust.json` to the prod role
+  (the GitHub Environment was renamed `production` → `prod`; stale IAM trust
+  policies still reference `environment:production`).

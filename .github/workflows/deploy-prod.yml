@@ -39,6 +39,11 @@ jobs:
   deploy:
     needs: config
     runs-on: ubuntu-latest
+    # OIDC subject must be environment:prod (see prod-trust.json). Unlike beta,
+    # do not rely on refs/heads/main — workflow_run and workflow_dispatch refs
+    # are not always main. Approval already ran on config; same environment
+    # does not require a second gate in one workflow run.
+    environment: prod
     steps:
       - uses: actions/checkout@v4
         with:
