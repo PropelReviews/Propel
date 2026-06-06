@@ -30,6 +30,21 @@ The dev server listens on port `5173` by default.
 | `npm run build` | Type-check and build for production |
 | `npm run preview` | Preview production build locally |
 
+## Landing page preview
+
+During normal dev, the landing Vite app runs as `frontend-landing` on port 5174
+(see `infrastructure/docker/README.md`).
+
+To preview the prebuilt static artifact in `dist-landing/` (`landing.html` +
+assets), use the on-demand nginx service:
+
+```bash
+docker compose --profile landing up frontend-landing-static   # http://localhost:8080 (LANDING_PORT)
+```
+
+It is behind the `landing` Compose profile, so it does not start with the
+default `docker compose up` stack.
+
 ## Analytics
 
 Product analytics run through PostHog. Autocapture records every click/pageview,
@@ -48,6 +63,11 @@ Optional build-time env vars (all default sensibly):
 | `VITE_GIT_SHA` | Build commit SHA (defaults to `dev`) |
 | `VITE_API_URL` | Backend API base URL (defaults to `http://localhost:8000`) |
 | `VITE_AUTH_ENABLED` | Fallback to show auth when PostHog is disabled (default off) |
+
+PostHog error tracking and session replay are enabled in code when a key is set.
+Session replay must also be turned on in your PostHog project settings. Production
+deploys upload source maps when `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID`
+are set in the build environment — see [analytics docs](../docs/frontend/analytics.md).
 
 ## Auth (sign up / sign in)
 

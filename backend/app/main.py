@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth.middleware import AuthSecurityMiddleware
 from app.config import get_settings
 from app.routers import auth, invites, members, tenants
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
@@ -20,6 +21,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Propel", lifespan=lifespan)
+
+app.add_middleware(AuthSecurityMiddleware)
 
 # Allow the browser SPA (a different origin) to call the API, including the
 # preflight OPTIONS request the browser sends before POSTs with a JSON body.

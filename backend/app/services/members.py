@@ -29,18 +29,16 @@ async def list_members(session: AsyncSession, tenant_id: uuid.UUID) -> list[Memb
         .where(TenantMembership.tenant_id == tenant_id)
         .order_by(TenantMembership.created_at.asc())
     )
-    members: list[MemberRead] = []
-    for membership, user in result.all():
-        members.append(
-            MemberRead(
-                user_id=user.id,
-                email=user.email,
-                name=user.name,
-                role=membership.role,
-                created_at=membership.created_at,
-            )
+    return [
+        MemberRead(
+            user_id=user.id,
+            email=user.email,
+            name=user.name,
+            role=membership.role,
+            created_at=membership.created_at,
         )
-    return members
+        for membership, user in result.all()
+    ]
 
 
 async def assign_role(

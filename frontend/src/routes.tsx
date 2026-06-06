@@ -6,10 +6,7 @@ import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { SignInPage } from "@/pages/sign-in";
 import { SignUpPage } from "@/pages/sign-up";
 
-/**
- * Gates the auth routes behind the `signup-signin` feature flag. When the flag
- * is off, the routes do not exist for the user and redirect home.
- */
+/** Gates auth routes behind the `signup-signin` feature flag. */
 function RequireAuthFlag({ children }: { children: ReactNode }) {
   const authEnabled = useAuthFlag();
   if (!authEnabled) return <Navigate to="/" replace />;

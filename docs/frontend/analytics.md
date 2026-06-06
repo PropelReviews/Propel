@@ -12,7 +12,7 @@ Configured explicitly in `posthog.init`:
 
 | Event | When | Notes |
 |---|---|---|
-| `$pageview` | App mount / load | `capture_pageview: true`. Switch to `"history_change"` once a client router is added. |
+| `$pageview` | Client-side route changes | `capture_pageview: "history_change"` emits a pageview on every SPA navigation. |
 | `$pageleave` | Tab/page unload | `capture_pageleave: true`. Powers session/bounce metrics. |
 | `$autocapture` | Every element click (buttons, links, etc.) | `autocapture: true`. Buttons carry the structured attributes below. |
 
@@ -85,11 +85,48 @@ On successful sign in / sign up, the user is identified with
 clears the identity. Because `person_profiles: "identified_only"` is set,
 anonymous activity stays anonymous until the user authenticates.
 
+On refresh, a cached user profile re-identifies PostHog immediately (before
+`GET /users/me` completes) so feature flags that target identified users stay
+stable. Feature flags and distinct IDs are also bootstrapped from
+`localStorage` on init so the first paint matches the previous session.
+
 ## Feature flags
 
 | Flag | Controls |
 |---|---|
 | `signup-signin` | Whether the sign up / sign in surface (landing links + `/signin`, `/signup` routes) is shown. Read via [`use-auth-flag.ts`](../../frontend/src/hooks/use-auth-flag.ts). When PostHog is disabled (no key), it falls back to `VITE_AUTH_ENABLED === "true"` (default off). |
+
+## Error tracking
+
+Configured in `posthog.init`:
+
+| Setting | Value | Notes |
+|---|---|---|
+| `capture_exceptions` | `true` | Autocaptures unhandled JS errors and promise rejections. |
+| `PostHogErrorBoundary` | wraps app | Captures React render errors; shows a fallback UI. |
+
+Unexpected auth failures (non-API errors during bootstrap, sign-in, or sign-up) are
+also sent via `posthog.captureException()`. Expected validation/auth errors
+(wrong password, duplicate email) stay as domain events only (`sign_in_failed`, etc.).
+
+### Source maps
+
+Production deploys upload source maps via `@posthog/rollup-plugin` when
+`POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` are set in the build
+environment (CI GitHub Actions variables). Maps are keyed by release
+`propel-frontend` + `VITE_GIT_SHA`. They are deleted from the S3 artifact after
+upload (`deleteAfterUpload: true`).
+
+## Session replay
+
+Configured in `posthog.init`:
+
+```ts
+session_recording: { maskAllInputs: true }
+```
+
+All form inputs (including sign-in / sign-up) are masked in recordings. Session
+replay must also be enabled in your PostHog project settings.
 
 ## Limitations & future work
 
@@ -98,6 +135,3 @@ anonymous activity stays anonymous until the user authenticates.
   `src/`. Autocapture still records its clicks at runtime (when a key is set),
   but it cannot receive the `data-ph-capture-attribute-*` enrichment until its
   source is added.
-- **Routing:** the app now uses `react-router-dom`, but `capture_pageview`
-  remains `true` (load-time pageview). Switch it to `"history_change"` to emit a
-  `$pageview` on every client-side route change.

@@ -1,9 +1,7 @@
-import uuid
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_admin, require_admin_for_delete, require_member
+from app.auth.dependencies import require_admin, require_member
 from app.auth.manager import current_active_user
 from app.db.session import get_async_session
 from app.models.user import User
@@ -49,7 +47,7 @@ async def update_tenant(
 
 @router.delete("/{tenant_id}", status_code=204)
 async def delete_tenant(
-    ctx=Depends(require_admin_for_delete),
+    ctx=Depends(require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     await tenant_service.soft_delete_tenant(session, ctx.tenant)

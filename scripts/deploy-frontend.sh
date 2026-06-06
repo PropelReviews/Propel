@@ -30,6 +30,14 @@ export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://us.i.post
 # Build-time analytics metadata so beta/prod builds are distinguishable in PostHog.
 export VITE_APP_ENV="$ENV"
 export VITE_GIT_SHA="${GITHUB_SHA:-$(git rev-parse --short HEAD)}"
+export POSTHOG_PERSONAL_API_KEY="${POSTHOG_PERSONAL_API_KEY:-${POSTHOG_API_KEY:-}}"
+export POSTHOG_PROJECT_ID="${POSTHOG_PROJECT_ID:-}"
+
+if [[ -n "$POSTHOG_PERSONAL_API_KEY" && -n "$POSTHOG_PROJECT_ID" ]]; then
+  echo "==> Source maps will upload to PostHog (project $POSTHOG_PROJECT_ID)"
+else
+  echo "==> Skipping PostHog source map upload (set POSTHOG_PERSONAL_API_KEY + POSTHOG_PROJECT_ID to enable)"
+fi
 
 echo "==> Building SPA (VITE_API_URL=$VITE_API_URL)"
 npm --prefix "$FRONTEND_DIR" ci

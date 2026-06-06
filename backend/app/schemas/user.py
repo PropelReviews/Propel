@@ -16,10 +16,6 @@ class UserCreate(schemas.BaseUserCreate):
     name: str | None = None
 
 
-class UserUpdate(schemas.BaseUserUpdate):
-    name: str | None = None
-
-
 class UserMeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -60,6 +60,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
       JWT_SECRET: test-secret
+      AUTH_REGISTRATION_ENABLED: "true"
     defaults:
       run:
         working-directory: backend

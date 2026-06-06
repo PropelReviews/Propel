@@ -21,21 +21,39 @@ env:
   AWS_ROLE_ARN: arn:aws:iam::536270449640:role/PropelTerraform
 
 jobs:
-  # Load GitHub Environment-scoped variables without changing the OIDC subject
-  # on the deploy job (which must stay refs/heads/main for the beta IAM trust).
+  # Load GitHub Environment-scoped variables and secrets without changing the
+  # OIDC subject on the deploy job (which must stay refs/heads/main for the
+  # beta IAM trust).
   config:
     runs-on: ubuntu-latest
     environment: beta
     outputs:
       app_vars: ${{ toJSON(vars) }}
     steps:
-      - run: echo "Loaded beta environment variables"
+      - uses: actions/checkout@v4
+
+      - name: Generate Terraform app config
+        env:
+          APP_ENVIRONMENT_JSON: ${{ toJSON(vars) }}
+          OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
+          OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+        run: ./scripts/generate-app-tfvars.sh terraform-app-config.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-app-config
+          path: terraform-app-config.json
+          retention-days: 1
 
   deploy:
     needs: config
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-app-config
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -54,11 +72,8 @@ jobs:
         with:
           terraform_version: 1.9.8
 
-      # Same variables become the API container's environment via Terraform.
-      - name: Generate app config from Actions variables
-        working-directory: ${{ env.TF_DIR }}
-        run: |
-          echo '{"app_environment": ${{ needs.config.outputs.app_vars }} }' > app.auto.tfvars.json
+      - name: Install Terraform app config
+        run: cp terraform-app-config.json "${{ env.TF_DIR }}/app.auto.tfvars.json"
 
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}

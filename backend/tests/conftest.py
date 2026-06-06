@@ -6,6 +6,7 @@ os.environ.setdefault(
     "postgresql://propel:propel@localhost:5432/propel_test",
 )
 os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("AUTH_REGISTRATION_ENABLED", "true")
 
 import pytest
 from alembic import command

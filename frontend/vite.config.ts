@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import path from "path";
+import posthogRollup from "@posthog/rollup-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
@@ -15,6 +16,14 @@ export default defineConfig(({ mode }) => {
   const rootEnv = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const localEnv = loadEnv(mode, __dirname, "");
   const env = { ...rootEnv, ...localEnv };
+
+  const posthogPersonalApiKey =
+    env.POSTHOG_PERSONAL_API_KEY ?? env.POSTHOG_API_KEY ?? "";
+  const posthogProjectId = env.POSTHOG_PROJECT_ID ?? "";
+  const gitSha = env.VITE_GIT_SHA ?? env.GITHUB_SHA ?? "dev";
+  const uploadSourceMaps =
+    mode === "production" &&
+    Boolean(posthogPersonalApiKey && posthogProjectId);
 
   return {
     envDir: path.resolve(__dirname, ".."),
@@ -42,7 +51,28 @@ export default defineConfig(({ mode }) => {
         env.VITE_GIT_SHA ?? env.GITHUB_SHA ?? "dev",
       ),
     },
-    plugins: [react(), tailwindcss()],
+    build: {
+      sourcemap: uploadSourceMaps,
+    },
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...(uploadSourceMaps
+        ? [
+            posthogRollup({
+              personalApiKey: posthogPersonalApiKey,
+              projectId: posthogProjectId,
+              host: env.POSTHOG_HOST ?? "https://us.i.posthog.com",
+              sourcemaps: {
+                enabled: true,
+                releaseName: "propel-frontend",
+                releaseVersion: gitSha,
+                deleteAfterUpload: true,
+              },
+            }),
+          ]
+        : []),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.auth.manager import auth_backend, current_active_user, fastapi_users
-from app.auth.oauth import OAUTH_STATE_SECRET, github_oauth_client, google_oauth_client
+from app.auth.oauth import github_oauth_client, google_oauth_client
 from app.config import get_settings
 from app.models.user import User
 from app.schemas.user import UserCreate, UserMeRead, UserRead
@@ -25,7 +25,8 @@ if settings.oauth_google_client_id and settings.oauth_google_client_secret:
             auth_backend,
             settings.jwt_secret,
             redirect_url=f"{settings.oauth_callback_base_url}/api/v1/auth/google/callback",
-            associate_by_email=True,
+            # Disabled until email verification prevents account pre-registration attacks.
+            associate_by_email=False,
             is_verified_by_default=True,
         ),
         prefix="/google",
@@ -36,9 +37,9 @@ if settings.oauth_github_client_id and settings.oauth_github_client_secret:
         fastapi_users.get_oauth_router(
             github_oauth_client,
             auth_backend,
-            OAUTH_STATE_SECRET,
+            settings.jwt_secret,
             redirect_url=f"{settings.oauth_callback_base_url}/api/v1/auth/github/callback",
-            associate_by_email=True,
+            associate_by_email=False,
             is_verified_by_default=True,
         ),
         prefix="/github",

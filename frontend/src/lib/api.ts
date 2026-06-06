@@ -36,6 +36,8 @@ const FRIENDLY_MESSAGES: Record<string, string> = {
   LOGIN_USER_NOT_VERIFIED: "Please verify your email before signing in.",
   REGISTER_USER_ALREADY_EXISTS: "An account with this email already exists.",
   REGISTER_INVALID_PASSWORD: "Password does not meet the requirements.",
+  REGISTRATION_DISABLED: "Sign up is not available right now.",
+  TOO_MANY_REQUESTS: "Too many attempts. Please wait a moment and try again.",
 };
 
 /**

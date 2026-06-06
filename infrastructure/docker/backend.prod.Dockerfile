@@ -16,7 +16,8 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" \
+    SKIP_UV_SYNC=1
 
 COPY app ./app
 # Migrations are applied at container start by the entrypoint, so the image
@@ -25,7 +26,7 @@ COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 
 # Entrypoint lives in the backend build context (this image builds from backend/).
-COPY docker-entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 # Normalize CRLF (Windows/WSL checkouts) so the shebang is not read as /bin/sh\r
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 

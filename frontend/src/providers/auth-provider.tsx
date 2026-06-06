@@ -15,9 +15,14 @@ import {
   register as apiRegister,
   type AuthUser,
 } from "@/lib/api";
+import {
+  clearCachedDistinctId,
+  writeCachedDistinctId,
+} from "@/lib/posthog-persistence";
 import { posthog } from "@/providers/posthog-provider";
 
 const TOKEN_STORAGE_KEY = "propel_token";
+const USER_STORAGE_KEY = "propel_user";
 
 type AuthStatus = "loading" | "authenticated" | "anonymous";
 
@@ -53,7 +58,43 @@ function writeToken(token: string | null) {
   }
 }
 
+function readCachedUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "id" in parsed &&
+      "email" in parsed &&
+      typeof (parsed as AuthUser).id === "string" &&
+      typeof (parsed as AuthUser).email === "string"
+    ) {
+      return parsed as AuthUser;
+    }
+  } catch {
+    // Ignore corrupt cache.
+  }
+  return null;
+}
+
+function writeCachedUser(user: AuthUser | null) {
+  try {
+    if (user) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures (private mode, disabled storage).
+  }
+}
+
 function identify(user: AuthUser) {
+  posthog?.identify(user.id, { email: user.email, name: user.name });
+  writeCachedDistinctId(user.id);
+}
+
+/** Re-identify from persisted session data before the network round-trip. */
+function identifyFromCache(user: AuthUser) {
   posthog?.identify(user.id, { email: user.email, name: user.name });
 }
 
@@ -72,6 +113,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const cachedUser = readCachedUser();
+    if (cachedUser) {
+      identifyFromCache(cachedUser);
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -80,12 +126,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(me);
         setToken(existing);
         setStatus("authenticated");
+        writeCachedUser(me);
         identify(me);
       } catch (error) {
         if (cancelled) return;
         // Invalid/expired token: clear it and fall back to anonymous.
         if (error instanceof ApiError && error.status === 401) {
           writeToken(null);
+          writeCachedUser(null);
+          clearCachedDistinctId();
+        } else {
+          posthog?.captureException(error, { context: "auth_bootstrap" });
         }
         setUser(null);
         setToken(null);
@@ -104,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me);
     setToken(accessToken);
     setStatus("authenticated");
+    writeCachedUser(me);
     identify(me);
   }, []);
 
@@ -118,6 +170,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         posthog?.capture("sign_in_failed", {
           reason: error instanceof ApiError ? error.code : "unknown",
         });
+        if (!(error instanceof ApiError)) {
+          posthog?.captureException(error, { context: "sign_in" });
+        }
         throw error;
       }
     },
@@ -139,6 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         posthog?.capture("sign_up_failed", {
           reason: error instanceof ApiError ? error.code : "unknown",
         });
+        if (!(error instanceof ApiError)) {
+          posthog?.captureException(error, { context: "sign_up" });
+        }
         throw error;
       }
     },
@@ -147,6 +205,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     writeToken(null);
+    writeCachedUser(null);
+    clearCachedDistinctId();
     setUser(null);
     setToken(null);
     setStatus("anonymous");

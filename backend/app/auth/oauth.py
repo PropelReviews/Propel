@@ -14,5 +14,3 @@ github_oauth_client = GitHubOAuth2(
     settings.oauth_github_client_id,
     settings.oauth_github_client_secret,
 )
-
-OAUTH_STATE_SECRET = settings.jwt_secret

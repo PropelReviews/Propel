@@ -8,7 +8,7 @@ WORKDIR /app
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
-COPY infrastructure/docker/backend-entrypoint.sh /entrypoint.sh
+COPY backend/entrypoint.sh /entrypoint.sh
 # Normalize CRLF (Windows/WSL checkouts) so the shebang is not read as /bin/sh\r
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 

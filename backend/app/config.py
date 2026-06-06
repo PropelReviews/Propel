@@ -1,14 +1,22 @@
 from functools import lru_cache
+from typing import Self
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    app_env: str = "development"
     database_url: str = "postgresql+asyncpg://propel:propel@localhost:5432/propel"
     jwt_secret: str = "change-me"
     jwt_lifetime_seconds: int = 3600
+
+    # Server-side signup gate (independent of the frontend feature flag).
+    auth_registration_enabled: bool = False
+    auth_rate_limit_max_requests: int = 10
+    auth_rate_limit_window_seconds: int = 60
 
     oauth_google_client_id: str = ""
     oauth_google_client_secret: str = ""
@@ -43,6 +51,17 @@ class Settings(BaseSettings):
         if url.startswith("postgres://"):
             return url.replace("postgres://", "postgresql://", 1)
         return url
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> Self:
+        if self.app_env.lower() in {"production", "prod", "beta"}:
+            insecure_secrets = {"", "change-me", "test-secret"}
+            if self.jwt_secret in insecure_secrets or len(self.jwt_secret) < 32:
+                raise ValueError(
+                    "JWT_SECRET must be a random string of at least 32 characters in "
+                    f"{self.app_env} environments."
+                )
+        return self
 
 
 @lru_cache

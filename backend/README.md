@@ -88,12 +88,11 @@ in production — by the image entrypoint running `alembic upgrade head` before
 the app boots:
 
 - **Local (`docker compose`):** the `backend` service entrypoint
-  ([`infrastructure/docker/backend-entrypoint.sh`](../infrastructure/docker/backend-entrypoint.sh))
-  runs migrations after syncing deps. Just `docker compose up` (or
-  `docker compose restart backend`) to apply pending migrations.
-- **Production (ECS):** the prod image entrypoint
-  ([`backend/docker-entrypoint.sh`](docker-entrypoint.sh)) runs migrations on
-  task start, so every deploy migrates the database before serving traffic.
+  ([`backend/entrypoint.sh`](entrypoint.sh)) runs migrations after syncing deps.
+  Just `docker compose up` (or `docker compose restart backend`) to apply pending
+  migrations.
+- **Production (ECS):** the same entrypoint with `SKIP_UV_SYNC=1` runs migrations
+  on task start, so every deploy migrates the database before serving traffic.
   `alembic upgrade head` is idempotent, so it is a no-op when already current.
 
 Run them manually when needed:
@@ -116,10 +115,15 @@ docker compose exec backend alembic -c /app/alembic.ini upgrade head
 
 ### Local auth
 
-1. Set `JWT_SECRET` in `.env` (use a strong random value in production).
-2. Register via `POST /api/v1/auth/register` with email and password.
-3. Login via `POST /api/v1/auth/login` (form fields `username`, `password`) to receive a JWT.
-4. Pass `Authorization: Bearer <token>` on protected routes.
+1. Set `JWT_SECRET` in `.env` for local dev (use `openssl rand -hex 32`; the
+   default `change-me` is fine when `APP_ENV=development`). In AWS, Terraform
+   generates and stores `JWT_SECRET` in Secrets Manager on first apply.
+2. Set `AUTH_REGISTRATION_ENABLED=true` to allow email/password signup at the API (off by default).
+3. Register via `POST /api/v1/auth/register` with email and password (minimum 8 characters, enforced server-side).
+4. Login via `POST /api/v1/auth/login` (form fields `username`, `password`) to receive a JWT.
+5. Pass `Authorization: Bearer <token>` on protected routes.
+
+Login and register are rate-limited per client IP (`AUTH_RATE_LIMIT_*` env vars). OAuth providers do not auto-link to existing email/password accounts until email verification is implemented.
 
 Optional Google/GitHub login: set `OAUTH_*` client IDs/secrets and register redirect URLs:
 

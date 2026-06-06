@@ -41,7 +41,7 @@ edits are picked up automatically via hot reload.
 |---|---|---|
 | Frontend | `frontend/node_modules` | `scripts/setup.sh` (`npm install`) |
 | Backend (dev shell) | `backend/.venv` | `scripts/setup.sh` (`uv sync`, includes dev deps) |
-| Backend (API container) | `/opt/venv` in the container | `backend-entrypoint.sh` on start (`uv sync` from bind-mounted lockfile) |
+| Backend (API container) | `/opt/venv` in the container | [`backend/entrypoint.sh`](../../backend/entrypoint.sh) on start (`uv sync` from bind-mounted lockfile) |
 
 After `uv add`, restart the backend service — no image rebuild needed.
 

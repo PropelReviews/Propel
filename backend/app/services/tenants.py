@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,21 +42,6 @@ async def list_user_tenants(session: AsyncSession, user_id: uuid.UUID) -> list[T
         .order_by(Tenant.created_at.desc())
     )
     return list(result.scalars().unique().all())
-
-
-async def get_tenant_for_user(
-    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
-) -> Tenant | None:
-    result = await session.execute(
-        select(Tenant)
-        .join(TenantMembership)
-        .where(
-            Tenant.id == tenant_id,
-            TenantMembership.user_id == user_id,
-            Tenant.deleted_at.is_(None),
-        )
-    )
-    return result.scalar_one_or_none()
 
 
 async def update_tenant(

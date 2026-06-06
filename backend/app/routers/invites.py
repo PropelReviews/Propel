@@ -10,11 +10,11 @@ from app.models.user import User
 from app.schemas.invite import InviteAcceptRead, InviteCreate, InviteCreated, InviteRead
 from app.services import invites as invite_service
 
-router = APIRouter(tags=["invites"])
+router = APIRouter(prefix="/api/v1", tags=["invites"])
 
 
 @router.post(
-    "/api/v1/tenants/{tenant_id}/invites",
+    "/tenants/{tenant_id}/invites",
     response_model=InviteCreated,
     status_code=201,
 )
@@ -29,7 +29,7 @@ async def create_invite(
 
 
 @router.get(
-    "/api/v1/tenants/{tenant_id}/invites",
+    "/tenants/{tenant_id}/invites",
     response_model=list[InviteRead],
 )
 async def list_invites(
@@ -40,7 +40,7 @@ async def list_invites(
 
 
 @router.delete(
-    "/api/v1/tenants/{tenant_id}/invites/{invite_id}",
+    "/tenants/{tenant_id}/invites/{invite_id}",
     status_code=204,
 )
 async def revoke_invite(
@@ -52,7 +52,7 @@ async def revoke_invite(
 
 
 @router.post(
-    "/api/v1/invites/{token}/accept",
+    "/invites/{token}/accept",
     response_model=InviteAcceptRead,
 )
 async def accept_invite(

@@ -14,7 +14,8 @@ export const AUTH_FEATURE_FLAG = "signup-signin";
  * self-hosting.
  */
 export function useAuthFlag(): boolean {
-  const flagEnabled = useFeatureFlagEnabled(AUTH_FEATURE_FLAG);
+  // Default false so unresolved/disabled flags hide auth instead of loading forever.
+  const flagEnabled = useFeatureFlagEnabled(AUTH_FEATURE_FLAG, false);
 
   if (!isPostHogEnabled) {
     return import.meta.env.VITE_AUTH_ENABLED === "true";

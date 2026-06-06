@@ -23,7 +23,9 @@ function App() {
         metrics.
       </p>
 
-      {authEnabled && status === "authenticated" ? (
+      {authEnabled && status === "loading" ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : authEnabled && status === "authenticated" ? (
         <div className="flex flex-col items-center gap-3">
           <p className="text-sm text-muted-foreground">
             Signed in as {user?.name ?? user?.email}
