@@ -1,4 +1,17 @@
 services:
+  dev:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/dev.Dockerfile
+      pull: true
+    container_name: propel-dev
+    volumes:
+      - .:/workspaces/Propel:cached
+    command: sleep infinity
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:16
     container_name: propel-postgres

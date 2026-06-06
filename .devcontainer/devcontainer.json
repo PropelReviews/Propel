@@ -1,20 +1,15 @@
 {
   "name": "Propel",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "dev",
+  "runServices": ["postgres", "backend", "frontend"],
   "workspaceFolder": "/workspaces/Propel",
-  "features": {
-    "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.12"
-    },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "20"
-    },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
-  },
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose",
   "forwardPorts": [8000, 5173, 5432],
   "portsAttributes": {
     "8000": {
-      "label": "Backend (FastAPI)",
+      "label": "Backend",
       "onAutoForward": "notify"
     },
     "5173": {
@@ -35,6 +30,5 @@
         "ms-azuretools.vscode-docker"
       ]
     }
-  },
-  "postCreateCommand": "echo 'Dev container ready. Run: docker compose up -d postgres'"
+  }
 }
