@@ -5,8 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# OIDC: the job mints a short-lived token and assumes the PropelTerraform role
-# in the beta account. No long-lived AWS keys are stored in GitHub.
+# OIDC: the deploy job mints a short-lived token and assumes the PropelTerraform
+# role in the beta account. No long-lived AWS keys are stored in GitHub.
 permissions:
   id-token: write
   contents: read
@@ -21,11 +21,19 @@ env:
   AWS_ROLE_ARN: arn:aws:iam::536270449640:role/PropelTerraform
 
 jobs:
-  deploy:
+  # Load GitHub Environment-scoped variables without changing the OIDC subject
+  # on the deploy job (which must stay refs/heads/main for the beta IAM trust).
+  config:
     runs-on: ubuntu-latest
-    # Binds GitHub Environment "beta" so environment-scoped Actions variables
-    # (e.g. POSTHOG_TOKEN) are available via the vars context.
     environment: beta
+    outputs:
+      app_vars: ${{ toJSON(vars) }}
+    steps:
+      - run: echo "Loaded beta environment variables"
+
+  deploy:
+    needs: config
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +47,7 @@ jobs:
       # steps as env (used by the SPA build, e.g. VITE_*/POSTHOG_*).
       - name: Forward Actions variables to env
         run: |
-          echo '${{ toJSON(vars) }}' | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_ENV"
+          echo '${{ needs.config.outputs.app_vars }}' | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_ENV"
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -50,7 +58,7 @@ jobs:
       - name: Generate app config from Actions variables
         working-directory: ${{ env.TF_DIR }}
         run: |
-          echo '{"app_environment": ${{ toJSON(vars) }}}' > app.auto.tfvars.json
+          echo '{"app_environment": ${{ needs.config.outputs.app_vars }} }' > app.auto.tfvars.json
 
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}

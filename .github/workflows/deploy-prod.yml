@@ -24,14 +24,21 @@ env:
   AWS_ROLE_ARN: arn:aws:iam::616938645090:role/PropelTerraform
 
 jobs:
-  deploy:
+  config:
     runs-on: ubuntu-latest
     if: >-
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
-    # Requires manual approval when the `prod` Environment has required
-    # reviewers configured in the repo settings.
+    # Approval gate + environment-scoped Actions variables.
     environment: prod
+    outputs:
+      app_vars: ${{ toJSON(vars) }}
+    steps:
+      - run: echo "Loaded prod environment variables"
+
+  deploy:
+    needs: config
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,25 +50,20 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Generic config: forward every GitHub Actions variable to subsequent
-      # steps as env (used by the SPA build, e.g. VITE_*/POSTHOG_*).
       - name: Forward Actions variables to env
         run: |
-          echo '${{ toJSON(vars) }}' | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_ENV"
+          echo '${{ needs.config.outputs.app_vars }}' | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_ENV"
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
-      # Same variables become the API container's environment via Terraform.
       - name: Generate app config from Actions variables
         working-directory: ${{ env.TF_DIR }}
         run: |
-          echo '{"app_environment": ${{ toJSON(vars) }}}' > app.auto.tfvars.json
+          echo '{"app_environment": ${{ needs.config.outputs.app_vars }} }' > app.auto.tfvars.json
 
-      # The prod role assumes the beta role (read-only) to delegate
-      # beta.propel.ninja from the parent zone during apply.
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
         run: |

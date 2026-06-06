@@ -154,7 +154,8 @@ The trust/permission policy JSON is committed under
 - `beta-trust.json` — beta trust: GitHub `main` branch **and** prod
   cross-account assume (the `ProdCrossAccountAssume` statement, so the role is
   created in one shot).
-- `prod-trust.json` — prod trust: GitHub `v*` tags + `prod` environment.
+- `prod-trust.json` — prod trust: GitHub `v*` tags, `main` branch (for
+  auto-promote via `workflow_run`), and `prod` environment.
 
 Create the roles — **prod first**, because `beta-trust.json` names the prod role
 as a principal and IAM validates that it exists (run from the repo root):
