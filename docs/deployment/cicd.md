@@ -13,11 +13,14 @@ AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
 
 ## Deploy flow (beta and prod are identical except account/trigger)
 
-1. **Checkout** the repo.
-2. **Configure AWS credentials (OIDC)** — assume `PropelTerraform` in the target
-   account.
-3. **Forward Actions variables to env** — every `vars.*` becomes a shell env var
-   (consumed by the SPA build, e.g. `VITE_*`, `POSTHOG_*`).
+1. **`config` job** — binds the `beta` / `prod` GitHub Environment so
+   environment-scoped Actions variables are available (and prod approval runs
+   here). This job does **not** call AWS.
+2. **`deploy` job** — checks out the repo and assumes `PropelTerraform` via OIDC
+   using branch/tag subjects (`refs/heads/main` or `refs/tags/v*`), not
+   `environment:*` subjects.
+3. **Forward Actions variables to env** — vars from the `config` job become shell
+   env vars (consumed by the SPA build, e.g. `VITE_*`, `POSTHOG_*`).
 4. **Generate app config** — `{"app_environment": <all vars>}` is written to
    `app.auto.tfvars.json`, auto-loaded by Terraform → becomes the API
    container's environment.
@@ -47,10 +50,12 @@ git push origin v1.2.3      # triggers deploy-prod.yml; approve in the Environme
 
 ## Required GitHub config
 
-- **`beta` and `prod` Environments** (Settings → Environments). Each job binds
-  its environment so environment-scoped Actions **variables** (e.g.
-  `POSTHOG_TOKEN`, `POSTHOG_HOST`) flow into `vars` and reach both the API
-  container and the SPA build. Repository/org-level variables still work as a
-  fallback when an environment does not override them.
-- **`prod` Environment** — add required reviewers to gate prod deploys.
-- Per-account OIDC provider + `PropelTerraform` role (bootstrap Step 4).
+- **`beta` and `prod` Environments** (Settings → Environments). The `config` job
+  binds each environment so environment-scoped Actions **variables** (e.g.
+  `POSTHOG_TOKEN`, `POSTHOG_HOST`) reach both the API container and the SPA
+  build. Repository/org-level variables still work as a fallback.
+- **`prod` Environment** — add required reviewers to gate prod deploys (runs on
+  the `config` job).
+- Per-account OIDC provider + `PropelTerraform` role (bootstrap Step 4). Prod
+  auto-promote (`workflow_run`) assumes AWS via `refs/heads/main` — re-apply
+  `prod-trust.json` if that path was added after initial bootstrap.

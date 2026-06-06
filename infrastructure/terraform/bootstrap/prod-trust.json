@@ -11,7 +11,8 @@
         "StringLike": {
           "token.actions.githubusercontent.com:sub": [
             "repo:PropelReviews/Propel:ref:refs/tags/v*",
-            "repo:PropelReviews/Propel:environment:production"
+            "repo:PropelReviews/Propel:ref:refs/heads/main",
+            "repo:PropelReviews/Propel:environment:prod"
           ]
         }
       }
