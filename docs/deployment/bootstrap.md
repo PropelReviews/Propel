@@ -151,9 +151,9 @@ The trust/permission policy JSON is committed under
 [`infrastructure/terraform/bootstrap/`](../../infrastructure/terraform/bootstrap/README.md)
 (safe to commit — account IDs and policy JSON only, no secrets):
 
-- `beta-trust.json` — beta trust: GitHub `main` branch **and** prod
-  cross-account assume (the `ProdCrossAccountAssume` statement, so the role is
-  created in one shot).
+- `beta-trust.json` — beta trust: GitHub `main` branch, the `beta` environment,
+  **and** prod cross-account assume (the `ProdCrossAccountAssume` statement, so
+  the role is created in one shot).
 - `prod-trust.json` — prod trust: GitHub `v*` tags + `production` environment.
 
 Create the roles — **prod first**, because `beta-trust.json` names the prod role
@@ -225,20 +225,27 @@ level) is forwarded by the workflows into both the API container env
 (`app_environment` → `app.auto.tfvars.json`) and the SPA build env. Adding a new
 key is just adding an Actions variable; no Terraform or workflow edits needed.
 
-1. **Actions variables** (Settings → Secrets and variables → Actions →
-   Variables). The PostHog project token is a write-only key, safe as a variable:
+1. **Environments + Actions variables** — create **`beta`** and **`production`**
+   environments (Settings → Environments). Add Actions **variables** on each
+   (or at org/repo level as a fallback). The PostHog project token is a
+   write-only key, safe as a variable:
 
    | Variable | Example | Consumed by |
    |----------|---------|-------------|
    | `POSTHOG_TOKEN` | `phc_...` | API (OTEL → PostHog) + SPA |
    | `POSTHOG_HOST` | `https://us.i.posthog.com` | API + SPA |
 
+   Deploy workflows bind `environment: beta` / `environment: production` so
+   environment-scoped variables are forwarded via `vars` into the API container
+   and SPA build. Without the environment binding, only repo/org variables are
+   visible and per-environment values (e.g. beta PostHog) are silently omitted.
+
    For **truly sensitive** values, use the Terraform `app_secrets` map instead —
    each entry becomes a Secrets Manager secret injected into the task.
 
-2. **`production` Environment** (Settings → Environments → New environment →
-   `production`). Add **required reviewers** so prod deploys pause for manual
-   approval. The prod workflow declares `environment: production`.
+2. **`production` Environment** — add **required reviewers** so prod deploys
+   pause for manual approval. Prod also auto-triggers after a successful beta
+   deploy on `main` (see [`cicd.md`](cicd.md)).
 
 ---
 

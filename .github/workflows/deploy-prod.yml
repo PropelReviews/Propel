@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+  # Auto-promote to prod after a successful beta deploy on main.
+  workflow_run:
+    workflows: ["Deploy Beta"]
+    types: [completed]
+    branches: [main]
 
 permissions:
   id-token: write
@@ -21,11 +26,16 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     # Requires manual approval when the `production` Environment has required
     # reviewers configured in the repo settings.
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

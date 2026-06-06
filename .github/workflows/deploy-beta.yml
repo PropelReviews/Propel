@@ -23,6 +23,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Binds GitHub Environment "beta" so environment-scoped Actions variables
+    # (e.g. POSTHOG_TOKEN) are available via the vars context.
+    environment: beta
     steps:
       - uses: actions/checkout@v4
 
