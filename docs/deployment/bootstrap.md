@@ -233,16 +233,35 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
 
    | Variable | Example | Consumed by |
    |----------|---------|-------------|
+   | `APP_ENV` | `beta` / `production` | API (startup validation) |
    | `POSTHOG_TOKEN` | `phc_...` | API (OTEL → PostHog) + SPA |
    | `POSTHOG_HOST` | `https://us.i.posthog.com` | API + SPA |
+   | `POSTHOG_PROJECT_ID` | `245238` | SPA build (source map upload) |
+   | `POSTHOG_PERSONAL_API_KEY` | `phx_...` | SPA build (source map upload; keep secret) |
+   | `AUTH_REGISTRATION_ENABLED` | `true` | API (allow signup when ready) |
 
    Deploy workflows bind `environment: beta` / `environment: prod` so
    environment-scoped variables are forwarded via `vars` into the API container
    and SPA build. Without the environment binding, only repo/org variables are
    visible and per-environment values (e.g. beta PostHog) are silently omitted.
 
-   For **truly sensitive** values, use the Terraform `app_secrets` map instead —
-   each entry becomes a Secrets Manager secret injected into the task.
+   Add Actions **secrets** on each environment for OAuth client secrets (when
+   enabled). Deploy workflows pass these into Terraform `app_secrets` → AWS
+   Secrets Manager → ECS task env (via
+   [`scripts/generate-app-tfvars.sh`](../../scripts/generate-app-tfvars.sh)):
+
+   | Secret | Required | Notes |
+   |--------|----------|-------|
+   | `OAUTH_GOOGLE_CLIENT_SECRET` | No | When Google login is enabled |
+   | `OAUTH_GITHUB_CLIENT_SECRET` | No | When GitHub login is enabled |
+
+   **`JWT_SECRET` is not stored in GitHub.** Terraform generates a 64-character
+   secret on first apply and stores it in Secrets Manager (same pattern as the
+   database password). Rotating it requires a deliberate Terraform taint or
+   manual Secrets Manager update.
+
+   Non-secret OAuth client IDs (`OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GITHUB_CLIENT_ID`)
+   can be Actions **variables** in `app_environment`.
 
 2. **`prod` Environment** — add **required reviewers** so prod deploys pause for
    manual approval. The prod workflow declares `environment: prod`. Prod also

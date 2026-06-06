@@ -99,5 +99,19 @@ services:
     volumes:
       - ${PROPEL_HOST_DIR:-.}/frontend:/app
 
+  # Serves the prebuilt static landing page (frontend/dist-landing) for local
+  # testing. Not part of the default dev stack — start it on demand:
+  #   docker compose --profile landing up frontend-landing-static   ->  http://localhost:8080
+  frontend-landing-static:
+    image: nginx:alpine
+    container_name: propel-frontend-landing-static
+    restart: unless-stopped
+    profiles: ["landing"]
+    volumes:
+      - ${PROPEL_HOST_DIR:-.}/frontend/dist-landing:/usr/share/nginx/html:ro
+      - ${PROPEL_HOST_DIR:-.}/infrastructure/docker/landing-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${LANDING_PORT:-8080}:80"
+
 volumes:
   pgdata:

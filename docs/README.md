@@ -22,8 +22,10 @@ docs live here under `docs/`.
 
 ## Components
 
-- [Backend](../backend/README.md) — FastAPI service.
+- [Backend](../backend/README.md) — FastAPI service (auth, tenants, API).
+- [Backend data model](backend/data-model.md) — users, tenants, memberships, invites.
 - [Frontend](../frontend/README.md) — Vite + React SPA.
+- [Frontend analytics](frontend/analytics.md) — PostHog event taxonomy & super properties.
 - [Transformation](../transformation/README.md) — data transformation.
 - [Contributing](../CONTRIBUTING.md) — contribution guidelines.
 

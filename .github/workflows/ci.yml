@@ -43,23 +43,40 @@ jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: propel
+          POSTGRES_PASSWORD: propel
+          POSTGRES_DB: propel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
+      JWT_SECRET: test-secret
+      AUTH_REGISTRATION_ENABLED: "true"
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: backend/requirements-dev.txt
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: uv sync
 
       - name: Run pytest
-        run: pytest
+        run: uv run pytest
 
   frontend:
     name: Frontend tests

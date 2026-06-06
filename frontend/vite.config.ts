@@ -1,7 +1,13 @@
+import { readFileSync } from "fs";
 import path from "path";
+import posthogRollup from "@posthog/rollup-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+
+const pkg = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
+) as { version?: string };
 
 export default defineConfig(({ mode }) => {
   // Read env from the repo root (single shared .env for host dev) and from the
@@ -10,6 +16,14 @@ export default defineConfig(({ mode }) => {
   const rootEnv = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const localEnv = loadEnv(mode, __dirname, "");
   const env = { ...rootEnv, ...localEnv };
+
+  const posthogPersonalApiKey =
+    env.POSTHOG_PERSONAL_API_KEY ?? env.POSTHOG_API_KEY ?? "";
+  const posthogProjectId = env.POSTHOG_PROJECT_ID ?? "";
+  const gitSha = env.VITE_GIT_SHA ?? env.GITHUB_SHA ?? "dev";
+  const uploadSourceMaps =
+    mode === "production" &&
+    Boolean(posthogPersonalApiKey && posthogProjectId);
 
   return {
     envDir: path.resolve(__dirname, ".."),
@@ -25,8 +39,40 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_API_URL": JSON.stringify(
         env.VITE_API_URL ?? "http://localhost:8000",
       ),
+      // Build-time metadata registered as PostHog super properties so every
+      // event is attributable to an environment, app version, and commit.
+      "import.meta.env.VITE_APP_ENV": JSON.stringify(
+        env.VITE_APP_ENV ?? mode,
+      ),
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(
+        env.VITE_APP_VERSION ?? pkg.version ?? "0.0.0",
+      ),
+      "import.meta.env.VITE_GIT_SHA": JSON.stringify(
+        env.VITE_GIT_SHA ?? env.GITHUB_SHA ?? "dev",
+      ),
     },
-    plugins: [react(), tailwindcss()],
+    build: {
+      sourcemap: uploadSourceMaps,
+    },
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...(uploadSourceMaps
+        ? [
+            posthogRollup({
+              personalApiKey: posthogPersonalApiKey,
+              projectId: posthogProjectId,
+              host: env.POSTHOG_HOST ?? "https://us.i.posthog.com",
+              sourcemaps: {
+                enabled: true,
+                releaseName: "propel-frontend",
+                releaseVersion: gitSha,
+                deleteAfterUpload: true,
+              },
+            }),
+          ]
+        : []),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

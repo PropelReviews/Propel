@@ -9,9 +9,9 @@ if [ -f frontend/package.json ]; then
   (cd frontend && npm install)
 fi
 
-if [ -f backend/requirements.txt ]; then
+if [ -f backend/pyproject.toml ]; then
   echo "Installing backend dependencies (dev container tooling)..."
-  pip install --quiet --no-cache-dir -r backend/requirements.txt \
+  (cd backend && uv sync --quiet) \
     || echo "  (backend deps install skipped/failed — non-fatal)"
 fi
 

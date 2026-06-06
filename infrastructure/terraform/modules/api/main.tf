@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.5"
+    }
   }
 }
 
@@ -39,22 +43,51 @@ resource "aws_ecr_lifecycle_policy" "api" {
 }
 
 # ------------------------------------------------------------------------------
-# Generic application secrets. Each entry in var.app_secrets becomes a Secrets
-# Manager secret injected into the task. Adding a new secret is just a new map
-# entry; no module changes required. keys() is non-sensitive (only the values
-# are), so it is safe to use for for_each.
+# JWT signing secret — generated on first apply (same pattern as the DB password).
+# Stored in Secrets Manager; never passed through CI.
 # ------------------------------------------------------------------------------
+resource "random_password" "jwt_secret" {
+  length  = 64
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "jwt_secret" {
+  name        = "${var.name_prefix}/app/JWT_SECRET"
+  description = "JWT signing secret for the ${var.name_prefix} API."
+  tags        = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "jwt_secret" {
+  secret_id     = aws_secretsmanager_secret.jwt_secret.id
+  secret_string = random_password.jwt_secret.result
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# ------------------------------------------------------------------------------
+# External application secrets (OAuth client secrets, etc.). Each entry in
+# var.app_secrets becomes a Secrets Manager secret injected into the task.
+# JWT_SECRET is managed separately above — do not pass it here.
+# ------------------------------------------------------------------------------
+locals {
+  external_app_secrets = {
+    for key, value in var.app_secrets : key => value if key != "JWT_SECRET"
+  }
+}
+
 resource "aws_secretsmanager_secret" "app" {
-  for_each    = toset(nonsensitive(keys(var.app_secrets)))
+  for_each    = toset(nonsensitive(keys(local.external_app_secrets)))
   name        = "${var.name_prefix}/app/${each.key}"
   description = "App secret ${each.key} for ${var.name_prefix}."
   tags        = var.tags
 }
 
 resource "aws_secretsmanager_secret_version" "app" {
-  for_each      = toset(nonsensitive(keys(var.app_secrets)))
+  for_each      = toset(nonsensitive(keys(local.external_app_secrets)))
   secret_id     = aws_secretsmanager_secret.app[each.key].id
-  secret_string = var.app_secrets[each.key]
+  secret_string = local.external_app_secrets[each.key]
 }
 
 # ------------------------------------------------------------------------------
@@ -98,6 +131,7 @@ data "aws_iam_policy_document" "execution" {
     actions = ["secretsmanager:GetSecretValue"]
     resources = concat(
       [var.database_url_secret_arn],
+      [aws_secretsmanager_secret.jwt_secret.arn],
       [for s in aws_secretsmanager_secret.app : s.arn],
     )
   }
@@ -154,7 +188,8 @@ resource "aws_ecs_task_definition" "api" {
     environment = [for k, v in var.app_environment : { name = k, value = v }]
     secrets = concat(
       [{ name = "DATABASE_URL", valueFrom = var.database_url_secret_arn }],
-      [for k in nonsensitive(keys(var.app_secrets)) : { name = k, valueFrom = aws_secretsmanager_secret.app[k].arn }],
+      [{ name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn }],
+      [for k in nonsensitive(keys(local.external_app_secrets)) : { name = k, valueFrom = aws_secretsmanager_secret.app[k].arn }],
     )
   }])
 

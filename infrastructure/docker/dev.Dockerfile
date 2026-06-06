@@ -1,5 +1,7 @@
 FROM mcr.microsoft.com/devcontainers/python:3.12-bookworm
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 USER root
 
 # Base dev packages (small layer — caches well)

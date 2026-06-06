@@ -46,7 +46,7 @@ On open, the host starts:
 
 | Service  | Role                                      |
 |----------|-------------------------------------------|
-| dev      | Your editor environment (Python 3.12, Node 20, AWS CLI) |
+| dev      | Your editor environment (Python 3.12, uv, Node 20, AWS CLI) |
 | postgres | Database                                  |
 | backend  | FastAPI with `uvicorn --reload`           |
 | frontend | Vite dev server with HMR                  |
@@ -58,7 +58,7 @@ The dev, backend, and frontend services all share the same workspace bind mount.
 | http://localhost:8000 | FastAPI backend |
 | http://localhost:5173 | Vite frontend |
 
-`postCreateCommand` runs `scripts/setup.sh` to install `node_modules` on the shared volume. `postAttachCommand` runs `scripts/dev.sh` to verify services are reachable.
+`postCreateCommand` runs `scripts/setup.sh` to install frontend `node_modules` and backend Python deps (`uv sync`). `postAttachCommand` runs `scripts/dev.sh` to verify services are reachable.
 
 The `dev` service shares the Compose network, so Postgres is reachable at `postgres:5432` from inside the dev container (`psql` client is preinstalled).
 
