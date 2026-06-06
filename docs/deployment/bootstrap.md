@@ -326,6 +326,7 @@ For prod, swap to `api.propel.ninja` / `app.propel.ninja`.
 | `NoCredentials: Unable to locate credentials` | `AWS_PROFILE` not set — `aws sso login` authenticates the session but commands still need a profile. Run `export AWS_PROFILE=propel-prod` (or `propel-beta`), or pass `--profile`. |
 | `sso-session does not exist: "propel"` | `~/.aws/config` missing the profiles — see [`aws-sso.md`](aws-sso.md). |
 | OIDC `EntityAlreadyExists` | The provider already exists in that account (only one allowed) — safe to skip 4a; verify with `aws iam list-open-id-connect-providers`. |
+| Prod OIDC `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Stale prod role trust — re-apply `prod-trust.json` (Step 4b `update-assume-role-policy`). Common after renaming the GitHub Environment `production` → `prod`; the live IAM trust may still list `environment:production` while Actions mints `environment:prod`. |
 | `Backend initialization required` on `plan`/`apply` | Run `terraform init` first; ensure the state bucket + lock table from Step 3 exist. |
 | `BucketAlreadyOwnedByYou` | The state bucket is already created — safe to ignore. |
 | Prod apply can't read beta zone | Step 4c cross-account trust is missing or `beta_dns_role_arn` is wrong. |
