@@ -12,8 +12,8 @@ provider "aws" {
   }
 }
 
-# Cross-account, READ-ONLY provider into the beta account, used only to look up
-# the beta.propel.ninja hosted zone's NS records so this config can write the
+# Cross-account, read-only provider into the beta account, used to look up the
+# beta.propel.ninja hosted zone NS records so this config can write the
 # delegation into the propel.ninja parent zone. The prod credentials must be
 # allowed to assume this role (see README IAM section).
 provider "aws" {

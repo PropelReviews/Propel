@@ -330,5 +330,6 @@ For prod, swap to `api.propel.ninja` / `app.propel.ninja`.
 | `Backend initialization required` on `plan`/`apply` | Run `terraform init` first; ensure the state bucket + lock table from Step 3 exist. |
 | `BucketAlreadyOwnedByYou` | The state bucket is already created — safe to ignore. |
 | Prod apply can't read beta zone | Step 4c cross-account trust is missing or `beta_dns_role_arn` is wrong. |
+| `www.beta.propel.ninja` returns only NS / does not load | A stray `www.beta.propel.ninja` **NS** record in the **prod** zone overrides delegation — delete it. The www landing alias must be an **A** record named `www` in the **beta** `beta.propel.ninja` child zone (created by the beta stack). Re-apply beta after the landing module is merged. |
 | ALB target unhealthy / 0 tasks | No image pushed yet — run Step 7. |
 | ACM cert stuck `PENDING_VALIDATION` | DNS validation records propagating; wait a few minutes and re-apply. |

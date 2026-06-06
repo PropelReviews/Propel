@@ -8,6 +8,11 @@ variable "zone_id" {
   description = "Route53 hosted zone ID for this environment's domain."
 }
 
+variable "zone_name" {
+  type        = string
+  description = "Route53 hosted zone apex FQDN (e.g. beta.propel.ninja). Used for relative record names."
+}
+
 variable "api_fqdn" {
   type        = string
   description = "API FQDN, e.g. api.beta.propel.ninja."
@@ -21,6 +26,12 @@ variable "app_fqdn" {
 variable "landing_fqdns" {
   type        = list(string)
   description = "Landing site FQDNs (apex + www), e.g. [\"propel.ninja\", \"www.propel.ninja\"]. The first entry is treated as the canonical apex."
+}
+
+variable "landing_dns_fqdns" {
+  type        = list(string)
+  default     = null
+  description = "FQDNs to create Route53 landing alias records for. Defaults to landing_fqdns. Set to the apex only when www is managed cross-account from prod (beta env)."
 }
 
 variable "container_port" {
