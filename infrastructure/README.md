@@ -1,16 +1,27 @@
 # Infrastructure
 
-Docker, environment configuration, and future IaC for Propel.
+Docker, environment configuration, and Terraform IaC for Propel.
 
 ## Contents
 
 ```
 infrastructure/
-└── docker/
-    ├── dev.Dockerfile        # Dev container (Python 3.12, Node 20, AWS CLI)
-    ├── backend.Dockerfile    # Python 3.12 base for FastAPI + Meltano
-    └── frontend.Dockerfile   # Node 20 base for Vite + React
+├── docker/
+│   ├── dev.Dockerfile          # Dev container (Python 3.12, Node 20, AWS CLI)
+│   ├── backend.Dockerfile      # Dev FastAPI image (bind-mount, --reload)
+│   ├── backend.prod.Dockerfile # Prod FastAPI image (baked code) -> ECR/ECS
+│   ├── frontend.Dockerfile     # Dev Vite dev-server image
+│   └── README.md               # Container setup (dev vs prod)
+└── terraform/                  # AWS IaC: beta + prod (see terraform/README.md)
 ```
+
+## Deployment
+
+- **Bootstrap runbook** (one-time AWS setup): [`../docs/deployment/bootstrap.md`](../docs/deployment/bootstrap.md)
+- **CI/CD** (GitHub Actions): [`../docs/deployment/cicd.md`](../docs/deployment/cicd.md)
+- **Local AWS SSO**: [`../docs/deployment/aws-sso.md`](../docs/deployment/aws-sso.md)
+- **Containers** (dev vs prod, build/push): [`docker/README.md`](docker/README.md)
+- **AWS infra reference** (Terraform modules/architecture): [`terraform/README.md`](terraform/README.md)
 
 ## Local stack
 

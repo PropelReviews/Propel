@@ -15,4 +15,16 @@ if [ -f backend/requirements.txt ]; then
     || echo "  (backend deps install skipped/failed — non-fatal)"
 fi
 
+# AWS SSO profiles (propel-beta / propel-prod). Idempotent: never clobber an
+# existing ~/.aws/config so personal tweaks survive a rebuild.
+AWS_CONFIG="$HOME/.aws/config"
+if [ ! -f "$AWS_CONFIG" ]; then
+  echo "Installing AWS SSO config -> $AWS_CONFIG"
+  mkdir -p "$HOME/.aws"
+  cp .devcontainer/aws-config "$AWS_CONFIG"
+  echo "  Run 'aws sso login --sso-session propel' to authenticate."
+else
+  echo "AWS config already exists ($AWS_CONFIG) — leaving it untouched."
+fi
+
 echo "Setup complete."

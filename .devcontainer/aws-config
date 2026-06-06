@@ -1,0 +1,25 @@
+# Propel AWS SSO configuration (installed to ~/.aws/config by scripts/setup.sh).
+# Log in with:   aws sso login --sso-session propel
+# Then use a profile, e.g.:   AWS_PROFILE=propel-beta aws sts get-caller-identity
+#
+# No credentials are stored here — only the SSO start URL, account IDs, region,
+# and permission set names. Short-lived creds are fetched on `aws sso login`.
+
+[sso-session propel]
+sso_start_url = https://propel.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+[profile propel-beta]
+sso_session = propel
+sso_account_id = 536270449640
+sso_role_name = AdministratorAccess
+region = us-east-1
+output = json
+
+[profile propel-prod]
+sso_session = propel
+sso_account_id = 616938645090
+sso_role_name = AdministratorAccess
+region = us-east-1
+output = json

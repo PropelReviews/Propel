@@ -15,10 +15,15 @@ export default defineConfig(({ mode }) => {
     envDir: path.resolve(__dirname, ".."),
     define: {
       "import.meta.env.VITE_POSTHOG_KEY": JSON.stringify(
-        env.VITE_POSTHOG_KEY ?? env.POSTHOG_API_KEY ?? "",
+        env.VITE_POSTHOG_KEY ?? env.POSTHOG_TOKEN ?? "",
       ),
       "import.meta.env.VITE_POSTHOG_HOST": JSON.stringify(
         env.VITE_POSTHOG_HOST ?? env.POSTHOG_HOST ?? "https://us.i.posthog.com",
+      ),
+      // Backend API base URL. The deploy script sets this per environment
+      // (e.g. https://api.beta.propel.ninja); defaults to the local dev API.
+      "import.meta.env.VITE_API_URL": JSON.stringify(
+        env.VITE_API_URL ?? "http://localhost:8000",
       ),
     },
     plugins: [react(), tailwindcss()],

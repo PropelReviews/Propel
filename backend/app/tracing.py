@@ -5,7 +5,7 @@ with the project token as a bearer header. No PostHog-specific packages are
 required.
 
 Tracing degrades gracefully:
-- a no-op when ``POSTHOG_API_KEY`` is unset, and
+- a no-op when ``POSTHOG_TOKEN`` is unset, and
 - a no-op when the OpenTelemetry packages are not installed (e.g. before the
   backend image has been rebuilt with the new requirements).
 """
@@ -34,8 +34,8 @@ def get_tracer(name: str):
 
 
 def setup_tracing(app) -> bool:
-    api_key = os.getenv("POSTHOG_API_KEY")
-    if not api_key:
+    token = os.getenv("POSTHOG_TOKEN")
+    if not token:
         return False
 
     try:
@@ -59,7 +59,7 @@ def setup_tracing(app) -> bool:
     )
     exporter = OTLPSpanExporter(
         endpoint=f"{host}/i/v1/traces",
-        headers={"Authorization": f"Bearer {api_key}"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
