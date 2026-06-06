@@ -1,8 +1,8 @@
 import pytest
 from httpx import AsyncClient
+from tests.conftest import register_user
 
 from app.config import Settings
-from tests.conftest import auth_headers, login_user, register_user
 
 
 @pytest.mark.asyncio

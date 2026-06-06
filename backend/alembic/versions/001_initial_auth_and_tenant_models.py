@@ -5,18 +5,20 @@ Revises:
 Create Date: 2026-06-06
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 revision: str = "001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 role_enum = sa.Enum("admin", "manager", "individual", name="role")
-role_enum_existing = sa.Enum("admin", "manager", "individual", name="role", create_type=False)
+role_enum_existing = sa.Enum(
+    "admin", "manager", "individual", name="role", create_type=False
+)
 
 
 def upgrade() -> None:
@@ -25,9 +27,18 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("email", sa.String(length=320), nullable=False),
         sa.Column("hashed_password", sa.String(length=1024), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("is_superuser", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("is_verified", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
+        ),
+        sa.Column(
+            "is_superuser",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
+        sa.Column(
+            "is_verified", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
         sa.Column("name", sa.String(length=255), nullable=True),
         sa.Column(
             "created_at",
@@ -52,7 +63,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="cascade"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_oauth_accounts_user_id"), "oauth_accounts", ["user_id"], unique=False)
+    op.create_index(
+        op.f("ix_oauth_accounts_user_id"), "oauth_accounts", ["user_id"], unique=False
+    )
 
     op.create_table(
         "tenants",
@@ -88,10 +101,16 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "user_id", name="uq_tenant_membership"),
     )
     op.create_index(
-        op.f("ix_tenant_memberships_tenant_id"), "tenant_memberships", ["tenant_id"], unique=False
+        op.f("ix_tenant_memberships_tenant_id"),
+        "tenant_memberships",
+        ["tenant_id"],
+        unique=False,
     )
     op.create_index(
-        op.f("ix_tenant_memberships_user_id"), "tenant_memberships", ["user_id"], unique=False
+        op.f("ix_tenant_memberships_user_id"),
+        "tenant_memberships",
+        ["user_id"],
+        unique=False,
     )
 
     op.create_table(
@@ -110,22 +129,31 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["invited_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["invited_by_user_id"], ["users.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "email", name="uq_tenant_invite_email"),
         sa.UniqueConstraint("token_hash", name="uq_tenant_invite_token_hash"),
     )
     op.create_index(
-        op.f("ix_tenant_invites_tenant_id"), "tenant_invites", ["tenant_id"], unique=False
+        op.f("ix_tenant_invites_tenant_id"),
+        "tenant_invites",
+        ["tenant_id"],
+        unique=False,
     )
 
 
 def downgrade() -> None:
     op.drop_index(op.f("ix_tenant_invites_tenant_id"), table_name="tenant_invites")
     op.drop_table("tenant_invites")
-    op.drop_index(op.f("ix_tenant_memberships_user_id"), table_name="tenant_memberships")
-    op.drop_index(op.f("ix_tenant_memberships_tenant_id"), table_name="tenant_memberships")
+    op.drop_index(
+        op.f("ix_tenant_memberships_user_id"), table_name="tenant_memberships"
+    )
+    op.drop_index(
+        op.f("ix_tenant_memberships_tenant_id"), table_name="tenant_memberships"
+    )
     op.drop_table("tenant_memberships")
     op.drop_index(op.f("ix_tenants_slug"), table_name="tenants")
     op.drop_table("tenants")

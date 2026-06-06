@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 // Heading + optional supporting copy for a marketing section. Centered by
 // default; `align="left"` is used where the heading sits beside other content.
@@ -11,9 +11,9 @@ function SectionHeading({
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "title"> & {
-  title: React.ReactNode
-  description?: React.ReactNode
-  align?: "center" | "left"
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  align?: "center" | "left";
 }) {
   return (
     <div
@@ -25,14 +25,12 @@ function SectionHeading({
       )}
       {...props}
     >
-      <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-        {title}
-      </h2>
+      <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h2>
       {description && (
         <p className="text-muted-foreground mt-4 text-lg">{description}</p>
       )}
     </div>
-  )
+  );
 }
 
-export { SectionHeading }
+export { SectionHeading };

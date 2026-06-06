@@ -54,9 +54,7 @@ def setup_tracing(app) -> bool:
     host = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com").rstrip("/")
     service_name = os.getenv("OTEL_SERVICE_NAME", "propel-backend")
 
-    provider = TracerProvider(
-        resource=Resource.create({"service.name": service_name})
-    )
+    provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
     exporter = OTLPSpanExporter(
         endpoint=f"{host}/i/v1/traces",
         headers={"Authorization": f"Bearer {token}"},

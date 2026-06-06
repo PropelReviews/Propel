@@ -19,15 +19,14 @@ function App() {
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 p-8">
       <h1 className="text-3xl font-semibold tracking-tight">Propel</h1>
       <p className="text-muted-foreground max-w-md text-center">
-        Open source developer analytics for teams that want to trust their
-        metrics.
+        Open source developer analytics for teams that want to trust their metrics.
       </p>
 
       {authEnabled && status === "loading" ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground text-sm">Loading…</p>
       ) : authEnabled && status === "authenticated" ? (
         <div className="flex flex-col items-center gap-3">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Signed in as {user?.name ?? user?.email}
           </p>
           <Button variant="outline" analyticsName="sign_out" onClick={signOut}>

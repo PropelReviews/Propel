@@ -9,7 +9,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.enums import Role
 from app.models.invite import TenantInvite
 from app.models.membership import TenantMembership
 from app.models.user import User
@@ -81,7 +80,9 @@ async def create_invite(
     return InviteCreated(invite=invite_read, invite_url=_build_invite_url(raw_token))
 
 
-async def list_pending_invites(session: AsyncSession, tenant_id: uuid.UUID) -> list[InviteRead]:
+async def list_pending_invites(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> list[InviteRead]:
     result = await session.execute(
         select(TenantInvite)
         .where(
@@ -98,21 +99,29 @@ async def revoke_invite(
 ) -> None:
     invite = await session.get(TenantInvite, invite_id)
     if invite is None or invite.tenant_id != tenant_id or not invite.is_pending:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found"
+        )
     await session.delete(invite)
     await session.commit()
 
 
-async def accept_invite(session: AsyncSession, user: User, raw_token: str) -> TenantMembership:
+async def accept_invite(
+    session: AsyncSession, user: User, raw_token: str
+) -> TenantMembership:
     token_hash = _hash_token(raw_token)
     result = await session.execute(
         select(TenantInvite).where(TenantInvite.token_hash == token_hash)
     )
     invite = result.scalar_one_or_none()
     if invite is None or not invite.is_pending:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite token")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite token"
+        )
     if invite.expires_at < datetime.now(UTC):
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Invite has expired")
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE, detail="Invite has expired"
+        )
     if invite.email.lower() != user.email.lower():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

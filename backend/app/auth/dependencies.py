@@ -42,7 +42,9 @@ async def get_membership(
     )
     membership = result.scalar_one_or_none()
     if membership is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found"
+        )
     return membership
 
 
@@ -52,7 +54,9 @@ async def get_tenant_context(
 ) -> TenantContext:
     tenant = await session.get(Tenant, membership.tenant_id)
     if tenant is None or tenant.is_deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found"
+        )
     return TenantContext(tenant=tenant, membership=membership)
 
 

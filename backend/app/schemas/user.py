@@ -2,9 +2,7 @@ import uuid
 from datetime import datetime
 
 from fastapi_users import schemas
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-
-from app.models.enums import Role
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class UserRead(schemas.BaseUser[uuid.UUID]):

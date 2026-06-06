@@ -57,12 +57,15 @@ class AuthSecurityMiddleware(BaseHTTPMiddleware):
         settings = get_settings()
         path = request.url.path
 
-        if request.method == "POST" and path == REGISTER_PATH:
-            if not settings.auth_registration_enabled:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "REGISTRATION_DISABLED"},
-                )
+        if (
+            request.method == "POST"
+            and path == REGISTER_PATH
+            and not settings.auth_registration_enabled
+        ):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "REGISTRATION_DISABLED"},
+            )
 
         if request.method == "POST" and path in {REGISTER_PATH, LOGIN_PATH}:
             client_ip = get_client_ip(request)
@@ -74,7 +77,9 @@ class AuthSecurityMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=429,
                     content={"detail": "TOO_MANY_REQUESTS"},
-                    headers={"Retry-After": str(settings.auth_rate_limit_window_seconds)},
+                    headers={
+                        "Retry-After": str(settings.auth_rate_limit_window_seconds)
+                    },
                 )
 
         return await call_next(request)

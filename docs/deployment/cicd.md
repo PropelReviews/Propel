@@ -7,7 +7,7 @@ AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | `terraform fmt -check` + `validate` (beta & prod), backend `pytest`, frontend `vitest` |
+| [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | Terraform `fmt -check` + `validate` (beta & prod); backend Ruff lint/format + `pytest`; frontend ESLint + Prettier + TypeScript + `vitest` + Vite builds |
 | [`deploy-beta.yml`](../../.github/workflows/deploy-beta.yml) | push to `main`, manual | OIDC → beta role → `terraform apply` → deploy API → deploy frontend (uses the `beta` Environment for vars) |
 | [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | successful beta deploy on `main`, push `v*` tag, manual | Same as beta, in prod, gated by the `prod` Environment approval |
 

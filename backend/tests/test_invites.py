@@ -3,10 +3,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
+from tests.conftest import auth_headers, create_tenant, login_user, register_user
 
 from app.db.session import async_session_maker
 from app.models.invite import TenantInvite
-from tests.conftest import auth_headers, create_tenant, login_user, register_user
 
 
 @pytest.mark.asyncio

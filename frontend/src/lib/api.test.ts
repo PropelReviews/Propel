@@ -12,11 +12,18 @@ function mockFetch(response: { ok: boolean; status: number; body: unknown }) {
   const fetchMock = vi.fn(async (_url: string, _init: FetchInit) => ({
     ok: response.ok,
     status: response.status,
-    text: async () =>
-      response.body === null ? "" : JSON.stringify(response.body),
+    text: async () => (response.body === null ? "" : JSON.stringify(response.body)),
   }));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function lastFetchInit(
+  fetchMock: ReturnType<typeof vi.fn>,
+): FetchInit {
+  const init = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]?.[1];
+  expect(init).toBeDefined();
+  return init as FetchInit;
 }
 
 afterEach(() => {
@@ -34,7 +41,8 @@ describe("register", () => {
 
     await register({ email: "a@b.com", password: "supersecret", name: "Ada" });
 
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url] = fetchMock.mock.calls[0]!;
+    const init = lastFetchInit(fetchMock);
     expect(url).toContain("/api/v1/auth/register");
     expect(init.method).toBe("POST");
     expect(init.headers["Content-Type"]).toBe("application/json");
@@ -71,11 +79,10 @@ describe("login", () => {
 
     const result = await login({ email: "a@b.com", password: "pw" });
 
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url] = fetchMock.mock.calls[0]!;
+    const init = lastFetchInit(fetchMock);
     expect(url).toContain("/api/v1/auth/login");
-    expect(init.headers["Content-Type"]).toBe(
-      "application/x-www-form-urlencoded",
-    );
+    expect(init.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
     const params = new URLSearchParams(init.body);
     expect(params.get("username")).toBe("a@b.com");
     expect(params.get("password")).toBe("pw");
@@ -89,9 +96,10 @@ describe("login", () => {
       body: { detail: "LOGIN_BAD_CREDENTIALS" },
     });
 
-    await expect(login({ email: "a@b.com", password: "x" })).rejects.toMatchObject(
-      { code: "LOGIN_BAD_CREDENTIALS", message: "Incorrect email or password." },
-    );
+    await expect(login({ email: "a@b.com", password: "x" })).rejects.toMatchObject({
+      code: "LOGIN_BAD_CREDENTIALS",
+      message: "Incorrect email or password.",
+    });
   });
 });
 
@@ -103,7 +111,7 @@ describe("getMe", () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(401);
 
-    const [, init] = fetchMock.mock.calls[0];
+    const init = lastFetchInit(fetchMock);
     expect(init.headers.Authorization).toBe("Bearer tok");
   });
 });

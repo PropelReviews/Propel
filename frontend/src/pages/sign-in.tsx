@@ -30,7 +30,7 @@ export function SignInPage() {
         <CardContent>
           <SignInForm onSuccess={() => navigate("/", { replace: true })} />
         </CardContent>
-        <CardFooter className="justify-center text-sm text-muted-foreground">
+        <CardFooter className="text-muted-foreground justify-center text-sm">
           <span>
             Don&apos;t have an account?{" "}
             <Link to="/signup" className="text-foreground underline underline-offset-4">

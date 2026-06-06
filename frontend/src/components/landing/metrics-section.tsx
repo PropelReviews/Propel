@@ -1,11 +1,6 @@
 import { Activity, GitPullRequest, Timer, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { SectionHeading } from "@/components/ui/section-heading";
 

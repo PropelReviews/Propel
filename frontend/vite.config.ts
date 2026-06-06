@@ -22,8 +22,7 @@ export default defineConfig(({ mode }) => {
   const posthogProjectId = env.POSTHOG_PROJECT_ID ?? "";
   const gitSha = env.VITE_GIT_SHA ?? env.GITHUB_SHA ?? "dev";
   const uploadSourceMaps =
-    mode === "production" &&
-    Boolean(posthogPersonalApiKey && posthogProjectId);
+    mode === "production" && Boolean(posthogPersonalApiKey && posthogProjectId);
 
   return {
     envDir: path.resolve(__dirname, ".."),
@@ -41,9 +40,7 @@ export default defineConfig(({ mode }) => {
       ),
       // Build-time metadata registered as PostHog super properties so every
       // event is attributable to an environment, app version, and commit.
-      "import.meta.env.VITE_APP_ENV": JSON.stringify(
-        env.VITE_APP_ENV ?? mode,
-      ),
+      "import.meta.env.VITE_APP_ENV": JSON.stringify(env.VITE_APP_ENV ?? mode),
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(
         env.VITE_APP_VERSION ?? pkg.version ?? "0.0.0",
       ),
