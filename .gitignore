@@ -54,3 +54,6 @@ pgdata/
 # Logs
 *.log
 npm-debug.log*
+
+*storybook.log
+storybook-static

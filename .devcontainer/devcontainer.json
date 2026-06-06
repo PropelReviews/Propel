@@ -6,9 +6,15 @@
   "workspaceFolder": "/workspaces/Propel",
   "remoteUser": "vscode",
   "shutdownAction": "stopCompose",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "containerEnv": {
+    "PROPEL_HOST_DIR": "${localWorkspaceFolder}"
+  },
   "postCreateCommand": "bash scripts/setup.sh",
   "postAttachCommand": "bash scripts/dev.sh",
-  "forwardPorts": [8000, 5173, 5432],
+  "forwardPorts": [8000, 5173, 5432, 6006],
   "portsAttributes": {
     "8000": {
       "label": "Backend",
@@ -16,6 +22,10 @@
     },
     "5173": {
       "label": "Frontend (Vite)",
+      "onAutoForward": "notify"
+    },
+    "6006": {
+      "label": "Storybook",
       "onAutoForward": "notify"
     },
     "5432": {
