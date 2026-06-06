@@ -38,6 +38,13 @@ reading the beta zone's name servers cross-account (read-only) and writing the
 NS record in the parent zone. Both hosted zones are **referenced** (never
 created/destroyed by Terraform).
 
+`www.beta.propel.ninja` is **not** a separate hosted zone and does **not** need
+its own NS record in the prod zone. Delegation at `beta.propel.ninja` already
+covers all child names; the beta stack creates a Route53 **A alias** for `www`
+in the `beta.propel.ninja` child zone pointing at the beta landing CloudFront
+distribution. Do not add a `www.beta.propel.ninja` NS record in prod — that
+breaks resolution and leaves clients seeing only NS/SOA responses.
+
 ---
 
 ## One-time prerequisites (manual, per account)

@@ -15,6 +15,18 @@ terraform {
 # S3/CloudFront frontend + ACM cert + Route53 alias records. Shared by the
 # beta and prod environment roots so they stay (almost) identical.
 
+locals {
+  landing_dns_fqdns = coalesce(var.landing_dns_fqdns, var.landing_fqdns)
+
+  # Route53 record names are relative to the hosted zone apex (e.g. "www" in
+  # beta.propel.ninja, not "www.beta.propel.ninja"). Using FQDNs in delegated
+  # child zones can leave www.* resolving to NS/SOA only instead of the alias.
+  landing_route53_names = {
+    for fqdn in local.landing_dns_fqdns :
+    fqdn => fqdn == var.zone_name ? "" : replace(fqdn, ".${var.zone_name}", "")
+  }
+}
+
 module "network" {
   source         = "../network"
   name_prefix    = var.name_prefix
@@ -108,7 +120,7 @@ resource "aws_route53_record" "app" {
 
 # Landing FQDNs (apex + www) -> landing CloudFront. One alias per name.
 resource "aws_route53_record" "landing" {
-  for_each = toset(var.landing_fqdns)
+  for_each = local.landing_route53_names
 
   zone_id = var.zone_id
   name    = each.value
@@ -119,4 +131,6 @@ resource "aws_route53_record" "landing" {
     zone_id                = module.landing.distribution_hosted_zone_id
     evaluate_target_health = false
   }
+
+  allow_overwrite = true
 }

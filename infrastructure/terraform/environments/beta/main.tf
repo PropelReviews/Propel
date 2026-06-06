@@ -23,6 +23,7 @@ module "stack" {
 
   name_prefix   = local.name_prefix
   zone_id       = data.aws_route53_zone.this.zone_id
+  zone_name     = var.zone_name
   api_fqdn      = local.api_fqdn
   app_fqdn      = local.app_fqdn
   landing_fqdns = local.landing_fqdns

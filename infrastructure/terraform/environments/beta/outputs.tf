@@ -18,6 +18,14 @@ output "landing_cloudfront_distribution_id" {
   value = module.stack.landing_cloudfront_distribution_id
 }
 
+output "landing_cloudfront_domain_name" {
+  value = module.stack.landing_cloudfront_domain_name
+}
+
+output "landing_cloudfront_hosted_zone_id" {
+  value = module.stack.landing_cloudfront_hosted_zone_id
+}
+
 output "ecr_repository_url" {
   value = module.stack.ecr_repository_url
 }
