@@ -25,6 +25,23 @@ locals {
     for fqdn in local.landing_dns_fqdns :
     fqdn => fqdn == var.zone_name ? "" : replace(fqdn, ".${var.zone_name}", "")
   }
+
+  # Browser calls from the deployed SPA (app.<zone>) are cross-origin relative to
+  # api.<zone>. Starlette returns 400 on OPTIONS preflight when the Origin is not
+  # listed here, so always inject the app origin. Extra origins can still be
+  # supplied via GitHub Actions variables (app_environment.CORS_ALLOWED_ORIGINS).
+  cors_allowed_origins = join(",", distinct(concat(
+    ["https://${var.app_fqdn}"],
+    [
+      for origin in split(",", lookup(var.app_environment, "CORS_ALLOWED_ORIGINS", "")) :
+      trimspace(origin) if trimspace(origin) != ""
+    ],
+    ["http://localhost:5173", "http://localhost:3000"],
+  )))
+
+  api_app_environment = merge(var.app_environment, {
+    CORS_ALLOWED_ORIGINS = local.cors_allowed_origins
+  })
 }
 
 module "network" {
@@ -66,7 +83,7 @@ module "api" {
   ecs_security_group_id   = module.network.ecs_security_group_id
   acm_certificate_arn     = module.dns.certificate_arn
   database_url_secret_arn = module.database.database_url_secret_arn
-  app_environment         = var.app_environment
+  app_environment         = local.api_app_environment
   app_secrets             = var.app_secrets
   container_port          = var.container_port
   image_tag               = var.api_image_tag
