@@ -64,7 +64,7 @@ workflows into:
 So adding a new key (e.g. `POSTHOG_TOKEN`, `POSTHOG_HOST`, `VITE_FEATURE_X`)
 is just **adding an Actions variable** — no Terraform or workflow edits.
 
-Typical variables to set per environment (`beta` / `production` in GitHub
+Typical variables to set per environment (`beta` / `prod` in GitHub
 Environments, or org/repo level as a fallback). The PostHog write-only key is
 safe to expose as a variable:
 
@@ -93,7 +93,7 @@ seeding the first API image + frontend.
 
 - Push to `main` -> `.github/workflows/deploy-beta.yml` deploys **beta**.
 - Push a `v*` tag -> `.github/workflows/deploy-prod.yml` deploys **prod**
-  (gated by the `production` GitHub Environment approval).
+  (gated by the `prod` GitHub Environment approval).
 
 ### Verify
 

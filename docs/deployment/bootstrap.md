@@ -31,7 +31,7 @@ the `beta.propel.ninja` delegation, so the beta zone must already exist.
 - Permission to create the GitHub OIDC provider, IAM roles, S3, and DynamoDB in
   each account.
 - Admin on the `PropelReviews/Propel` GitHub repo (to set Actions variables and
-  the `production` Environment).
+  the `prod` Environment).
 - Tools: `aws` CLI v2, `terraform` ≥ 1.9.8, `docker`, `jq`. All are preinstalled
   in the dev container.
 
@@ -154,7 +154,7 @@ The trust/permission policy JSON is committed under
 - `beta-trust.json` — beta trust: GitHub `main` branch, the `beta` environment,
   **and** prod cross-account assume (the `ProdCrossAccountAssume` statement, so
   the role is created in one shot).
-- `prod-trust.json` — prod trust: GitHub `v*` tags + `production` environment.
+- `prod-trust.json` — prod trust: GitHub `v*` tags + `prod` environment.
 
 Create the roles — **prod first**, because `beta-trust.json` names the prod role
 as a principal and IAM validates that it exists (run from the repo root):
@@ -225,7 +225,7 @@ level) is forwarded by the workflows into both the API container env
 (`app_environment` → `app.auto.tfvars.json`) and the SPA build env. Adding a new
 key is just adding an Actions variable; no Terraform or workflow edits needed.
 
-1. **Environments + Actions variables** — create **`beta`** and **`production`**
+1. **Environments + Actions variables** — create **`beta`** and **`prod`**
    environments (Settings → Environments). Add Actions **variables** on each
    (or at org/repo level as a fallback). The PostHog project token is a
    write-only key, safe as a variable:
@@ -235,7 +235,7 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | `POSTHOG_TOKEN` | `phc_...` | API (OTEL → PostHog) + SPA |
    | `POSTHOG_HOST` | `https://us.i.posthog.com` | API + SPA |
 
-   Deploy workflows bind `environment: beta` / `environment: production` so
+   Deploy workflows bind `environment: beta` / `environment: prod` so
    environment-scoped variables are forwarded via `vars` into the API container
    and SPA build. Without the environment binding, only repo/org variables are
    visible and per-environment values (e.g. beta PostHog) are silently omitted.
@@ -243,7 +243,7 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    For **truly sensitive** values, use the Terraform `app_secrets` map instead —
    each entry becomes a Secrets Manager secret injected into the task.
 
-2. **`production` Environment** — add **required reviewers** so prod deploys
+2. **`prod` Environment** — add **required reviewers** so prod deploys
    pause for manual approval. Prod also auto-triggers after a successful beta
    deploy on `main` (see [`cicd.md`](cicd.md)).
 

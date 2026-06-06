@@ -29,9 +29,9 @@ jobs:
     if: >-
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
-    # Requires manual approval when the `production` Environment has required
+    # Requires manual approval when the `prod` Environment has required
     # reviewers configured in the repo settings.
-    environment: production
+    environment: prod
     steps:
       - uses: actions/checkout@v4
         with:

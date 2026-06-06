@@ -9,7 +9,7 @@ AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
 |----------|---------|--------------|
 | [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | `terraform fmt -check` + `validate` (beta & prod), backend `pytest`, frontend `vitest` |
 | [`deploy-beta.yml`](../../.github/workflows/deploy-beta.yml) | push to `main`, manual | OIDC → beta role → `terraform apply` → deploy API → deploy frontend (uses the `beta` Environment for vars) |
-| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | successful beta deploy on `main`, push `v*` tag, manual | Same as beta, in prod, gated by the `production` Environment approval |
+| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | successful beta deploy on `main`, push `v*` tag, manual | Same as beta, in prod, gated by the `prod` Environment approval |
 
 ## Deploy flow (beta and prod are identical except account/trigger)
 
@@ -37,7 +37,7 @@ map for values that must not be exposed (they become Secrets Manager secrets).
 ## Releasing to prod
 
 Every successful **Deploy Beta** run on `main` automatically triggers **Deploy
-Prod** (still gated by the `production` Environment approval if reviewers are
+Prod** (still gated by the `prod` Environment approval if reviewers are
 configured). You can also cut a versioned release:
 
 ```bash
@@ -47,12 +47,12 @@ git push origin v1.2.3      # triggers deploy-prod.yml; approve in the Environme
 
 ## Required GitHub config
 
-- **`beta` and `production` Environments** (Settings → Environments). Each job
-  binds its environment so environment-scoped Actions **variables** (e.g.
+- **`beta` and `prod` Environments** (Settings → Environments). Each job binds
+  its environment so environment-scoped Actions **variables** (e.g.
   `POSTHOG_TOKEN`, `POSTHOG_HOST`) flow into `vars` and reach both the API
   container and the SPA build. Repository/org-level variables still work as a
   fallback when an environment does not override them.
-- **`production` Environment** — add required reviewers to gate prod deploys.
+- **`prod` Environment** — add required reviewers to gate prod deploys.
 - Per-account OIDC provider + `PropelTerraform` role (bootstrap Step 4). After
   adding `environment: beta` to the beta workflow, re-apply the beta IAM trust
   (`beta-trust.json`) so OIDC allows `environment:beta` subjects.
