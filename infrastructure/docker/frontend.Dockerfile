@@ -2,6 +2,5 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Placeholder until Vite app is scaffolded.
-# Keeps the container running so docker-compose up succeeds.
-CMD ["node", "-e", "console.log('Propel frontend placeholder — waiting for app code'); setInterval(() => {}, 3600000)"]
+# node_modules lives on the bind-mounted volume (installed by scripts/setup.sh).
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

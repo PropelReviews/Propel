@@ -6,6 +6,8 @@
   "workspaceFolder": "/workspaces/Propel",
   "remoteUser": "vscode",
   "shutdownAction": "stopCompose",
+  "postCreateCommand": "bash scripts/setup.sh",
+  "postAttachCommand": "bash scripts/dev.sh",
   "forwardPorts": [8000, 5173, 5432],
   "portsAttributes": {
     "8000": {

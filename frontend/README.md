@@ -14,14 +14,21 @@ The frontend presents metrics surfaced by the backend API: cycle time, throughpu
 
 ## Setup
 
-Setup instructions coming soon. Once the app is scaffolded, local development will run via:
-
 ```bash
+cd frontend
 npm install
 npm run dev
 ```
 
 The dev server listens on port `5173` by default.
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start Vite dev server |
+| `npm run build` | Type-check and build for production |
+| `npm run preview` | Preview production build locally |
 
 ## Related
 

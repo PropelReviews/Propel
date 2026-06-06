@@ -28,19 +28,35 @@ Your tools (GitHub, Linear, Cursor)
 
 ```
 backend/
-├── meltano/        # Meltano project — extractors and loaders
+├── app/
+│   ├── __init__.py
+│   └── main.py     # FastAPI application
+├── meltano/        # Meltano project — extractors and loaders (coming soon)
+├── requirements.txt
 └── README.md
 ```
 
 ## Setup
 
-Setup instructions coming soon. Once the app is scaffolded, local development will run via:
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+The API listens on port `8000` by default.
+
+### Endpoints
+
+| Route | Description |
+|---|---|
+| `GET /` | Hello World |
+| `GET /health` | Health check |
+
+### Extraction (coming soon)
 
 ```bash
-# API
-uvicorn app.main:app --reload --port 8000
-
-# Extraction (from meltano/)
+# From meltano/
 meltano run tap-github target-postgres
 ```
 
