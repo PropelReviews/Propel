@@ -53,8 +53,7 @@ Done once per account before the first `terraform init`:
 ### App config via GitHub Actions variables (generic)
 
 App configuration is **not hardcoded** anywhere. Every **GitHub Actions
-variable** (environment, org, or repo level) is forwarded generically by the
-workflows into:
+variable** (org or repo level) is forwarded generically by the workflows into:
 
 - the **API container** env — via `app_environment` (CI writes
   `{"app_environment": ${{ toJSON(vars) }}}` to `app.auto.tfvars.json`, which
@@ -64,9 +63,8 @@ workflows into:
 So adding a new key (e.g. `POSTHOG_TOKEN`, `POSTHOG_HOST`, `VITE_FEATURE_X`)
 is just **adding an Actions variable** — no Terraform or workflow edits.
 
-Typical variables to set per environment (`beta` / `prod` in GitHub
-Environments, or org/repo level as a fallback). The PostHog write-only key is
-safe to expose as a variable:
+Typical variables to set at the org level (the PostHog write-only key is safe to
+expose as a variable):
 
 | Variable | Example | Consumed by |
 |----------|---------|-------------|
@@ -93,7 +91,7 @@ seeding the first API image + frontend.
 
 - Push to `main` -> `.github/workflows/deploy-beta.yml` deploys **beta**.
 - Push a `v*` tag -> `.github/workflows/deploy-prod.yml` deploys **prod**
-  (gated by the `prod` GitHub Environment approval).
+  (gated by the `production` GitHub Environment approval).
 
 ### Verify
 

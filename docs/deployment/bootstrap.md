@@ -31,7 +31,7 @@ the `beta.propel.ninja` delegation, so the beta zone must already exist.
 - Permission to create the GitHub OIDC provider, IAM roles, S3, and DynamoDB in
   each account.
 - Admin on the `PropelReviews/Propel` GitHub repo (to set Actions variables and
-  the `prod` Environment).
+  the `beta` and `prod` Environments).
 - Tools: `aws` CLI v2, `terraform` ≥ 1.9.8, `docker`, `jq`. All are preinstalled
   in the dev container.
 
@@ -151,9 +151,9 @@ The trust/permission policy JSON is committed under
 [`infrastructure/terraform/bootstrap/`](../../infrastructure/terraform/bootstrap/README.md)
 (safe to commit — account IDs and policy JSON only, no secrets):
 
-- `beta-trust.json` — beta trust: GitHub `main` branch, the `beta` environment,
-  **and** prod cross-account assume (the `ProdCrossAccountAssume` statement, so
-  the role is created in one shot).
+- `beta-trust.json` — beta trust: GitHub `main` branch **and** prod
+  cross-account assume (the `ProdCrossAccountAssume` statement, so the role is
+  created in one shot).
 - `prod-trust.json` — prod trust: GitHub `v*` tags + `prod` environment.
 
 Create the roles — **prod first**, because `beta-trust.json` names the prod role
@@ -243,9 +243,9 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    For **truly sensitive** values, use the Terraform `app_secrets` map instead —
    each entry becomes a Secrets Manager secret injected into the task.
 
-2. **`prod` Environment** — add **required reviewers** so prod deploys
-   pause for manual approval. Prod also auto-triggers after a successful beta
-   deploy on `main` (see [`cicd.md`](cicd.md)).
+2. **`prod` Environment** — add **required reviewers** so prod deploys pause for
+   manual approval. The prod workflow declares `environment: prod`. Prod also
+   auto-triggers after a successful beta deploy on `main` (see [`cicd.md`](cicd.md)).
 
 ---
 
