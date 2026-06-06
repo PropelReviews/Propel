@@ -30,6 +30,15 @@ db_session.async_session_maker = async_sessionmaker(test_engine, expire_on_commi
 engine = test_engine
 
 
+@pytest.fixture(autouse=True)
+def reset_auth_rate_limiter():
+    from app.auth.middleware import auth_rate_limiter
+
+    auth_rate_limiter.reset()
+    yield
+    auth_rate_limiter.reset()
+
+
 @pytest.fixture(scope="session")
 def anyio_backend():
     return "asyncio"

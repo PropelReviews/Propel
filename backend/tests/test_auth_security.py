@@ -1,16 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
-from app.auth.middleware import auth_rate_limiter
 from app.config import Settings
 from tests.conftest import auth_headers, login_user, register_user
-
-
-@pytest.fixture(autouse=True)
-def reset_auth_rate_limiter():
-    auth_rate_limiter.reset()
-    yield
-    auth_rate_limiter.reset()
 
 
 @pytest.mark.asyncio
