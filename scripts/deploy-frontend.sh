@@ -29,7 +29,9 @@ export VITE_POSTHOG_KEY="${VITE_POSTHOG_KEY:-${POSTHOG_TOKEN:-}}"
 export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://us.i.posthog.com}}"
 
 echo "==> Building SPA (VITE_API_URL=$VITE_API_URL)"
-npm --prefix "$FRONTEND_DIR" ci
+if [[ "${SKIP_NPM_CI:-}" != "1" ]]; then
+  "$REPO_ROOT/scripts/npm-ci.sh" "$FRONTEND_DIR"
+fi
 npm --prefix "$FRONTEND_DIR" run build
 
 echo "==> Syncing to s3://$BUCKET"
