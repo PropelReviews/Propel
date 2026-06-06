@@ -1,0 +1,26 @@
+# SQL lint rules for the dbt project. Run from transformation/dbt:
+#   uvx sqlfluff lint models
+# The jinja templater with dbt builtins (ref/source/config/var) keeps linting
+# fast and database-free; real compilation is checked by `dbt build` in CI.
+[sqlfluff]
+dialect = postgres
+templater = jinja
+max_line_length = 100
+# L031/AL07 (avoid table aliases) and ST06 (column order by complexity) are
+# more opinionated than useful for analytics models.
+exclude_rules = AL07, ST06
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = true
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower

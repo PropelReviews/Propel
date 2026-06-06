@@ -1,0 +1,144 @@
+version: 2
+
+models:
+  - name: fct_pr_activity_daily
+    description: >
+      Daily pull-request activity per tenant: PRs opened (created_at), merged
+      (merged_at), and closed without merging (closed_at with no merged_at).
+      Throughput signal — not DORA deployment frequency (see
+      fct_deployment_frequency_daily, which counts GitHub Releases).
+    columns:
+      - name: tenant_id
+        description: Propel tenant that owns the activity.
+        data_tests:
+          - not_null
+      - name: activity_date
+        description: UTC calendar day of the activity.
+        data_tests:
+          - not_null
+      - name: prs_opened
+        data_tests:
+          - not_null
+      - name: prs_merged
+        data_tests:
+          - not_null
+      - name: prs_closed
+        data_tests:
+          - not_null
+
+  - name: fct_deployment_frequency_daily
+    description: >
+      Daily DORA deployment frequency from GitHub Releases: published
+      non-draft releases (releases_published) and non-prerelease production
+      releases (production_releases), bucketed by published_at.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: releases_published
+        data_tests:
+          - not_null
+      - name: production_releases
+        data_tests:
+          - not_null
+
+  - name: fct_pr_cycle_time_daily
+    description: >
+      Daily PR cycle-time primitives (DORA lead-time-for-changes proxy):
+      median / average / p90 hours from PR open to merge, bucketed by merge day.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: prs_merged
+        data_tests:
+          - not_null
+      - name: median_cycle_time_hours
+        data_tests:
+          - not_null
+      - name: avg_cycle_time_hours
+        data_tests:
+          - not_null
+      - name: p90_cycle_time_hours
+        data_tests:
+          - not_null
+
+  - name: fct_review_latency_daily
+    description: >
+      Daily review-latency primitives: time from PR open to first non-author
+      review, plus reviews submitted that day. Contributes to DORA lead-time
+      breakdown / review-flow analysis.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: prs_first_reviewed
+        data_tests:
+          - not_null
+      - name: reviews_submitted
+        data_tests:
+          - not_null
+
+  - name: fct_change_failure_daily
+    description: >
+      Daily change-failure proxy (DORA change-fail-rate stand-in): share of
+      merged PRs whose title matches `^Revert` + space/punct, bucketed by merge day.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: prs_merged
+        data_tests:
+          - not_null
+      - name: prs_reverted
+        data_tests:
+          - not_null
+      - name: change_failure_rate
+        data_tests:
+          - not_null
+
+  - name: stg_github_pull_requests
+    description: >
+      Latest snapshot of every GitHub pull request (one row per PR), including
+      cycle_time_hours and is_revert primitives used by DORA marts.
+    columns:
+      - name: pr_node_id
+        data_tests:
+          - not_null
+
+  - name: fct_tickets
+    description: >
+      Unified ticket entity across GitHub issues and Linear issues. One row per
+      ticket per tenant with a normalized status (open, in_progress, done,
+      canceled).
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: ticket_uid
+        description: Stable key source:external_id (unique per tenant).
+        data_tests:
+          - not_null
+          - unique
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['github', 'linear']
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['open', 'in_progress', 'done', 'canceled']

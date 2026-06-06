@@ -1,0 +1,17 @@
+# Connection profile for the Propel warehouse (the same Postgres the backend
+# uses). All credentials come from DBT_* env vars, derived from DATABASE_URL by
+# the Dagster analytics module (orchestration/propel_orchestration/analytics.py)
+# or exported manually for ad-hoc runs. Models land in the `analytics` schema;
+# raw landing tables stay in `public`.
+propel:
+  target: default
+  outputs:
+    default:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_PORT', '5432') | as_number }}"
+      user: "{{ env_var('DBT_USER', 'propel') }}"
+      password: "{{ env_var('DBT_PASSWORD', 'propel') }}"
+      dbname: "{{ env_var('DBT_DBNAME', 'propel') }}"
+      schema: analytics
+      threads: 4

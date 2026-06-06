@@ -1,0 +1,32 @@
+name: propel
+version: "1.0.0"
+profile: propel
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+
+vars:
+  # When set (by the Dagster analytics run), incremental marts only recompute
+  # this tenant's rows. Unset (manual / full-refresh) builds every tenant.
+  tenant_id: null
+
+models:
+  propel:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+      # Incremental delete+insert issues DELETEs. When a Postgres publication
+      # publishes deletes (e.g. PostHog warehouse CDC), tables need a replica
+      # identity or the delete fails. Set FULL before/after each run so both
+      # existing tables and freshly created ones are covered.
+      +pre-hook:
+        - "{% if execute %}alter table if exists {{ this }} replica identity full;{% endif %}"
+      +post-hook:
+        - "alter table {{ this }} replica identity full"

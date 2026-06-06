@@ -1,0 +1,83 @@
+import uuid
+
+from fastapi import Depends, Request
+from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, models, schemas
+from fastapi_users.authentication import (
+    AuthenticationBackend,
+    BearerTransport,
+    JWTStrategy,
+)
+from fastapi_users.db import SQLAlchemyUserDatabase
+
+from app.auth.database import get_user_db
+from app.auth.password import validate_password_strength
+from app.config import get_settings
+from app.models.user import User
+from app.services import github_identity
+
+settings = get_settings()
+
+
+class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
+    reset_password_token_secret = settings.jwt_secret
+    verification_token_secret = settings.jwt_secret
+
+    async def validate_password(
+        self,
+        password: str,
+        user: schemas.UC | User,
+    ) -> None:
+        validate_password_strength(password, user)
+
+    async def create(
+        self,
+        user_create,
+        safe: bool = False,
+        request: Request | None = None,
+    ) -> User:
+        user = await super().create(user_create, safe=safe, request=request)
+        if getattr(user_create, "name", None):
+            await self.user_db.update(user, {"name": user_create.name})
+        return user
+
+    async def on_after_register(self, user: User, request: Request | None = None):
+        # Claim any pending GitHub org identities with a matching email so the
+        # new user lands in their org's workspace with the right role.
+        await github_identity.link_email_identity(
+            self.user_db.session, user.id, user.email
+        )
+
+    async def oauth_callback(self, oauth_name: str, *args, **kwargs) -> User:
+        user = await super().oauth_callback(oauth_name, *args, **kwargs)
+        # When a user signs in with GitHub, claim any pending org identities whose
+        # GitHub user id matches — closing the loop for provisioned/pending members.
+        if oauth_name == "github":
+            account_id = args[1] if len(args) > 1 else kwargs.get("account_id")
+            if account_id:
+                await github_identity.link_oauth_identity(
+                    self.user_db.session, user.id, str(account_id)
+                )
+        return user
+
+
+async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db)):
+    yield UserManager(user_db)
+
+
+def get_jwt_strategy() -> JWTStrategy[models.UP, models.ID]:
+    return JWTStrategy(
+        secret=settings.jwt_secret, lifetime_seconds=settings.jwt_lifetime_seconds
+    )
+
+
+bearer_transport = BearerTransport(tokenUrl="api/v1/auth/login")
+
+auth_backend = AuthenticationBackend(
+    name="jwt",
+    transport=bearer_transport,
+    get_strategy=get_jwt_strategy,
+)
+
+fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [auth_backend])
+
+current_active_user = fastapi_users.current_user(active=True)

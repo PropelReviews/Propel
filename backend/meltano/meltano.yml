@@ -1,0 +1,148 @@
+version: 1
+default_environment: dev
+project_id: propel-ingestion
+
+# Extraction layer for Propel (ingestion spec). Meltano pulls provider data via
+# Singer taps and lands it through the custom target-propel loader, which writes
+# raw_record + thin datapoint envelopes to Postgres. No transforms here.
+#
+# The orchestrator (app.ingestion) sets the per-run environment before invoking
+# `meltano run <job>`:
+#   GITHUB_INSTALLATION_TOKEN   minted per connected_account
+#   TAP_GITHUB_REPOSITORIES     JSON array of "org/repo" for the installation
+#   TAP_GITHUB_ORGANIZATIONS    JSON array of org logins (org member roster)
+#   TAP_GITHUB_USER_USERNAMES   JSON array of logins (user profile enrichment)
+#   TAP_GITHUB_START_DATE       backfill window / watermark
+#   COPILOT_ORG                 org login for Copilot usage metrics
+#   TAP_LINEAR_AUTH_TOKEN       OAuth access token for the connected workspace
+#   TAP_LINEAR_START_DATE       backfill window / watermark (Linear)
+#   PROPEL_DATABASE_URL, PROPEL_TENANT_ID, PROPEL_CONNECTED_ACCOUNT_ID,
+#   PROPEL_RUN_ID, PROPEL_SOURCE   passed through to target-propel
+
+environments:
+  - name: dev
+
+plugins:
+  extractors:
+    # Shared GitHub base: auth + watermark only, no discovery mode. tap-github
+    # requires exactly one of repositories / organizations / user_usernames per
+    # invocation, so each child below adds exactly one mode and its own select.
+    # Children inherit this definition and share its virtualenv (and lock file).
+    - name: tap-github
+      variant: meltanolabs
+      pip_url: meltanolabs-tap-github
+      config:
+        auth_token: ${GITHUB_INSTALLATION_TOKEN}
+        start_date: ${TAP_GITHUB_START_DATE}
+
+    # Repo activity is split per resource so each lands as its own Dagster op /
+    # Meltano job (granular runs, per-resource watermarks, isolated failures).
+    # Each child inherits auth + watermark and adds the repositories mode plus a
+    # single resource's stream selection.
+    - name: tap-github-commits
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
+        - commits.*
+
+    - name: tap-github-pull-requests
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
+        - pull_requests.*
+        - reviews.*
+        - pull_request_review_comments.*
+
+    - name: tap-github-issues
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
+        - issues.*
+        - issue_comments.*
+
+    # GitHub Releases (often published by Actions release workflows) — the
+    # DORA deployment-frequency signal. Separate job so release sync has its
+    # own watermark and failure boundary.
+    - name: tap-github-releases
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
+        - releases.*
+
+    - name: tap-github-org
+      inherit_from: tap-github
+      config:
+        organizations: ${TAP_GITHUB_ORGANIZATIONS}
+      select:
+        - organization_members.*
+
+    - name: tap-github-users
+      inherit_from: tap-github
+      config:
+        user_usernames: ${TAP_GITHUB_USER_USERNAMES}
+      select:
+        - users.*
+
+    - name: tap-github-copilot
+      namespace: tap_github_copilot
+      pip_url: -e ./tap-github-copilot
+      executable: tap-github-copilot
+      capabilities:
+        - state
+        - catalog
+        - discover
+      config:
+        org: ${COPILOT_ORG}
+        auth_token: ${GITHUB_INSTALLATION_TOKEN}
+
+    # Linear issues via GraphQL. Auth is the per-workspace OAuth access token
+    # (actor=app), minted/refreshed by the orchestrator and passed per run.
+    - name: tap-linear
+      namespace: tap_linear
+      pip_url: -e ./tap-linear
+      executable: tap-linear
+      capabilities:
+        - state
+        - catalog
+        - discover
+      config:
+        auth_token: ${TAP_LINEAR_AUTH_TOKEN}
+        start_date: ${TAP_LINEAR_START_DATE}
+      select:
+        - issues.*
+
+  loaders:
+    - name: target-propel
+      namespace: target_propel
+      pip_url: -e ./target-propel
+      executable: target-propel
+
+jobs:
+  - name: github_org_sync
+    tasks:
+      - tap-github-org target-propel
+  - name: github_user_profiles_sync
+    tasks:
+      - tap-github-users target-propel
+  - name: github_commits_sync
+    tasks:
+      - tap-github-commits target-propel
+  - name: github_pull_requests_sync
+    tasks:
+      - tap-github-pull-requests target-propel
+  - name: github_issues_sync
+    tasks:
+      - tap-github-issues target-propel
+  - name: github_releases_sync
+    tasks:
+      - tap-github-releases target-propel
+  - name: copilot_sync
+    tasks:
+      - tap-github-copilot target-propel
+  - name: linear_issues_sync
+    tasks:
+      - tap-linear target-propel

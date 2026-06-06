@@ -1,0 +1,68 @@
+[project]
+name = "propel-backend"
+version = "0.1.0"
+description = "Propel FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-fastapi",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "fastapi-users[sqlalchemy,oauth]",
+    "httpx-oauth",
+    "httpx",
+    "pyjwt[crypto]",
+    "cryptography",
+    "pydantic-settings",
+    "python-dotenv",
+    "email-validator",
+    "posthog",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "ruff>=0.14.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["app", "tests", "alembic"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI dependency injection uses Depends() in parameter defaults by design.
+"app/routers/**" = ["B008"]
+"app/auth/**" = ["B008"]
+# Test fixtures set env vars before importing app modules.
+"tests/conftest.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

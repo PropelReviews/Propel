@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: stg_github_issues
+    description: Latest snapshot of every GitHub issue (one row per issue, PRs excluded).
+    columns:
+      - name: issue_node_id
+        data_tests:
+          - not_null
+
+  - name: stg_linear_issues
+    description: Latest snapshot of every Linear issue (one row per issue).
+    columns:
+      - name: issue_id
+        data_tests:
+          - not_null
+
+  - name: stg_github_reviews
+    description: >
+      Latest snapshot of every submitted GitHub pull-request review (one row
+      per review). Pending reviews are excluded.
+    columns:
+      - name: review_node_id
+        data_tests:
+          - not_null
+      - name: submitted_at
+        data_tests:
+          - not_null
+
+  - name: stg_github_releases
+    description: >
+      Latest snapshot of every GitHub Release (one row per release), including
+      drafts. Deployment-frequency marts filter to published non-drafts.
+    columns:
+      - name: release_node_id
+        data_tests:
+          - not_null

@@ -1,0 +1,31 @@
+[project]
+name = "propel-orchestration"
+version = "0.1.0"
+description = "Dagster scheduler for Propel ingestion"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dagster>=1.9,<2",
+    "dagster-webserver>=1.9,<2",
+    "dagster-postgres>=0.25,<1",
+    # dbt analytics layer: models in transformation/dbt run as Dagster assets
+    # (dagster-dbt), executed by dbt-core against the app's Postgres.
+    "dagster-dbt>=0.25,<1",
+    # Distributed execution: org_ingestion_job steps run on a Dask cluster
+    # (dask_executor); dagster-aws provides the EcsRunLauncher so each run gets
+    # its own Fargate task instead of executing on the daemon's task.
+    "dagster-dask>=0.25,<1",
+    "dagster-aws>=0.25,<1",
+    "distributed>=2024.1",
+    "dbt-core>=1.8,<2",
+    "dbt-postgres>=1.8,<2",
+    # psycopg2 is needed by scripts/prepare_dagster_db.py and Dagster's Postgres
+    # storage. The remaining backend runtime deps required to import the `app`
+    # package in-process (fastapi-users, sqlalchemy, httpx, posthog, otel, …) are
+    # co-installed from backend/pyproject.toml at image build (see the Dockerfiles)
+    # so they stay a single source of truth.
+    "psycopg2-binary",
+]
+
+[tool.uv]
+package = false

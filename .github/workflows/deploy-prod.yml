@@ -1,0 +1,196 @@
+name: Deploy Prod
+
+# Auto-deploys production after CI succeeds on main (merges), on version tags,
+# or via manual dispatch. The ``prod`` Environment gates approval + secrets and
+# records deployment status on the commit (Environments UI + commit checks).
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (branch, tag, or SHA). Empty = this workflow's SHA."
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: infrastructure/terraform/environments/prod
+  AWS_ROLE_ARN: arn:aws:iam::616938645090:role/PropelTerraform
+  PROD_URL: https://propel.ninja
+  API_HEALTH_URL: https://api.propel.ninja/health
+
+jobs:
+  # Resolve the commit to deploy and skip failed CI runs on main.
+  prepare:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    outputs:
+      deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
+    steps:
+      - name: Resolve deploy SHA
+        id: resolve
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            workflow_run)
+              echo "deploy_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+              ;;
+            workflow_dispatch)
+              REF="${{ inputs.ref }}"
+              if [ -n "$REF" ]; then
+                echo "deploy_sha=$REF" >> "$GITHUB_OUTPUT"
+              else
+                echo "deploy_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              echo "deploy_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+  config:
+    needs: prepare
+    runs-on: ubuntu-latest
+    # Approval gate + environment-scoped Actions variables and secrets.
+    # ``url`` surfaces the live site on the Environments / Deployments UI.
+    environment:
+      name: prod
+      url: ${{ env.PROD_URL }}
+    outputs:
+      app_vars: ${{ toJSON(vars) }}
+      deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.deploy_sha }}
+
+      - name: Record resolved SHA
+        id: meta
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          echo "deploy_sha=$SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Production deploy"
+            echo ""
+            echo "- **SHA:** \`$SHA\`"
+            echo "- **Trigger:** \`${{ github.event_name }}\`"
+            echo "- **Site:** ${{ env.PROD_URL }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate Terraform app config
+        env:
+          APP_ENVIRONMENT_JSON: ${{ toJSON(vars) }}
+          OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
+          OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+          OAUTH_LINEAR_CLIENT_SECRET: ${{ secrets.OAUTH_LINEAR_CLIENT_SECRET }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+          GITHUB_APP_ID: ${{ secrets.GH_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.GH_APP_WEBHOOK_SECRET }}
+          GITHUB_APP_SLUG: ${{ secrets.GH_APP_SLUG }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.GH_APP_CLIENT_SECRET }}
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          DAGSTER_ALLOWED_CIDRS: ${{ vars.DAGSTER_ALLOWED_CIDRS }}
+        run: ./scripts/generate-app-tfvars.sh terraform-app-config.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-app-config
+          path: terraform-app-config.json
+          retention-days: 1
+
+  deploy:
+    needs: config
+    runs-on: ubuntu-latest
+    # OIDC subject must be environment:prod (see prod-trust.json). Approval
+    # already ran on config; same environment does not require a second gate.
+    environment:
+      name: prod
+      url: ${{ env.PROD_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.config.outputs.deploy_sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-app-config
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Forward Actions variables to env
+        run: |
+          echo '${{ needs.config.outputs.app_vars }}' | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_ENV"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          # deploy-*.sh / rollback.sh need raw ``terraform output`` (no wrapper JSON).
+          terraform_wrapper: false
+
+      - name: Install Terraform app config
+        run: cp terraform-app-config.json "${{ env.TF_DIR }}/app.auto.tfvars.json"
+
+      - name: Terraform apply
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build, push & deploy API
+        env:
+          IMAGE_TAG: ${{ needs.config.outputs.deploy_sha }}
+        run: ./scripts/deploy-api.sh prod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build & publish frontend
+        env:
+          RELEASE_SHA: ${{ needs.config.outputs.deploy_sha }}
+        run: ./scripts/deploy-frontend.sh prod
+
+      - name: Build & publish landing
+        env:
+          RELEASE_SHA: ${{ needs.config.outputs.deploy_sha }}
+        run: ./scripts/deploy-landing.sh prod
+
+      - name: Smoke check API health
+        run: |
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors \
+            "${{ env.API_HEALTH_URL }}" | tee /tmp/health.json
+          echo
+          {
+            echo "## Deploy complete"
+            echo ""
+            echo "- **SHA:** \`${{ needs.config.outputs.deploy_sha }}\`"
+            echo "- **Health:** ${{ env.API_HEALTH_URL }}"
+            echo "- **Rollback:** Actions → Rollback Prod → SHA above"
+          } >> "$GITHUB_STEP_SUMMARY"

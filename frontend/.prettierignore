@@ -1,0 +1,8 @@
+dist
+dist-landing
+node_modules
+package-lock.json
+storybook-static
+coverage
+.vitest-cache
+*.tsbuildinfo

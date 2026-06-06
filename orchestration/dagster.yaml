@@ -1,0 +1,64 @@
+# Production storage for the Dagster ingestion service.
+#
+# Run, event-log, and schedule state live in the application's Postgres under a
+# dedicated `dagster` schema so Dagster's own `alembic_version` table never
+# collides with the app's Alembic migrations. The schema is created and a
+# materialized dagster.yaml (Postgres URL inlined) is written to DAGSTER_HOME by
+# entrypoint.sh via scripts/prepare_dagster_db.py before the daemon and webserver start.
+#
+# In local dev (`dagster dev`) entrypoint.sh copies this file into DAGSTER_HOME
+# when the Postgres prep succeeds; otherwise Dagster falls back to its default
+# ephemeral SQLite storage.
+storage:
+  postgres:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+# Serialize dbt runs: per-tenant analytics runs (dagster/concurrency_key: dbt)
+# queue instead of racing delete+insert statements on the same target tables.
+#
+# Cap concurrent org/Linear ingestion runs (dagster/concurrency_key: ingestion)
+# so EcsRunLauncher does not stampede Fargate with one task per org at fan-out.
+# The limit is inlined from DASK_WORKER_MAX by prepare_dagster_db.py (default 4).
+run_coordinator:
+  module: dagster._core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    tag_concurrency_limits:
+      - key: dagster/concurrency_key
+        value: dbt
+        limit: 1
+      - key: dagster/concurrency_key
+        value: ingestion
+        limit: __INGESTION_CONCURRENCY_LIMIT__
+
+# Detect run workers that never leave STARTING (common when ECS cannot place
+# Fargate tasks under load) and free stale concurrency slots after failures.
+run_monitoring:
+  enabled: true
+  # Fargate run-worker cold start can take several minutes during fan-out.
+  start_timeout_seconds: 600
+  poll_interval_seconds: 30
+  free_slots_after_run_end_seconds: 60
+
+# No phone-home from a backend service.
+telemetry:
+  enabled: false
+
+# Emit context.log and managed Python loggers to stdout so run logs are visible
+# outside the Dagster UI (docker logs, future ECS log drivers). Event-log storage
+# in Postgres is unchanged — the UI still works.
+python_logs:
+  python_log_level: INFO
+  managed_python_loggers:
+    - propel
+  dagster_handler_config:
+    handlers:
+      console:
+        class: logging.StreamHandler
+        level: INFO
+        stream: ext://sys.stdout
+        formatter: console
+    formatters:
+      console:
+        format: "%(asctime)s %(levelname)s %(name)s %(message)s"

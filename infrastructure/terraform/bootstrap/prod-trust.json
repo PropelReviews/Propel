@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GitHubActionsOIDC",
+      "Effect": "Allow",
+      "Principal": { "Federated": "arn:aws:iam::616938645090:oidc-provider/token.actions.githubusercontent.com" },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": [
+            "repo:PropelReviews/Propel:ref:refs/tags/v*",
+            "repo:PropelReviews/Propel:ref:refs/heads/main",
+            "repo:PropelReviews/Propel:environment:prod"
+          ]
+        }
+      }
+    }
+  ]
+}
