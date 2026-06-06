@@ -12,7 +12,7 @@ repo path, and policy JSON — **no credentials or secrets**.
 | File | Role | Kind | Purpose |
 |------|------|------|---------|
 | `beta-trust.json` | beta `PropelTerraform` | trust policy | Lets GitHub Actions (`main` branch) assume the role, **and** lets the prod account assume it for the cross-account DNS read. |
-| `prod-trust.json` | prod `PropelTerraform` | trust policy | Lets GitHub Actions (`v*` tags, `main` branch, + `prod` environment) assume the role. |
+| `prod-trust.json` | prod `PropelTerraform` | trust policy | Lets GitHub Actions assume the role via the `prod` GitHub Environment (`environment:prod` OIDC subject), plus `v*` tags and `main` as fallbacks. |
 | `iam-deploy-policy.json` | both | permissions policy | Allows managing the `propel-*` ECS task/exec roles + required service-linked roles (`PowerUserAccess` excludes IAM). |
 
 ## Apply
