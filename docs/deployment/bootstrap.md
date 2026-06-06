@@ -240,6 +240,10 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | `POSTHOG_PERSONAL_API_KEY` | `phx_...` | SPA build (source map upload; keep secret) |
    | `AUTH_REGISTRATION_ENABLED` | `true` | API (allow signup when ready) |
 
+   `CORS_ALLOWED_ORIGINS` is injected automatically by Terraform (`https://app.<zone>`
+   plus local dev origins). Only set this variable if you need extra browser origins
+   beyond the deployed SPA URL.
+
    Deploy workflows bind `environment: beta` / `environment: prod` so
    environment-scoped variables are forwarded via `vars` into the API container
    and SPA build. Without the environment binding, only repo/org variables are
