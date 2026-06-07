@@ -12,10 +12,16 @@ and target-propel will key the measurement per user with no target changes.
 
 from __future__ import annotations
 
-from typing import Any
+from http import HTTPStatus
+from typing import TYPE_CHECKING, Any
 
 from singer_sdk.authenticators import BearerTokenAuthenticator
 from singer_sdk.streams import RESTStream
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    import requests
 
 # Daily metrics object is large and nested; landing keeps the full payload in
 # raw_record, so the schema is permissive rather than exhaustive.
@@ -53,3 +59,19 @@ class CopilotUsageStream(RESTStream):
         headers["Accept"] = "application/vnd.github+json"
         headers["X-GitHub-Api-Version"] = "2022-11-28"
         return headers
+
+    def validate_response(self, response: requests.Response) -> None:
+        # GitHub returns 404 when the org has no Copilot Business/Enterprise (or
+        # the App lacks the "GitHub Copilot Business" org-read permission). That's
+        # an expected "no data" state for many orgs, not a fatal error — let the
+        # run finish cleanly with zero records instead of failing every hour.
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            return
+        super().validate_response(response)
+
+    def parse_response(self, response: requests.Response) -> Iterable[dict]:
+        # Only the 200 body is a metrics array; on the tolerated 404 the body is
+        # an error object, so emit nothing rather than parsing it as records.
+        if response.status_code != HTTPStatus.OK:
+            return
+        yield from super().parse_response(response)
