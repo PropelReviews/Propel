@@ -63,6 +63,7 @@ Optional build-time env vars (all default sensibly):
 | `VITE_GIT_SHA`                           | Build commit SHA (defaults to `dev`)                         |
 | `VITE_API_URL`                           | Backend API base URL (defaults to `http://localhost:8000`)   |
 | `VITE_AUTH_ENABLED`                      | Fallback to show auth when PostHog is disabled (default off) |
+| `VITE_CHART_DEMO_ENABLED`                | Fallback to show the chart demo when PostHog is disabled (default off) |
 
 PostHog error tracking and session replay are enabled in code when a key is set.
 Session replay must also be turned on in your PostHog project settings. Production
@@ -79,6 +80,17 @@ Email/password auth wired to the backend `/api/v1/auth` endpoints.
 - **Backend:** must be running with migrations applied — `cd backend && alembic upgrade head`.
 
 See [docs/frontend/analytics.md](../docs/frontend/analytics.md) for the auth events and the `signup-signin` flag.
+
+## Chart library demo
+
+A visual gallery of the chart design library lives at `/dev/charts` (metric
+cards, line/bar/area widgets, bare primitives, and a date-range + granularity
+picker that drives every chart on the page).
+
+- **Feature flag:** gated behind the PostHog feature flag **`chart-demo`**.
+  Enable it in PostHog to expose the route and the homepage link. When PostHog
+  runs without a key (keyless self-host), set `VITE_CHART_DEMO_ENABLED=true`
+  instead.
 
 ## Related
 

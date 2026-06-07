@@ -1,31 +1,67 @@
+import { Check, X } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { SectionHeading } from "@/components/ui/section-heading";
+
+const blackBox = [
+  "Numbers generated where you can't see",
+  "Scored by logic you can't read",
+  "Handed down to the people they describe",
+  "So people distrust it, dispute it, or game it",
+];
+
+const propel = [
+  "Fully open source and self-hostable",
+  "Every metric is readable SQL",
+  "Trace any number to the raw event",
+  "Disagree? Fix it and open a pull request",
+];
 
 export function WhySection() {
   return (
     <Section id="why">
-      <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
-        <SectionHeading
-          align="left"
-          title="Most analytics tools optimize for managers. Propel optimizes for engineers."
-        />
+      <SectionHeading
+        title="Analytics shouldn't feel like surveillance"
+        description="When the pipeline is hidden, every metric feels like something being done to you. Propel is the opposite, by design."
+      />
 
-        <div className="text-muted-foreground space-y-6 text-lg leading-relaxed">
-          <p>
-            Performance measurement only works when the people being measured trust it.
-            That requires transparency at every layer: the source data, the
-            transformation logic, and the final numbers on the dashboard.
-          </p>
-          <p>
-            When any of that is hidden, metrics feel like surveillance. When all of it
-            is visible, they become a shared basis for accountability.
-          </p>
-          <p className="text-foreground font-medium">
-            Propel is built on that principle. Every metric is defined in open, readable
-            SQL, and every step in the pipeline is open source.
-          </p>
-        </div>
+      <div className="mt-16 grid gap-6 lg:grid-cols-2">
+        <Card className="gap-4 p-6">
+          <div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+            Most engineering analytics
+          </div>
+          <ul className="space-y-3">
+            {blackBox.map((item) => (
+              <li
+                key={item}
+                className="text-muted-foreground flex items-start gap-2.5"
+              >
+                <X className="mt-0.5 size-4 shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card className="border-primary/30 gap-4 p-6">
+          <div className="text-primary text-xs font-semibold tracking-wide uppercase">
+            Propel
+          </div>
+          <ul className="space-y-3">
+            {propel.map((item) => (
+              <li key={item} className="flex items-start gap-2.5">
+                <Check className="text-primary mt-0.5 size-4 shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       </div>
+
+      <p className="text-foreground mx-auto mt-10 max-w-2xl text-center text-lg font-medium text-balance">
+        Open measurement isn't a feature. It's the only kind developers will actually
+        trust.
+      </p>
     </Section>
   );
 }

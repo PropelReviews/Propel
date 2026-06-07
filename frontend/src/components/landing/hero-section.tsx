@@ -15,37 +15,33 @@ export function HeroSection() {
       <div className="mx-auto max-w-3xl text-center">
         <Badge variant="outline" className="mb-6 gap-2">
           <span className="bg-primary size-1.5 rounded-full" />
-          Open source. Trust first.
+          Fully open source. Self-hostable.
         </Badge>
 
         <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
-          Developer analytics your team can actually trust
+          Transparent analytics for engineering teams
         </h1>
 
         <p className="text-muted-foreground mt-6 text-lg text-pretty sm:text-xl">
-          Propel connects to GitHub, Linear, and Cursor and turns raw engineering
-          activity into metrics your team can inspect, question, and own. Every number
-          is open, readable SQL.
+          Your work in GitHub, Linear, and Cursor, turned into metrics you can read,
+          trace, and trust. Built first for the developers doing the work, open to
+          everyone who depends on it.
         </p>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button size="lg" asChild>
-            <a href={appUrl}>
-              Get started
-              <ArrowRight className="size-4" />
-            </a>
-          </Button>
           <Button size="lg" variant="outline" asChild>
             <a href={githubUrl} target="_blank" rel="noreferrer">
               <GithubIcon className="size-4" />
-              View on GitHub
+              Read the code
+            </a>
+          </Button>
+          <Button size="lg" asChild>
+            <a href={appUrl}>
+              Try Propel Cloud
+              <ArrowRight className="size-4" />
             </a>
           </Button>
         </div>
-
-        <p className="text-muted-foreground mt-6 text-sm">
-          Self-host in minutes or use Propel Cloud. No telemetry unless you opt in.
-        </p>
       </div>
     </Section>
   );

@@ -27,6 +27,9 @@ node_modules/
 dist/
 dist-landing/
 .vite/
+.vitest-cache/
+.vitest-attachments/
+**/__screenshots__/
 *.tsbuildinfo
 
 # dbt

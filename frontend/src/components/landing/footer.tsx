@@ -23,7 +23,8 @@ export function Footer() {
         <div className="space-y-2">
           <div className="text-lg font-semibold tracking-tight">Propel</div>
           <p className="text-muted-foreground max-w-xs text-sm">
-            Open source developer analytics for teams that want to trust their metrics.
+            Transparent analytics for engineering teams. Fully open source and
+            self-hostable.
           </p>
         </div>
 

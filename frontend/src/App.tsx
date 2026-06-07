@@ -4,11 +4,13 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useAuthFlag } from "@/hooks/use-auth-flag";
+import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { useAuth } from "@/providers/auth-provider";
 
 function App() {
   const posthog = usePostHog();
   const authEnabled = useAuthFlag();
+  const chartDemoEnabled = useChartDemoFlag();
   const { status, user, signOut } = useAuth();
 
   useEffect(() => {
@@ -44,6 +46,15 @@ function App() {
         </div>
       ) : (
         <Button analyticsName="get_started">Get Started</Button>
+      )}
+
+      {chartDemoEnabled && (
+        <Link
+          to="/dev/charts"
+          className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4"
+        >
+          Chart library demo
+        </Link>
       )}
     </main>
   );

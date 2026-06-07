@@ -1,29 +1,58 @@
 # Propel
 
-Open source developer analytics for teams that want to trust their metrics.
+Transparent analytics for engineering teams. Fully open source and self-hostable.
 
-Propel connects to your existing tools (GitHub, Linear, Cursor) and turns raw engineering activity into performance metrics your team can inspect, question, and own.
+Your work in GitHub, Linear, and Cursor, turned into metrics you can read, trace, and trust. Built first for the developers doing the work, open to everyone who depends on it.
 
-## Why Propel
+## Analytics shouldn't feel like surveillance
 
-Most developer analytics tools optimize for managers. Propel optimizes for engineers.
+Most engineering analytics are a black box:
 
-Performance measurement only works when the people being measured trust it. That requires transparency at every layer: the source data, the transformation logic, and the final numbers on the dashboard. When any of that is hidden, metrics feel like surveillance. When all of it is visible, they become a shared basis for accountability.
+- Numbers generated where you can't see
+- Scored by logic you can't read
+- Handed down to the people they describe
+- So people distrust it, dispute it, or game it
 
-Propel is built on that principle. Every metric is defined in open, readable SQL. Every step in the pipeline is open source. If you want to know how a number was calculated, you can trace it from dashboard to query to raw event.
+Propel is the opposite, by design:
+
+- Fully open source and self-hostable
+- Every metric is readable SQL
+- Trace any number to the raw event
+- Disagree? Fix it and open a pull request
+
+Open measurement isn't a feature. It's the only kind developers will actually trust.
+
+## Built for developers first
+
+The work you already do, turned into evidence you own:
+
+- **Fairer reviews** — walk in with data you can inspect, not a manager's memory
+- **A brag doc that fills itself** — real commits, reviews, and shipped work, collected as you go
+- **Resume datapoints** — concrete signal about what you actually shipped
+- **Metrics you can change** — every number about you is open SQL; read it, question it, fix it
+
+## The same numbers, for leaders
+
+Leaders work from the exact metrics developers see, not a separate hidden scorecard:
+
+- See where teams are stuck and what's slowing delivery
+- Unblock people instead of measuring them from a distance
+- Trust the rollup, because every number under it is inspectable
+
+The team view defaults to aggregate signal. Drilling into one person is opt-in, never the default.
 
 ## What Propel measures
 
-Propel pulls data from your toolchain and surfaces engineering metrics such as:
+Propel pulls from your toolchain and surfaces the metrics that matter:
 
 - **Cycle time** — how long work takes from start to finish
-- **Throughput** — how much work your team ships over time
-- **Review patterns** — how code review flows through your process
-- **Tooling activity** — signals from the tools your team already uses
+- **Throughput** — how much your team ships over time
+- **Review patterns** — how code review actually flows through your process
+- **Tooling activity** — signal from the tools your team already uses
 
-The exact metrics evolve with the project. What stays constant is that every one of them is inspectable.
+The exact set evolves with the project. What never changes is that every number is inspectable, from dashboard to raw event.
 
-## Architecture
+## How it works
 
 ```
 Your tools (GitHub, Linear, Cursor)
@@ -54,17 +83,17 @@ Meltano extracts, Postgres stores, dbt transforms, and Propel presents. The API 
 
 ## Deployment
 
-Propel is the same open source software whether you run it yourself or we run it for you. Pick the option that fits your team.
+The same software, however you run it. Identical open source software whether you run it or we do — pick what fits your team.
 
 ### Propel Cloud
 
-[Propel Cloud](https://propel.ninja) is the managed version of Propel. We handle infrastructure, updates, and operations — you get the same metrics, the same SQL, and the same transparency without running anything yourself.
+[Propel Cloud](https://propel.ninja) is our managed platform. Same metrics, same SQL, same transparency — without running anything yourself.
 
-Best if you want Propel running quickly and don't want to operate the stack.
+Best if you want Propel up quickly and don't want to operate the stack.
 
 ### Self-hosted
 
-Run Propel entirely in your own infrastructure. Your data never leaves your environment — full control over where it lives, who can access it, and how it connects to your internal tools.
+Run the open source core in your own infrastructure. Your data never leaves your environment — full control over where it lives and who can touch it.
 
 ```bash
 git clone https://github.com/PropelReviews/Propel

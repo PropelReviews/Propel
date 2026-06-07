@@ -24,12 +24,12 @@ const metrics: Metric[] = [
   {
     icon: GitPullRequest,
     title: "Review patterns",
-    description: "How code review flows through your process.",
+    description: "How code review actually flows through your process.",
   },
   {
     icon: Activity,
     title: "Tooling activity",
-    description: "Signals from the tools your team already uses.",
+    description: "Signal from the tools your team already uses.",
   },
 ];
 
@@ -37,8 +37,8 @@ export function MetricsSection() {
   return (
     <Section id="metrics">
       <SectionHeading
-        title="What Propel measures"
-        description="Propel pulls from your toolchain and surfaces engineering metrics. The exact set evolves with the project; what stays constant is that every one of them is inspectable."
+        title="The data behind the story"
+        description="Propel pulls from your toolchain and surfaces the metrics that matter. The exact set evolves; every number stays inspectable, from dashboard to raw event."
       />
 
       <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
