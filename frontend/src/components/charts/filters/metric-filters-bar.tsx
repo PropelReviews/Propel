@@ -20,12 +20,8 @@ export function MetricFiltersBar({
   className,
   hideGranularity = false,
 }: MetricFiltersBarProps) {
-  const {
-    filters,
-    availableGranularities,
-    setRange,
-    setGranularity,
-  } = useMetricFilters();
+  const { filters, availableGranularities, setRange, setGranularity } =
+    useMetricFilters();
 
   return (
     <div

@@ -63,8 +63,9 @@ export function DeploymentSection() {
             <FeatureIcon icon={Server} className="mb-2" />
             <CardTitle className="text-xl">Self-hosted</CardTitle>
             <CardDescription className="leading-relaxed">
-              Run the open source core in your own infrastructure. Your data never leaves
-              your environment. Full control over where it lives and who can touch it.
+              Run the open source core in your own infrastructure. Your data never
+              leaves your environment. Full control over where it lives and who can
+              touch it.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 space-y-4">

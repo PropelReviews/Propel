@@ -77,10 +77,7 @@ export function MetricCard({
             {value}
           </span>
           {hasDelta ? (
-            <Badge
-              variant={isGood ? "secondary" : "destructive"}
-              className="gap-1"
-            >
+            <Badge variant={isGood ? "secondary" : "destructive"} className="gap-1">
               <DeltaIcon />
               {formatDelta(delta!)}
             </Badge>

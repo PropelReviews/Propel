@@ -19,9 +19,7 @@ describe("resolveDateRange", () => {
 
 describe("startOfWeek", () => {
   it("returns the Monday of the week", () => {
-    expect(toIsoDate(startOfWeek(new Date("2026-06-10T00:00:00Z")))).toBe(
-      "2026-06-08",
-    );
+    expect(toIsoDate(startOfWeek(new Date("2026-06-10T00:00:00Z")))).toBe("2026-06-08");
   });
 });
 

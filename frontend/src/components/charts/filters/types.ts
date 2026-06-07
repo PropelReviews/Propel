@@ -1,11 +1,5 @@
 /** A relative look-back window for metrics. */
-export type RelativeRange =
-  | "day"
-  | "week"
-  | "month"
-  | "quarter"
-  | "half_year"
-  | "year";
+export type RelativeRange = "day" | "week" | "month" | "quarter" | "half_year" | "year";
 
 /** The bucket size used to aggregate data points within a range. */
 export type Granularity = "daily" | "weekly" | "monthly";

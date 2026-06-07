@@ -37,9 +37,7 @@ export function ChartWidget({
       </CardHeader>
       <CardContent>{children}</CardContent>
       {footer ? (
-        <CardFooter className="text-muted-foreground mt-4 text-xs">
-          {footer}
-        </CardFooter>
+        <CardFooter className="text-muted-foreground mt-4 text-xs">{footer}</CardFooter>
       ) : null}
     </Card>
   );

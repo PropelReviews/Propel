@@ -32,14 +32,8 @@ export function GranularityPicker({
     : GRANULARITIES;
 
   return (
-    <Select
-      value={value}
-      onValueChange={(next) => onValueChange(next as Granularity)}
-    >
-      <SelectTrigger
-        className={cn("w-[130px]", className)}
-        aria-label="Granularity"
-      >
+    <Select value={value} onValueChange={(next) => onValueChange(next as Granularity)}>
+      <SelectTrigger className={cn("w-[130px]", className)} aria-label="Granularity">
         <SelectValue placeholder="Granularity" />
       </SelectTrigger>
       <SelectContent>

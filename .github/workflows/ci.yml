@@ -111,6 +111,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Vitest browser-mode tests (chart components) run in headless Chromium,
+      # which isn't present on a fresh runner. Install it plus its OS libraries.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Run tests
         run: npm test
 

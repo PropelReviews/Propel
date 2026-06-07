@@ -42,11 +42,5 @@ export {
   RelativeRangePicker,
   type RelativeRangePickerProps,
 } from "./relative-range-picker";
-export {
-  GranularityPicker,
-  type GranularityPickerProps,
-} from "./granularity-picker";
-export {
-  MetricFiltersBar,
-  type MetricFiltersBarProps,
-} from "./metric-filters-bar";
+export { GranularityPicker, type GranularityPickerProps } from "./granularity-picker";
+export { MetricFiltersBar, type MetricFiltersBarProps } from "./metric-filters-bar";

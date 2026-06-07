@@ -87,13 +87,11 @@ export function ChartDemoPage() {
   return (
     <main className="bg-background mx-auto min-h-svh max-w-6xl px-6 py-12">
       <header className="mb-10">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Chart library
-        </h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Chart library</h1>
         <p className="text-muted-foreground mt-2 max-w-2xl">
-          Drop-in data visualization components built on shadcn and Recharts.
-          Every chart takes typed <code>data</code> and <code>series</code>{" "}
-          props and pulls its colors from the theme.
+          Drop-in data visualization components built on shadcn and Recharts. Every
+          chart takes typed <code>data</code> and <code>series</code> props and pulls
+          its colors from the theme.
         </p>
       </header>
 
@@ -156,8 +154,7 @@ export function ChartDemoPage() {
       <section className="mb-12">
         <h2 className="mb-1 text-lg font-medium">Bare primitives</h2>
         <p className="text-muted-foreground mb-4 text-sm">
-          The same charts without a card wrapper, proving they drop into any
-          layout.
+          The same charts without a card wrapper, proving they drop into any layout.
         </p>
         <div className="rounded-xl border p-6">
           <PropelLineChart
@@ -173,8 +170,8 @@ export function ChartDemoPage() {
       <section className="mb-12">
         <h2 className="mb-1 text-lg font-medium">Linked dashboard</h2>
         <p className="text-muted-foreground mb-4 text-sm">
-          One date range + granularity picker drives every chart below. Change a
-          control and all linked charts resample together.
+          One date range + granularity picker drives every chart below. Change a control
+          and all linked charts resample together.
         </p>
         <MetricFiltersProvider initialRange="quarter">
           <div className="mb-4">

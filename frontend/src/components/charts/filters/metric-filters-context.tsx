@@ -29,9 +29,7 @@ export interface MetricFiltersContextValue {
   setGranularity: (granularity: Granularity) => void;
 }
 
-const MetricFiltersContext = createContext<MetricFiltersContextValue | null>(
-  null,
-);
+const MetricFiltersContext = createContext<MetricFiltersContextValue | null>(null);
 
 export interface MetricFiltersProviderProps {
   children: ReactNode;
@@ -92,9 +90,7 @@ export function MetricFiltersProvider({
 export function useMetricFilters(): MetricFiltersContextValue {
   const context = useContext(MetricFiltersContext);
   if (!context) {
-    throw new Error(
-      "useMetricFilters must be used within a <MetricFiltersProvider />",
-    );
+    throw new Error("useMetricFilters must be used within a <MetricFiltersProvider />");
   }
   return context;
 }

@@ -12,10 +12,7 @@ import { resample, type Aggregation, type DailyPoint } from "./time";
  */
 export function useResampledSeries(
   points: DailyPoint[],
-  {
-    how = "sum",
-    valueKey = "value",
-  }: { how?: Aggregation; valueKey?: string } = {},
+  { how = "sum", valueKey = "value" }: { how?: Aggregation; valueKey?: string } = {},
 ): TimeSeriesPoint[] {
   const { filters } = useMetricFilters();
 

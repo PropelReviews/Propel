@@ -55,14 +55,14 @@ full event taxonomy.
 
 Optional build-time env vars (all default sensibly):
 
-| Var                                      | Purpose                                                      |
-| ---------------------------------------- | ------------------------------------------------------------ |
-| `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` | Enable PostHog and point it at a host                        |
-| `VITE_APP_ENV`                           | Environment label (defaults to Vite mode)                    |
-| `VITE_APP_VERSION`                       | App version (defaults to `package.json` version)             |
-| `VITE_GIT_SHA`                           | Build commit SHA (defaults to `dev`)                         |
-| `VITE_API_URL`                           | Backend API base URL (defaults to `http://localhost:8000`)   |
-| `VITE_AUTH_ENABLED`                      | Fallback to show auth when PostHog is disabled (default off) |
+| Var                                      | Purpose                                                                |
+| ---------------------------------------- | ---------------------------------------------------------------------- |
+| `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` | Enable PostHog and point it at a host                                  |
+| `VITE_APP_ENV`                           | Environment label (defaults to Vite mode)                              |
+| `VITE_APP_VERSION`                       | App version (defaults to `package.json` version)                       |
+| `VITE_GIT_SHA`                           | Build commit SHA (defaults to `dev`)                                   |
+| `VITE_API_URL`                           | Backend API base URL (defaults to `http://localhost:8000`)             |
+| `VITE_AUTH_ENABLED`                      | Fallback to show auth when PostHog is disabled (default off)           |
 | `VITE_CHART_DEMO_ENABLED`                | Fallback to show the chart demo when PostHog is disabled (default off) |
 
 PostHog error tracking and session replay are enabled in code when a key is set.

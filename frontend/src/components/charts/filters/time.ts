@@ -1,8 +1,4 @@
-import type {
-  Granularity,
-  RelativeRange,
-  ResolvedDateRange,
-} from "./types";
+import type { Granularity, RelativeRange, ResolvedDateRange } from "./types";
 import { rangeDef } from "./types";
 
 /** How to combine the daily values within a bucket. */

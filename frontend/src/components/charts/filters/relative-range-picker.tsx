@@ -29,10 +29,7 @@ export function RelativeRangePicker({
       value={value}
       onValueChange={(next) => onValueChange(next as RelativeRange)}
     >
-      <SelectTrigger
-        className={cn("w-[160px]", className)}
-        aria-label="Date range"
-      >
+      <SelectTrigger className={cn("w-[160px]", className)} aria-label="Date range">
         <SelectValue placeholder="Date range" />
       </SelectTrigger>
       <SelectContent>

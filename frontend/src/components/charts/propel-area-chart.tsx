@@ -10,11 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ChartEmptyState, ChartLoadingState } from "./chart-states";
-import {
-  buildChartConfig,
-  DEFAULT_CHART_HEIGHT,
-  DEFAULT_CHART_MARGIN,
-} from "./config";
+import { buildChartConfig, DEFAULT_CHART_HEIGHT, DEFAULT_CHART_MARGIN } from "./config";
 import type { ChartPrimitiveProps } from "./types";
 
 /**
@@ -38,11 +34,7 @@ export function PropelAreaChart({
 
   if (data.length === 0) {
     return (
-      <ChartEmptyState
-        height={height}
-        className={className}
-        message={emptyMessage}
-      />
+      <ChartEmptyState height={height} className={className} message={emptyMessage} />
     );
   }
 

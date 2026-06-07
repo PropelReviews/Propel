@@ -32,10 +32,7 @@ export function WhySection() {
           </div>
           <ul className="space-y-3">
             {blackBox.map((item) => (
-              <li
-                key={item}
-                className="text-muted-foreground flex items-start gap-2.5"
-              >
+              <li key={item} className="text-muted-foreground flex items-start gap-2.5">
                 <X className="mt-0.5 size-4 shrink-0" />
                 <span>{item}</span>
               </li>

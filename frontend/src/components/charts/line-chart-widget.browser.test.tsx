@@ -33,9 +33,7 @@ describe("LineChartWidget", () => {
     const { container } = result;
 
     await waitFor(() => container.textContent!.includes("Cycle time"));
-    await waitFor(
-      () => container.querySelectorAll(".recharts-line").length === 1,
-    );
+    await waitFor(() => container.querySelectorAll(".recharts-line").length === 1);
     expect(container.querySelector("svg")).not.toBeNull();
   });
 
@@ -45,9 +43,7 @@ describe("LineChartWidget", () => {
     );
     const { container } = result;
 
-    await waitFor(
-      () => container.querySelectorAll(".recharts-line").length === 2,
-    );
+    await waitFor(() => container.querySelectorAll(".recharts-line").length === 2);
   });
 
   it("shows the empty message when there is no data", async () => {

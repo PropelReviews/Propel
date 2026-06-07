@@ -41,9 +41,7 @@ function Harness() {
 }
 
 function text(container: HTMLElement, testid: string): string {
-  return (
-    container.querySelector(`[data-testid="${testid}"]`)?.textContent ?? ""
-  );
+  return container.querySelector(`[data-testid="${testid}"]`)?.textContent ?? "";
 }
 
 describe("MetricFilters linking", () => {
@@ -95,9 +93,7 @@ describe("filter pickers", () => {
     );
     const { container } = result;
 
-    await waitFor(
-      () => container.querySelector('[aria-label="Date range"]') !== null,
-    );
+    await waitFor(() => container.querySelector('[aria-label="Date range"]') !== null);
   });
 
   it("renders a granularity picker trigger", async () => {
@@ -110,8 +106,6 @@ describe("filter pickers", () => {
     );
     const { container } = result;
 
-    await waitFor(
-      () => container.querySelector('[aria-label="Granularity"]') !== null,
-    );
+    await waitFor(() => container.querySelector('[aria-label="Granularity"]') !== null);
   });
 });

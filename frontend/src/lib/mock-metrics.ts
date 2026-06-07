@@ -30,9 +30,7 @@ export function toTimeSeriesData(
 }
 
 /** Converts a categorical breakdown into chart-ready points keyed by `category`. */
-export function toBreakdownData(
-  response: MetricBreakdownResponse,
-): CategoryPoint[] {
+export function toBreakdownData(response: MetricBreakdownResponse): CategoryPoint[] {
   return response.rows.map((row) => ({ category: row.category, ...row.values }));
 }
 
@@ -133,8 +131,7 @@ export const mockCycleTimeSeries: TimeSeriesPoint[] = toTimeSeriesData(
   "median",
 );
 
-export const mockThroughputSeries: TimeSeriesPoint[] =
-  toTimeSeriesData(mockThroughput);
+export const mockThroughputSeries: TimeSeriesPoint[] = toTimeSeriesData(mockThroughput);
 
 export const mockDeploySeries: TimeSeriesPoint[] = toTimeSeriesData(mockDeploys);
 
@@ -145,9 +142,7 @@ export const cycleTimeSeries: ChartSeries[] = [
   { key: "median", label: "Median hours" },
 ];
 
-export const throughputSeries: ChartSeries[] = [
-  { key: "value", label: "PRs merged" },
-];
+export const throughputSeries: ChartSeries[] = [{ key: "value", label: "PRs merged" }];
 
 export const deploySeries: ChartSeries[] = [{ key: "value", label: "Deploys" }];
 

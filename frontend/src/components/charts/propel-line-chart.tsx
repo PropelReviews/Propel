@@ -10,11 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ChartEmptyState, ChartLoadingState } from "./chart-states";
-import {
-  buildChartConfig,
-  DEFAULT_CHART_HEIGHT,
-  DEFAULT_CHART_MARGIN,
-} from "./config";
+import { buildChartConfig, DEFAULT_CHART_HEIGHT, DEFAULT_CHART_MARGIN } from "./config";
 import type { ChartPrimitiveProps } from "./types";
 
 /**
@@ -39,11 +35,7 @@ export function PropelLineChart({
 
   if (data.length === 0) {
     return (
-      <ChartEmptyState
-        height={height}
-        className={className}
-        message={emptyMessage}
-      />
+      <ChartEmptyState height={height} className={className} message={emptyMessage} />
     );
   }
 
@@ -73,9 +65,7 @@ export function PropelLineChart({
           tickFormatter={valueFormatter}
         />
         <ChartTooltip content={<ChartTooltipContent />} />
-        {series.length > 1 ? (
-          <ChartLegend content={<ChartLegendContent />} />
-        ) : null}
+        {series.length > 1 ? <ChartLegend content={<ChartLegendContent />} /> : null}
         {series.map((item) => (
           <Line
             key={item.key}
