@@ -13,6 +13,23 @@ if [ -f /app/alembic.ini ]; then
   alembic -c /app/alembic.ini upgrade head
 fi
 
+# Materialize Meltano plugins (taps + target-propel), but only in containers that
+# actually run ingestion — the dedicated cron service, or an API task with cron
+# enabled. Plain API containers stay fast, and (together with the per-service
+# .meltano volume in docker-compose) this stops two containers from racing on one
+# SQLite systemdb, which fails with "database is locked". In dev the project lives
+# on the ./backend bind mount, so .meltano can't be baked into the image; it sits
+# on its own volume and installs on first start. Prod bakes plugins at build time,
+# so the marker dir already exists and this is skipped.
+if { [ "$1" = "cron" ] || [ "${INGESTION_CRON_ENABLED:-0}" = "1" ]; } \
+  && command -v meltano >/dev/null 2>&1 && [ -f /app/meltano/meltano.yml ]; then
+  if [ ! -d /app/meltano/.meltano/extractors ]; then
+    echo "==> Installing Meltano plugins (first run; this can take a few minutes)"
+    (cd /app/meltano && meltano install) \
+      || echo "WARN: 'meltano install' failed; ingestion runs will fail until it succeeds"
+  fi
+fi
+
 # On-server cron (V1 ingestion scheduler). cron jobs start with an empty
 # environment, so snapshot the current one (including PATH for the venv) into a
 # file the wrapper sources. shlex.quote keeps values with spaces/quotes safe.

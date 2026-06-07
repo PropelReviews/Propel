@@ -31,8 +31,16 @@ COPY app ./app
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 # Bake the Meltano project (taps + target-propel) so the ingestion CLI can run
-# `meltano run` from this image. Meltano itself is installed via its own venv.
+# `meltano run` from this image.
 COPY meltano ./meltano
+
+# Meltano is installed as an isolated uv tool (its pinned deps must not collide
+# with the app venv); the launcher lands on PATH at /usr/local/bin/meltano. Unlike
+# dev, prod has no bind mount, so install the plugins (taps + target-propel) into
+# the baked .meltano now rather than at container start.
+ENV UV_TOOL_BIN_DIR=/usr/local/bin
+RUN uv tool install "meltano>=3.5,<4" \
+    && cd meltano && meltano install
 
 # Entrypoint lives in the backend build context (this image builds from backend/).
 COPY entrypoint.sh /entrypoint.sh

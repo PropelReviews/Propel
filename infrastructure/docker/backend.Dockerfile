@@ -13,6 +13,14 @@ RUN apt-get update \
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
+# Meltano (ingestion extraction engine) is installed as an isolated uv tool so
+# its pinned deps never collide with the app venv. The launcher lands on PATH at
+# /usr/local/bin/meltano; the orchestrator shells out to it via `meltano run`.
+# Plugins (taps + target-propel) are installed at container start by entrypoint.sh
+# because the Meltano project lives on the ./backend bind mount in dev.
+ENV UV_TOOL_BIN_DIR=/usr/local/bin
+RUN uv tool install "meltano>=3.5,<4"
+
 COPY backend/entrypoint.sh /entrypoint.sh
 # Normalize CRLF (Windows/WSL checkouts) so the shebang is not read as /bin/sh\r
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh

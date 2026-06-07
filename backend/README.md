@@ -250,18 +250,62 @@ that is a later layer. The pieces:
   `ingestion_run` lifecycle (with an overlap guard for the hourly cadence).
 - **Scheduling:** on-server `cron`, hourly (see below).
 
-Run it manually:
+Run it manually inside the running container (the `backend` and `ingestion-cron`
+images bundle Meltano + the taps; plugins install on first container start):
 
 ```bash
-# Inside the backend image (Meltano + taps available):
-python -m app.ingestion.cli run                    # all active connections
-python -m app.ingestion.cli run --account-id <uuid>
-python -m app.ingestion.cli run --job github_sync  # or copilot_sync
+# Trigger a run on demand (no need to wait for the top of the hour):
+docker compose exec ingestion-cron python -m app.ingestion.cli run
+docker compose exec ingestion-cron python -m app.ingestion.cli run --job github_sync   # or copilot_sync
+docker compose exec ingestion-cron python -m app.ingestion.cli run --account-id <uuid>
+
+# Same wrapper cron fires hourly (sources the env snapshot, then runs the CLI):
+docker compose exec ingestion-cron /usr/local/bin/propel-ingestion
 ```
 
-Configure the ingestion GitHub App (separate from login OAuth) via
-`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`,
-`GITHUB_APP_SLUG` (see [`.env.example`](../.env.example)).
+A run only does work when there's an **active** `connected_accounts` row for a
+GitHub App installation. Create one either through the install flow
+(`GET /api/v1/tenants/{tenant_id}/connections/github/install` → install the App →
+GitHub redirects to the signed `…/connections/github/setup` callback, which binds
+the installation to the tenant), or insert a row directly for testing with
+`provider='github'`, `auth_type='github_app_installation'`,
+`external_account_id=<installation_id>`, `external_account_name=<org login>`,
+`status='active'`.
+
+#### Local ingestion credentials (AWS Secrets Manager)
+
+The ingestion GitHub App (separate from the login OAuth app) is configured via
+`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`, and
+`GITHUB_APP_SLUG`. Rather than passing a private key around, the shared **dev**
+App credentials live in AWS Secrets Manager under `propel/dev/ingestion` and are
+synced with [`scripts/dev-ingestion-secrets.sh`](../scripts/dev-ingestion-secrets.sh).
+
+**Pull (each developer, after `aws sso login` / configuring credentials):**
+
+```bash
+./scripts/dev-ingestion-secrets.sh pull       # writes .env.ingestion.local (gitignored)
+docker compose up -d backend ingestion-cron   # both services auto-load that file
+```
+
+`.env.ingestion.local` is wired into the `backend` and `ingestion-cron` services
+as an optional `env_file`, so the stack still starts for anyone who hasn't pulled
+it. The multi-line PEM is stored on one line with `\n` escapes (the app
+un-escapes it before signing the App JWT).
+
+**Push (one-time, by whoever owns the dev App — creates or additively updates the secret):**
+
+```bash
+export GITHUB_APP_ID=123456
+export GITHUB_APP_PRIVATE_KEY_FILE=~/Downloads/propel-dev.private-key.pem
+export GITHUB_APP_WEBHOOK_SECRET=...        # optional
+export GITHUB_APP_SLUG=propel-dev           # optional
+./scripts/dev-ingestion-secrets.sh push
+```
+
+Override the secret name with `PROPEL_DEV_SECRET_ID`, and the AWS account/region
+with the standard `AWS_PROFILE` / `AWS_REGION`. Run `… show` to print the current
+secret. For a one-off without AWS, you can still set the `GITHUB_APP_*` vars
+directly in `.env`.
 
 #### Scheduling — on-server cron (hourly)
 

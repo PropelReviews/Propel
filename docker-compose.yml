@@ -51,6 +51,11 @@ services:
         condition: service_healthy
     env_file:
       - .env
+      # Shared dev ingestion creds (GitHub App), pulled from AWS Secrets Manager
+      # via scripts/dev-ingestion-secrets.sh. Optional so the stack still starts
+      # for anyone who hasn't pulled them.
+      - path: .env.ingestion.local
+        required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-propel-backend}
@@ -73,10 +78,17 @@ services:
         condition: service_healthy
     env_file:
       - .env
+      # GitHub App creds for the hourly ingestion run (see backend service above).
+      - path: .env.ingestion.local
+        required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
+      # Meltano's .meltano (plugin venvs + SQLite systemdb) on a dedicated volume,
+      # NOT the bind mount: WAL/locking is reliable on the volume filesystem and it
+      # isn't shared with other containers, so no "database is locked" races.
+      - meltano-cron:/app/meltano/.meltano
     command: ["cron", "-f"]
 
   frontend:
@@ -135,3 +147,4 @@ services:
 
 volumes:
   pgdata:
+  meltano-cron:
