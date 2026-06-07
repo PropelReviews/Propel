@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/cursor-hooks@latest/schema/hooks.schema.json",
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "command": ".cursor/hooks/check-format.sh",
+        "matcher": "Write|StrReplace|EditNotebook",
+        "timeout": 30
+      }
+    ]
+  }
+}
