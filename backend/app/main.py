@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.middleware import AuthSecurityMiddleware
 from app.config import get_settings
-from app.routers import auth, connections, invites, members, tenants
+from app.routers import auth, connections, ingestion, invites, members, tenants
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
 
 settings = get_settings()
@@ -39,6 +39,7 @@ app.include_router(tenants.router)
 app.include_router(members.router)
 app.include_router(invites.router)
 app.include_router(connections.router)
+app.include_router(ingestion.router)
 
 
 @app.get("/")

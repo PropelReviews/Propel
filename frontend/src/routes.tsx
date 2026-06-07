@@ -5,6 +5,7 @@ import App from "@/App";
 import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { ChartDemoPage } from "@/pages/chart-demo";
+import { DataPage } from "@/pages/data";
 import { SignInPage } from "@/pages/sign-in";
 import { SignUpPage } from "@/pages/sign-up";
 
@@ -26,6 +27,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<App />} />
+      <Route path="/data" element={<DataPage />} />
       <Route
         path="/signin"
         element={

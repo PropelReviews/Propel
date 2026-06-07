@@ -31,9 +31,14 @@ function App() {
           <p className="text-muted-foreground text-sm">
             Signed in as {user?.name ?? user?.email}
           </p>
-          <Button variant="outline" analyticsName="sign_out" onClick={signOut}>
-            Sign out
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button asChild analyticsName="nav_data">
+              <Link to="/data">View data</Link>
+            </Button>
+            <Button variant="outline" analyticsName="sign_out" onClick={signOut}>
+              Sign out
+            </Button>
+          </div>
         </div>
       ) : authEnabled ? (
         <div className="flex items-center gap-3">
