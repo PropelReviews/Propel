@@ -105,6 +105,11 @@ Set `APP_ENV` to `beta` or `production` in `app_environment` so the API rejects
 weak JWT secrets at startup. Set `AUTH_REGISTRATION_ENABLED=true` only when
 signup should be open at the API (independent of the frontend feature flag).
 
+Terraform always sets `CORS_ALLOWED_ORIGINS` to include `https://app.<zone>` (the
+deployed SPA) plus `http://localhost:5173` and `http://localhost:3000`. Without
+this, browsers block cross-origin API calls with an OPTIONS `400 Bad Request`.
+Extra origins can still be appended via a `CORS_ALLOWED_ORIGINS` Actions variable.
+
 ---
 
 ## Deploy
