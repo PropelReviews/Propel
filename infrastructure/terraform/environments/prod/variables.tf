@@ -71,3 +71,15 @@ variable "app_secrets" {
   sensitive   = true
   description = "Sensitive key/value pairs stored in Secrets Manager and injected into the API container."
 }
+
+variable "ingestion_enabled" {
+  type        = bool
+  default     = true
+  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
+}
+
+variable "ingestion_schedule_expression" {
+  type        = string
+  default     = "rate(1 hour)"
+  description = "EventBridge Scheduler expression driving the ingestion run."
+}

@@ -75,6 +75,14 @@ locals {
   external_app_secrets = {
     for key, value in var.app_secrets : key => value if key != "JWT_SECRET"
   }
+
+  # Secrets injected into every task that runs the app (API service + the
+  # scheduled ingestion task), so both share one source of truth.
+  container_secrets = concat(
+    [{ name = "DATABASE_URL", valueFrom = var.database_url_secret_arn }],
+    [{ name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn }],
+    [for k in nonsensitive(keys(local.external_app_secrets)) : { name = k, valueFrom = aws_secretsmanager_secret.app[k].arn }],
+  )
 }
 
 resource "aws_secretsmanager_secret" "app" {
@@ -186,11 +194,7 @@ resource "aws_ecs_task_definition" "api" {
       protocol      = "tcp"
     }]
     environment = [for k, v in var.app_environment : { name = k, value = v }]
-    secrets = concat(
-      [{ name = "DATABASE_URL", valueFrom = var.database_url_secret_arn }],
-      [{ name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn }],
-      [for k in nonsensitive(keys(local.external_app_secrets)) : { name = k, valueFrom = aws_secretsmanager_secret.app[k].arn }],
-    )
+    secrets     = local.container_secrets
   }])
 
   tags = var.tags

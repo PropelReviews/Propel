@@ -92,3 +92,27 @@ variable "tags" {
   description = "Tags applied to all resources."
   default     = {}
 }
+
+variable "ingestion_enabled" {
+  type        = bool
+  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
+  default     = false
+}
+
+variable "ingestion_schedule_expression" {
+  type        = string
+  description = "EventBridge Scheduler expression driving the ingestion run."
+  default     = "rate(1 hour)"
+}
+
+variable "ingestion_task_cpu" {
+  type        = number
+  description = "Fargate CPU units for the ingestion task."
+  default     = 512
+}
+
+variable "ingestion_task_memory" {
+  type        = number
+  description = "Fargate memory (MiB) for the ingestion task (Meltano needs headroom)."
+  default     = 1024
+}

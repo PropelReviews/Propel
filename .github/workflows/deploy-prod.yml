@@ -41,6 +41,10 @@ jobs:
           APP_ENVIRONMENT_JSON: ${{ toJSON(vars) }}
           OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
           OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+          GITHUB_APP_ID: ${{ secrets.GH_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.GH_APP_WEBHOOK_SECRET }}
+          GITHUB_APP_SLUG: ${{ secrets.GH_APP_SLUG }}
         run: ./scripts/generate-app-tfvars.sh terraform-app-config.json
 
       - uses: actions/upload-artifact@v4
