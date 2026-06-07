@@ -20,6 +20,7 @@ dependencies = [
     "pydantic-settings",
     "python-dotenv",
     "email-validator",
+    "posthog",
 ]
 
 [dependency-groups]

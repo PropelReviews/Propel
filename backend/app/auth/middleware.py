@@ -8,6 +8,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from app.config import get_settings
+from app.feature_flags import registration_enabled
 
 REGISTER_PATH = "/api/v1/auth/register"
 LOGIN_PATH = "/api/v1/auth/login"
@@ -60,7 +61,7 @@ class AuthSecurityMiddleware(BaseHTTPMiddleware):
         if (
             request.method == "POST"
             and path == REGISTER_PATH
-            and not settings.auth_registration_enabled
+            and not registration_enabled(get_client_ip(request))
         ):
             return JSONResponse(
                 status_code=403,

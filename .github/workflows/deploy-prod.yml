@@ -45,6 +45,7 @@ jobs:
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
           GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.GH_APP_WEBHOOK_SECRET }}
           GITHUB_APP_SLUG: ${{ secrets.GH_APP_SLUG }}
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
         run: ./scripts/generate-app-tfvars.sh terraform-app-config.json
 
       - uses: actions/upload-artifact@v4

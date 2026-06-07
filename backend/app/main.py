@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.middleware import AuthSecurityMiddleware
 from app.config import get_settings
+from app.feature_flags import init_posthog, shutdown_posthog
 from app.routers import auth, connections, ingestion, invites, members, tenants
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
 
@@ -15,7 +16,9 @@ tracer = get_tracer("propel-backend")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     tracing_enabled = setup_tracing(app)
+    init_posthog()
     yield
+    shutdown_posthog()
     if tracing_enabled:
         shutdown_tracing()
 

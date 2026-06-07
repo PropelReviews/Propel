@@ -15,10 +15,20 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me"
     jwt_lifetime_seconds: int = 3600
 
-    # Server-side signup gate (independent of the frontend feature flag).
+    # Server-side signup gate. When PostHog is configured the `auth_registration_flag`
+    # feature flag is the source of truth (fail closed if it can't be evaluated);
+    # otherwise (local/dev/test, no PostHog) this setting governs.
     auth_registration_enabled: bool = False
+    auth_registration_flag: str = "auth-registration-enabled"
     auth_rate_limit_max_requests: int = 10
     auth_rate_limit_window_seconds: int = 60
+
+    # PostHog server-side SDK. POSTHOG_TOKEN (project key) + POSTHOG_HOST are shared
+    # with tracing; the personal API key enables fast local flag evaluation (no
+    # per-request network call).
+    posthog_token: str = ""
+    posthog_host: str = "https://us.i.posthog.com"
+    posthog_personal_api_key: str = ""
 
     oauth_google_client_id: str = ""
     oauth_google_client_secret: str = ""
