@@ -4,7 +4,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import Role
+from app.models.enums import IntegrationProvider, Role
+from app.models.external_identity import ExternalIdentity
 from app.models.membership import TenantMembership
 from app.models.user import User
 from app.schemas.membership import MemberRead, MemberRoleUpdate
@@ -24,8 +25,14 @@ async def count_admins(session: AsyncSession, tenant_id: uuid.UUID) -> int:
 
 async def list_members(session: AsyncSession, tenant_id: uuid.UUID) -> list[MemberRead]:
     result = await session.execute(
-        select(TenantMembership, User)
+        select(TenantMembership, User, ExternalIdentity)
         .join(User, TenantMembership.user_id == User.id)
+        .outerjoin(
+            ExternalIdentity,
+            (ExternalIdentity.tenant_id == TenantMembership.tenant_id)
+            & (ExternalIdentity.propel_user_id == TenantMembership.user_id)
+            & (ExternalIdentity.provider == IntegrationProvider.github.value),
+        )
         .where(TenantMembership.tenant_id == tenant_id)
         .order_by(TenantMembership.created_at.asc())
     )
@@ -36,8 +43,10 @@ async def list_members(session: AsyncSession, tenant_id: uuid.UUID) -> list[Memb
             name=user.name,
             role=membership.role,
             created_at=membership.created_at,
+            github_login=identity.external_login if identity else None,
+            github_link_status=identity.status if identity else None,
         )
-        for membership, user in result.all()
+        for membership, user, identity in result.all()
     ]
 
 

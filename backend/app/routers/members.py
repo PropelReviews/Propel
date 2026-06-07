@@ -5,10 +5,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_admin, require_member
 from app.db.session import get_async_session
-from app.schemas.membership import MemberRead, MemberRoleUpdate
+from app.schemas.membership import (
+    GitHubIdentityLink,
+    GitHubIdentityRead,
+    MemberRead,
+    MemberRoleUpdate,
+)
+from app.services import github_identity
 from app.services import members as member_service
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/members", tags=["members"])
+
+github_members_router = APIRouter(
+    prefix="/api/v1/tenants/{tenant_id}/github-members", tags=["github-members"]
+)
 
 
 @router.get("/", response_model=list[MemberRead])
@@ -36,3 +46,32 @@ async def remove_member(
     session: AsyncSession = Depends(get_async_session),
 ):
     await member_service.remove_member(session, ctx.tenant.id, user_id)
+
+
+@github_members_router.get("/", response_model=list[GitHubIdentityRead])
+async def list_github_members(
+    ctx=Depends(require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await github_identity.list_identities(session, ctx.tenant.id)
+
+
+@github_members_router.patch("/{identity_id}/link", response_model=GitHubIdentityRead)
+async def link_github_member(
+    identity_id: uuid.UUID,
+    payload: GitHubIdentityLink,
+    ctx=Depends(require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await github_identity.manual_link(
+        session, ctx.tenant.id, identity_id, payload.user_id
+    )
+
+
+@github_members_router.delete("/{identity_id}/link", response_model=GitHubIdentityRead)
+async def unlink_github_member(
+    identity_id: uuid.UUID,
+    ctx=Depends(require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await github_identity.manual_unlink(session, ctx.tenant.id, identity_id)

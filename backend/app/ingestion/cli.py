@@ -16,6 +16,7 @@ import logging
 import uuid
 
 from app.ingestion import orchestrator
+from app.otel_logging import setup_logging, shutdown_logging
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -44,11 +45,18 @@ def main(argv: list[str] | None = None) -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    logging_enabled = setup_logging()
     args = _build_parser().parse_args(argv)
-    if args.command == "run":
-        asyncio.run(
-            orchestrator.run_all(account_id=args.account_id, job_name=args.job_name)
-        )
+    try:
+        if args.command == "run":
+            asyncio.run(
+                orchestrator.run_all(
+                    account_id=args.account_id, job_name=args.job_name
+                )
+            )
+    finally:
+        if logging_enabled:
+            shutdown_logging()
 
 
 if __name__ == "__main__":

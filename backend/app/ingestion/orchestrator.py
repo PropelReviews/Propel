@@ -34,6 +34,7 @@ from app.models.enums import (
     IntegrationProvider,
 )
 from app.models.ingestion_run import IngestionRun
+from app.services import github_identity
 
 logger = logging.getLogger("propel.ingestion")
 settings = get_settings()
@@ -47,14 +48,33 @@ _WATERMARK_OVERLAP = timedelta(days=1)
 class JobSpec:
     name: str  # meltano job name
     resource_type: str  # ingestion_run.resource_type + overlap-guard key
-    needs_repos: bool
-    needs_org: bool
+    needs_repos: bool = False
+    needs_org: bool = False  # requires the connected org login to run
+    org_mode: str | None = None  # "array" (tap-github) | "copilot" (bare login)
+    needs_member_logins: bool = False  # build TAP_GITHUB_USER_USERNAMES from roster
 
 
+# Run order matters: org roster is synced before user profiles so the profile
+# job can target the discovered logins.
 JOBS: list[JobSpec] = [
-    JobSpec("github_sync", "github", needs_repos=True, needs_org=False),
-    JobSpec("copilot_sync", "copilot.usage", needs_repos=False, needs_org=True),
+    JobSpec("github_sync", "github", needs_repos=True),
+    JobSpec(
+        "github_org_sync",
+        "github.org_members",
+        needs_org=True,
+        org_mode="array",
+    ),
+    JobSpec(
+        "github_user_profiles_sync",
+        "github.user_profiles",
+        needs_org=True,
+        needs_member_logins=True,
+    ),
+    JobSpec("copilot_sync", "copilot.usage", needs_org=True, org_mode="copilot"),
 ]
+
+# Jobs after which the GitHub identity roster is reconciled into users/memberships.
+_IDENTITY_SYNC_JOB = "github_user_profiles_sync"
 
 
 async def run_all(
@@ -141,10 +161,32 @@ async def run_account_job(
             status=IngestionRunStatus.success,
             watermark=started_at,
         )
+        if job.name == _IDENTITY_SYNC_JOB:
+            await _reconcile_identities(session, account)
     except Exception as exc:  # noqa: BLE001 — record failure on the run, keep going
         logger.exception("Ingestion run %s failed", run.id)
         await _finalize(session, run, status=IngestionRunStatus.error, error=str(exc))
     return run
+
+
+async def _reconcile_identities(
+    session: AsyncSession, account: ConnectedAccount
+) -> None:
+    """Map the freshly-synced GitHub org roster onto Propel users/memberships.
+
+    Best-effort: the ingestion run has already succeeded, so a linking failure is
+    logged but never marks the run as errored.
+    """
+    try:
+        token = await app_auth.get_installation_token(account.external_account_id)
+        admin_logins = await app_auth.list_org_admin_logins(
+            token.token, account.external_account_name or ""
+        )
+        await github_identity.sync_and_link(session, account, admin_logins=admin_logins)
+    except Exception:  # noqa: BLE001 — never fail ingestion on a linking error
+        logger.exception(
+            "GitHub identity reconciliation failed for account %s", account.id
+        )
 
 
 async def _has_running(
@@ -194,13 +236,48 @@ async def _build_env(
             session, account.id, job.resource_type
         )
 
-    if job.needs_org:
-        if not account.external_account_name:
-            logger.info("Account %s has no org login for Copilot; skipping", account.id)
-            return None
+    if job.needs_org and not account.external_account_name:
+        logger.info("Account %s has no org login; skipping %s", account.id, job.name)
+        return None
+
+    if job.org_mode == "array":
+        env["TAP_GITHUB_ORGANIZATIONS"] = json.dumps([account.external_account_name])
+        env["TAP_GITHUB_START_DATE"] = await _start_date(
+            session, account.id, job.resource_type
+        )
+    elif job.org_mode == "copilot":
         env["COPILOT_ORG"] = account.external_account_name
 
+    if job.needs_member_logins:
+        logins = await _member_logins(session, account)
+        if not logins:
+            logger.info("Account %s has no synced org members yet", account.id)
+            return None
+        env["TAP_GITHUB_USER_USERNAMES"] = json.dumps(logins)
+        env["TAP_GITHUB_START_DATE"] = await _start_date(
+            session, account.id, job.resource_type
+        )
+
     return env
+
+
+async def _member_logins(session: AsyncSession, account: ConnectedAccount) -> list[str]:
+    """Logins from the most recent organization_members landing for this account.
+
+    Reads back the roster that github_org_sync just wrote so the profile job can
+    target exactly those users.
+    """
+    result = await session.execute(
+        text(
+            "SELECT DISTINCT payload->>'login' AS login "
+            "FROM raw_record "
+            "WHERE tenant_id = :tenant_id "
+            "AND resource_type = 'organization_members' "
+            "AND payload->>'login' IS NOT NULL"
+        ),
+        {"tenant_id": account.tenant_id},
+    )
+    return [row[0] for row in result.all()]
 
 
 async def _start_date(

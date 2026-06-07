@@ -41,3 +41,27 @@ class IngestionRunStatus(StrEnum):
     running = "running"
     success = "success"
     error = "error"
+
+
+class GitHubOrgRole(StrEnum):
+    """A member's role within the GitHub organization."""
+
+    admin = "admin"  # GitHub org owner
+    member = "member"
+
+
+class IdentityLinkMethod(StrEnum):
+    """How an external identity was connected to a Propel user."""
+
+    oauth_id = "oauth_id"  # matched a github login-OAuth account by provider id
+    email = "email"  # matched an existing user by exact email
+    provisioned = "provisioned"  # a new Propel user was created for this identity
+    manual = "manual"  # an admin linked it explicitly
+
+
+class IdentityStatus(StrEnum):
+    """Linking state of an external identity."""
+
+    linked = "linked"  # attached to an existing Propel user
+    provisioned = "provisioned"  # attached to a user we auto-created
+    pending_email = "pending_email"  # no email/match yet; awaiting OAuth claim

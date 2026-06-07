@@ -83,6 +83,7 @@ services:
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion-cron}
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
       # Meltano's .meltano (plugin venvs + SQLite systemdb) on a dedicated volume,

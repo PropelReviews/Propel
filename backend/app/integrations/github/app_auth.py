@@ -133,3 +133,32 @@ async def list_installation_repositories(token: str) -> list[str]:
                     repos.append(repo["full_name"])
             url = _next_page_url(response.headers.get("link"))
     return repos
+
+
+async def list_org_admin_logins(token: str, org: str) -> set[str]:
+    """Return the set of org member logins whose role is `admin` (org owners).
+
+    The `organization_members` stream does not expose role, so admins are
+    resolved separately via `GET /orgs/{org}/members?role=admin`. Requires the
+    installation to have Organization → Members: Read-only permission.
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    admins: set[str] = set()
+    url: str | None = f"{GITHUB_API}/orgs/{org}/members?role=admin&per_page=100"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while url:
+            response = await client.get(url, headers=headers)
+            if response.status_code != 200:
+                raise GitHubAppAuthError(
+                    f"Org admin listing failed ({response.status_code}): "
+                    f"{response.text}"
+                )
+            for member in response.json():
+                if member.get("login"):
+                    admins.add(str(member["login"]))
+            url = _next_page_url(response.headers.get("link"))
+    return admins
