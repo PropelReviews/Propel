@@ -18,9 +18,7 @@ function mockFetch(response: { ok: boolean; status: number; body: unknown }) {
   return fetchMock;
 }
 
-function lastFetchInit(
-  fetchMock: ReturnType<typeof vi.fn>,
-): FetchInit {
+function lastFetchInit(fetchMock: ReturnType<typeof vi.fn>): FetchInit {
   const init = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]?.[1];
   expect(init).toBeDefined();
   return init as FetchInit;
