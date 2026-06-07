@@ -26,6 +26,21 @@ class Settings(BaseSettings):
     oauth_github_client_secret: str = ""
     oauth_callback_base_url: str = "http://localhost:8000"
 
+    # GitHub App used for data ingestion (separate from the login OAuth app
+    # above). The private key signs the short-lived app JWT that is exchanged
+    # for per-installation tokens; the webhook secret verifies install events.
+    github_app_id: str = ""
+    github_app_private_key: str = ""
+    github_app_webhook_secret: str = ""
+    github_app_slug: str = ""
+
+    # Fernet key for encrypting OAuth tool tokens (future providers). GitHub App
+    # installs mint tokens per run and do not use this.
+    token_encryption_key: str = ""
+
+    # First-run backfill window for repo resources (Copilot is capped by GitHub).
+    ingestion_backfill_days: int = 90
+
     invite_token_lifetime_hours: int = 72
 
     # Comma-separated list of origins allowed to call the API from a browser.

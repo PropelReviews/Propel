@@ -84,6 +84,56 @@ jobs:
       - name: Run pytest
         run: uv run pytest
 
+  ingestion-integration:
+    name: Ingestion integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: propel
+          POSTGRES_PASSWORD: propel
+          POSTGRES_DB: propel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
+      # target-propel reads the sync DSN from PROPEL_DATABASE_URL.
+      PROPEL_DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
+      JWT_SECRET: test-secret
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Install API deps (for Alembic)
+        run: uv sync
+
+      - name: Migrate ingestion schema
+        run: uv run alembic upgrade head
+
+      # Install the Meltano target (singer-sdk + psycopg) into the same venv so
+      # its tests — pure envelope mappers, DB writers, and the end-to-end Singer
+      # stream → Postgres test — can run.
+      - name: Install target-propel
+        run: uv pip install -e meltano/target-propel
+
+      # --no-sync so uv does not reconcile the venv back to the lockfile and drop
+      # the editable target-propel install from the previous step.
+      - name: Run target-propel tests
+        run: uv run --no-sync pytest meltano/target-propel/tests -v
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest

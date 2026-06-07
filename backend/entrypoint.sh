@@ -13,4 +13,27 @@ if [ -f /app/alembic.ini ]; then
   alembic -c /app/alembic.ini upgrade head
 fi
 
+# On-server cron (V1 ingestion scheduler). cron jobs start with an empty
+# environment, so snapshot the current one (including PATH for the venv) into a
+# file the wrapper sources. shlex.quote keeps values with spaces/quotes safe.
+snapshot_env_for_cron() {
+  python -c 'import os, shlex; print("\n".join(f"export {k}={shlex.quote(v)}" for k, v in os.environ.items()))' \
+    > /etc/propel-ingestion.env
+}
+
+# Dedicated ingestion service: `crond` is the main process (foreground).
+if [ "$1" = "cron" ]; then
+  echo "==> Starting ingestion cron (foreground, hourly)"
+  snapshot_env_for_cron
+  exec cron -f
+fi
+
+# Same task as the API: start crond in the background, then exec uvicorn.
+# Opt-in via INGESTION_CRON_ENABLED=1 so plain dev/API containers are unaffected.
+if [ "${INGESTION_CRON_ENABLED:-0}" = "1" ]; then
+  echo "==> Starting ingestion cron (background, hourly)"
+  snapshot_env_for_cron
+  cron
+fi
+
 exec "$@"

@@ -1,6 +1,6 @@
 # Propel backend data model
 
-Canonical reference for entity relationships in the Propel API database. The v1 schema covers **users, login OAuth, tenants, memberships, and invites**. Tool integrations (`connected_accounts`) are planned for v2.
+Canonical reference for entity relationships in the Propel API database. The v1 schema covers **users, login OAuth, tenants, memberships, and invites**. The ingestion layer (migration `002`) adds **`connected_accounts`, `raw_record`, `datapoint`, and `ingestion_run`** for landing external data (see [ingestion overview](#ingestion-entities-migration-002)).
 
 ## v1 entities
 
@@ -108,36 +108,99 @@ Enforced in `backend/app/auth/permissions.py` and FastAPI dependencies.
 | **Sign-in** | `oauth_accounts` | Authenticate the Propel user via Google/GitHub |
 | **Tool connections** | `connected_accounts` (v2) | Authorize Propel to read/write third-party accounts on behalf of a tenant |
 
-Signing in with GitHub does **not** automatically connect the tenant's GitHub org. Those are separate user actions with different OAuth apps/scopes.
+Signing in with GitHub does **not** automatically connect the tenant's GitHub org. Those are separate user actions with different OAuth apps/scopes. Tenant tool connections live in `connected_accounts` (below), and for GitHub specifically a tenant admin installs the **GitHub App** (not the login OAuth app) via `/api/v1/tenants/{tenant_id}/connections/github/install`.
 
-## v2 planned: `connected_accounts`
+## Ingestion entities (migration `002`)
 
-Not migrated yet. Reserved API namespace: `/api/v1/tenants/{tenant_id}/connections`.
+V1 ingestion is **landing only**: Meltano (`tap-github` → custom `target-propel`) pulls provider data and writes it to Postgres. No transforms run at ingest — that is a later dbt layer. See the [backend README](../../backend/README.md#ingestion-v1--landing-only) for how runs are driven.
+
+| Entity | Table | Description |
+|---|---|---|
+| ConnectedAccount | `connected_accounts` | A tenant's link to a source. GitHub App installs use `auth_type='github_app_installation'`; future OAuth tools use `auth_type='oauth'` with encrypted tokens. |
+| RawRecord | `raw_record` | Append-only landing of the provider payload exactly as fetched (audit + replay + lineage). |
+| Datapoint | `datapoint` | Normalized, source-agnostic envelope (who/when/what + pointer to `raw_record`). Generic at ingest; provider detail stays in `raw_record.payload` and a passthrough `metadata`. |
+| IngestionRun | `ingestion_run` | One row per `(connected_account, resource_type)` run: counts, status, error, and incremental `cursor`. |
 
 ```mermaid
 erDiagram
     tenants ||--o{ connected_accounts : owns
     users ||--o{ connected_accounts : connected_by
+    connected_accounts ||--o{ ingestion_run : runs
+    ingestion_run ||--o{ raw_record : produces
+    raw_record ||--o| datapoint : lineage
 
     connected_accounts {
         uuid id PK
         uuid tenant_id FK
         uuid connected_by_user_id FK
-        enum provider
+        string provider
+        string auth_type
         string external_account_id
         string external_account_name
         text access_token_encrypted
         text refresh_token_encrypted
         timestamp token_expires_at
         jsonb scopes
-        enum status
+        string status
         jsonb metadata
         timestamp created_at
         timestamp updated_at
     }
+
+    raw_record {
+        uuid id PK
+        uuid tenant_id
+        string source
+        string resource_type
+        string source_id
+        jsonb payload
+        timestamp fetched_at
+        uuid run_id
+    }
+
+    datapoint {
+        uuid id PK
+        uuid tenant_id
+        string source
+        string tool
+        string kind
+        string name
+        string subject_type
+        string subject_id
+        timestamp occurred_at
+        timestamp period_start
+        timestamp period_end
+        timestamp observed_at
+        string source_key
+        jsonb metadata
+        uuid raw_record_id
+        timestamp created_at
+    }
+
+    ingestion_run {
+        uuid id PK
+        uuid tenant_id
+        uuid connected_account_id FK
+        string source
+        string resource_type
+        timestamp started_at
+        timestamp finished_at
+        string status
+        int records_pulled
+        int datapoints_written
+        jsonb cursor
+        text error
+    }
 ```
 
-The `IntegrationProvider` enum stub lives in `backend/app/models/enums.py` (`github`, `linear`, `jira`, `slack`, `cursor`, …).
+`provider`, `auth_type`, `status`, `kind`, etc. are stored as **text** (not Postgres enums) so new sources and resource types land without a migration. The matching `StrEnum`s for app-level use live in `backend/app/models/enums.py` (`IntegrationProvider`, `AuthType`, `ConnectionStatus`, `DatapointKind`, `IngestionRunStatus`).
+
+### Ingestion integrity rules
+
+- **`connected_accounts`**: unique `(tenant_id, provider, external_account_id)`. GitHub App installs store the `installation_id` in `external_account_id`; tokens are minted per run and never persisted for app installs.
+- **`datapoint` events**: partial unique index `datapoint_event_uq (tenant_id, source, source_key) where kind='event'`. Re-fetching an event is a no-op (`ON CONFLICT DO NOTHING`).
+- **`datapoint` measurements**: partial unique index `datapoint_measure_uq (tenant_id, tool, name, subject_id, period_start) where kind='measurement'`. Restatements upsert, but only when the incoming `observed_at` is newer (newest-wins) — this is what prevents double-counting when a provider republishes a period.
+- **`raw_record`**: never deduped or updated; dedup/restatement is resolved only at the `datapoint` layer.
 
 ## Related docs
 

@@ -35,11 +35,15 @@ backend/
 │   ├── main.py           # FastAPI application
 │   ├── config.py         # pydantic-settings (DATABASE_URL, JWT, OAuth)
 │   ├── db/               # async SQLAlchemy session
-│   ├── models/           # User, Tenant, Membership, Invite
+│   ├── models/           # User, Tenant, Membership, Invite, ingestion entities
 │   ├── schemas/          # Pydantic request/response DTOs
 │   ├── auth/             # fastapi-users, JWT, OAuth, RBAC dependencies
-│   ├── routers/          # auth, tenants, members, invites
-│   └── services/         # tenant domain logic
+│   ├── routers/          # auth, tenants, members, invites, connections
+│   ├── services/         # tenant + connection domain logic
+│   ├── integrations/     # GitHub App auth (JWT → installation token)
+│   └── ingestion/        # orchestrator + Meltano runner + CLI
+├── meltano/              # taps (tap-github, tap-github-copilot) + target-propel
+├── cron/                 # hourly ingestion crontab + wrapper
 ├── tests/
 ├── pyproject.toml
 ├── uv.lock
@@ -178,24 +182,147 @@ Invites:
 | DELETE | `/api/v1/tenants/{tenant_id}/invites/{invite_id}` | admin/manager | Revoke invite |
 | POST | `/api/v1/invites/{token}/accept` | authenticated | Accept invite |
 
-Future (v2, not implemented): `/api/v1/tenants/{tenant_id}/connections` for tool OAuth tokens.
+Connections (`/api/v1/tenants/{tenant_id}/connections`):
+
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| GET | `/` | admin | List connected accounts |
+| GET | `/github/install` | admin | Signed GitHub App install URL |
+| PATCH | `/{connection_id}` | admin | Pause / revoke a connection |
+| GET | `/api/v1/connections/github/setup` | authenticated | GitHub App setup callback (binds install to tenant) |
+| POST | `/api/v1/webhooks/github` | HMAC | Install events (`created`/`deleted`/`suspend`) |
 
 ### Tests
+
+Tests need a Postgres database named `propel_test`. The host in the connection
+string depends on where you run them:
+
+- **From your host machine** (Postgres published by Compose): `localhost`
+- **From inside the `dev` container** (Compose network): `postgres`
+
+Create the test database once (works from the host or the `dev` container;
+ignore the error if it already exists):
+
+```bash
+docker compose exec postgres createdb -U propel propel_test
+```
+
+Run the API suite (migrations are applied automatically by the test harness):
 
 ```bash
 cd backend
 uv sync
-DATABASE_URL=postgresql://propel:propel@localhost:5432/propel_test uv run pytest
+# Host:
+DATABASE_URL=postgresql://propel:propel@localhost:5432/propel_test JWT_SECRET=test-secret uv run pytest
+# Inside the dev container, swap localhost -> postgres:
+DATABASE_URL=postgresql://propel:propel@postgres:5432/propel_test JWT_SECRET=test-secret uv run pytest
 ```
 
-CI runs pytest against a Postgres 16 service container.
+Useful flags: `uv run pytest -v` (verbose), `uv run pytest tests/test_connections.py`
+(one file), `uv run pytest -k webhook` (by name).
 
-### Extraction (coming soon)
+Lint and format locally before pushing (CI enforces both):
 
 ```bash
-# From meltano/
-meltano run tap-github target-postgres
+uv run ruff check .
+uv run ruff format --check .   # use `ruff format .` to auto-fix
 ```
+
+The `target-propel` ingestion tests (writers + end-to-end Singer stream) are a
+separate suite — see [Testing ingestion](#testing-ingestion) below.
+
+CI runs pytest against a Postgres 16 service container (jobs `backend` and
+`ingestion-integration`).
+
+### Ingestion (V1 — landing only)
+
+V1 pulls GitHub data and lands it in Postgres as `raw_record` + thin `datapoint`
+envelopes. There are **no transforms** at ingest (no dbt, scoring, or analytics);
+that is a later layer. The pieces:
+
+- **Extraction:** Meltano `tap-github` (+ custom `tap-github-copilot`) — see
+  [`meltano/README.md`](meltano/README.md).
+- **Landing:** custom `target-propel` writes `raw_record` and a thin `datapoint`
+  envelope with idempotent writes (events dedupe; measurements upsert
+  newest-wins).
+- **Orchestration:** `app/ingestion` iterates active `connected_accounts`, mints a
+  GitHub App installation token, runs the Meltano job, and owns the
+  `ingestion_run` lifecycle (with an overlap guard for the hourly cadence).
+- **Scheduling:** on-server `cron`, hourly (see below).
+
+Run it manually:
+
+```bash
+# Inside the backend image (Meltano + taps available):
+python -m app.ingestion.cli run                    # all active connections
+python -m app.ingestion.cli run --account-id <uuid>
+python -m app.ingestion.cli run --job github_sync  # or copilot_sync
+```
+
+Configure the ingestion GitHub App (separate from login OAuth) via
+`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`,
+`GITHUB_APP_SLUG` (see [`.env.example`](../.env.example)).
+
+#### Scheduling — on-server cron (hourly)
+
+Locally, the `ingestion-cron` Compose service runs `crond` in the foreground and
+invokes the CLI each hour:
+
+```bash
+docker compose up -d ingestion-cron
+docker logs -f propel-ingestion-cron
+```
+
+In production the same crontab ships in the API image; set
+`INGESTION_CRON_ENABLED=1` to have the entrypoint start `crond` alongside
+uvicorn. The crontab lives at [`cron/ingestion`](cron/ingestion); the wrapper
+([`cron/propel-ingestion.sh`](cron/propel-ingestion.sh)) restores the container
+environment (which cron strips) before running the CLI.
+
+#### Testing ingestion
+
+| Layer | Where | Runs in |
+|---|---|---|
+| Envelope mappers (pure) | `tests/test_ingestion_envelopes.py`, `meltano/target-propel/tests/test_envelopes.py` | `backend` job + integration job |
+| Datapoint idempotency (DB) | `tests/test_ingestion_idempotency.py` | `backend` job |
+| Connections API + webhook | `tests/test_connections.py` | `backend` job |
+| Orchestrator lifecycle (Meltano mocked) | `tests/test_ingestion_orchestrator.py` | `backend` job |
+| Writers against Postgres | `meltano/target-propel/tests/test_writers.py` | `ingestion-integration` job |
+| **End-to-end Singer stream → Postgres** | `meltano/target-propel/tests/test_target_integration.py` | `ingestion-integration` job |
+
+The first four run in the standard `backend` CI job (`uv run pytest`). The
+`target-propel` package has its own deps (`singer-sdk`, `psycopg`), so its tests
+run in a dedicated **`ingestion-integration`** CI job that migrates a Postgres
+service, installs the target, and pipes a real Singer message stream through the
+`target-propel` binary to assert landed rows and idempotency.
+
+Run it locally (assumes the `propel_test` database exists — see
+[Tests](#tests) for creating it). Unlike the API suite, these tests do **not**
+self-migrate, so apply migrations first, and point `PROPEL_DATABASE_URL` at the
+same DB (use `localhost` from the host, `postgres` from the `dev` container):
+
+```bash
+cd backend
+# alembic reads DATABASE_URL; target-propel reads PROPEL_DATABASE_URL — same DB.
+export DATABASE_URL=postgresql://propel:propel@localhost:5432/propel_test
+export PROPEL_DATABASE_URL=$DATABASE_URL
+
+uv run alembic upgrade head              # migrate the test DB
+uv pip install -e meltano/target-propel  # adds singer-sdk + psycopg to the venv
+# --no-sync keeps the editable target install from being pruned:
+uv run --no-sync pytest meltano/target-propel/tests -v
+```
+
+`test_writers.py` and `test_target_integration.py` skip automatically if
+`PROPEL_DATABASE_URL` is unset or the ingestion tables are missing, so the suite
+degrades gracefully when run without a database.
+
+#### Future: Dagster
+
+Dagster will replace cron as the **scheduler only**, as a separate
+`orchestration/` Python project and ECS service. It calls the same
+`app.ingestion.cli run` entrypoint — Meltano, the taps, and `target-propel` stay
+here unchanged. Until then, cron is the V1 scheduler.
 
 ## Related
 
