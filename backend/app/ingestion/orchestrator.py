@@ -1,0 +1,265 @@
+"""Ingestion orchestrator: drives Meltano per active connected_accounts row.
+
+Run lifecycle per (account, job):
+  1. overlap guard — skip if a run for this (account, resource_type) is running
+  2. create ingestion_run (status=running)
+  3. mint installation token; discover repos / org
+  4. `meltano run <job>` (lands via target-propel)
+  5. finalize: counts from DB, watermark cursor, status
+
+Incrementality is driven by our own watermark (start_date), not Meltano state;
+the datapoint partial unique indexes dedupe any re-pulled rows.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
+from app.db.session import async_session_maker
+from app.ingestion import meltano_runner
+from app.integrations.github import app_auth
+from app.models.connected_account import ConnectedAccount
+from app.models.enums import (
+    AuthType,
+    ConnectionStatus,
+    IngestionRunStatus,
+    IntegrationProvider,
+)
+from app.models.ingestion_run import IngestionRun
+
+logger = logging.getLogger("propel.ingestion")
+settings = get_settings()
+
+# Re-pull a day of overlap so provider restatements (e.g. updated PRs, Copilot's
+# ~2-day restatement) are captured; dedupe handles the rest.
+_WATERMARK_OVERLAP = timedelta(days=1)
+
+
+@dataclass(frozen=True)
+class JobSpec:
+    name: str  # meltano job name
+    resource_type: str  # ingestion_run.resource_type + overlap-guard key
+    needs_repos: bool
+    needs_org: bool
+
+
+JOBS: list[JobSpec] = [
+    JobSpec("github_sync", "github", needs_repos=True, needs_org=False),
+    JobSpec("copilot_sync", "copilot.usage", needs_repos=False, needs_org=True),
+]
+
+
+async def run_all(
+    *,
+    account_id: uuid.UUID | None = None,
+    job_name: str | None = None,
+) -> None:
+    """Entry point used by the CLI/cron. Iterates accounts and runs jobs."""
+    jobs = [j for j in JOBS if job_name is None or j.name == job_name]
+    if not jobs:
+        logger.warning("No ingestion job matches %r", job_name)
+        return
+
+    async with async_session_maker() as session:
+        accounts = await _active_github_accounts(session, account_id)
+
+    if not accounts:
+        logger.info("No active GitHub connected accounts to ingest")
+        return
+
+    for account in accounts:
+        for job in jobs:
+            # Each (account, job) uses its own short-lived session so a failure
+            # is isolated and the run row is always finalized.
+            async with async_session_maker() as session:
+                await run_account_job(session, account, job)
+
+
+async def _active_github_accounts(
+    session: AsyncSession, account_id: uuid.UUID | None
+) -> list[ConnectedAccount]:
+    query = select(ConnectedAccount).where(
+        ConnectedAccount.provider == IntegrationProvider.github.value,
+        ConnectedAccount.status == ConnectionStatus.active.value,
+    )
+    if account_id is not None:
+        query = query.where(ConnectedAccount.id == account_id)
+    result = await session.execute(query)
+    return list(result.scalars().all())
+
+
+async def run_account_job(
+    session: AsyncSession, account: ConnectedAccount, job: JobSpec
+) -> IngestionRun | None:
+    if await _has_running(session, account.id, job.resource_type):
+        logger.info(
+            "Skipping %s for account %s: a run is already in progress",
+            job.name,
+            account.id,
+        )
+        return None
+
+    run = IngestionRun(
+        tenant_id=account.tenant_id,
+        connected_account_id=account.id,
+        source=IntegrationProvider.github.value,
+        resource_type=job.resource_type,
+        status=IngestionRunStatus.running.value,
+    )
+    session.add(run)
+    await session.commit()
+    await session.refresh(run)
+
+    started_at = run.started_at or datetime.now(UTC)
+    try:
+        env = await _build_env(session, account, job, run)
+        if env is None:
+            await _finalize(session, run, status=IngestionRunStatus.success)
+            return run
+
+        result = await meltano_runner.run_job(job.name, env)
+        if not result.ok:
+            await _finalize(
+                session,
+                run,
+                status=IngestionRunStatus.error,
+                error=_tail(result.stderr or result.stdout),
+            )
+            return run
+
+        await _finalize(
+            session,
+            run,
+            status=IngestionRunStatus.success,
+            watermark=started_at,
+        )
+    except Exception as exc:  # noqa: BLE001 — record failure on the run, keep going
+        logger.exception("Ingestion run %s failed", run.id)
+        await _finalize(session, run, status=IngestionRunStatus.error, error=str(exc))
+    return run
+
+
+async def _has_running(
+    session: AsyncSession, account_id: uuid.UUID, resource_type: str
+) -> bool:
+    result = await session.execute(
+        select(IngestionRun.id).where(
+            IngestionRun.connected_account_id == account_id,
+            IngestionRun.resource_type == resource_type,
+            IngestionRun.status == IngestionRunStatus.running.value,
+        )
+    )
+    return result.first() is not None
+
+
+async def _build_env(
+    session: AsyncSession,
+    account: ConnectedAccount,
+    job: JobSpec,
+    run: IngestionRun,
+) -> dict[str, str] | None:
+    """Build the per-run environment, or None to skip (nothing to ingest)."""
+    if account.auth_type != AuthType.github_app_installation.value:
+        logger.warning(
+            "Account %s is not a GitHub App installation; skipping", account.id
+        )
+        return None
+
+    token = await app_auth.get_installation_token(account.external_account_id)
+
+    env: dict[str, str] = {
+        "GITHUB_INSTALLATION_TOKEN": token.token,
+        "PROPEL_DATABASE_URL": settings.sync_database_url,
+        "PROPEL_TENANT_ID": str(account.tenant_id),
+        "PROPEL_CONNECTED_ACCOUNT_ID": str(account.id),
+        "PROPEL_RUN_ID": str(run.id),
+        "PROPEL_SOURCE": IntegrationProvider.github.value,
+    }
+
+    if job.needs_repos:
+        repos = await app_auth.list_installation_repositories(token.token)
+        if not repos:
+            logger.info("Account %s has no accessible repositories", account.id)
+            return None
+        env["TAP_GITHUB_REPOSITORIES"] = json.dumps(repos)
+        env["TAP_GITHUB_START_DATE"] = await _start_date(
+            session, account.id, job.resource_type
+        )
+
+    if job.needs_org:
+        if not account.external_account_name:
+            logger.info("Account %s has no org login for Copilot; skipping", account.id)
+            return None
+        env["COPILOT_ORG"] = account.external_account_name
+
+    return env
+
+
+async def _start_date(
+    session: AsyncSession, account_id: uuid.UUID, resource_type: str
+) -> str:
+    result = await session.execute(
+        select(IngestionRun.cursor)
+        .where(
+            IngestionRun.connected_account_id == account_id,
+            IngestionRun.resource_type == resource_type,
+            IngestionRun.status == IngestionRunStatus.success.value,
+        )
+        .order_by(IngestionRun.started_at.desc())
+        .limit(1)
+    )
+    row = result.scalar_one_or_none()
+    if row and row.get("watermark"):
+        watermark = datetime.fromisoformat(row["watermark"])
+        return (watermark - _WATERMARK_OVERLAP).date().isoformat()
+    backfill_start = datetime.now(UTC) - timedelta(
+        days=settings.ingestion_backfill_days
+    )
+    return backfill_start.date().isoformat()
+
+
+async def _finalize(
+    session: AsyncSession,
+    run: IngestionRun,
+    *,
+    status: IngestionRunStatus,
+    error: str | None = None,
+    watermark: datetime | None = None,
+) -> None:
+    records, datapoints = await _run_counts(session, run.id)
+    run.status = status.value
+    run.finished_at = datetime.now(UTC)
+    run.records_pulled = records
+    run.datapoints_written = datapoints
+    run.error = error
+    if watermark is not None:
+        run.cursor = {"watermark": watermark.isoformat()}
+    await session.commit()
+
+
+async def _run_counts(session: AsyncSession, run_id: uuid.UUID) -> tuple[int, int]:
+    records = await session.scalar(
+        text("SELECT count(*) FROM raw_record WHERE run_id = :run_id"),
+        {"run_id": run_id},
+    )
+    datapoints = await session.scalar(
+        text(
+            "SELECT count(*) FROM datapoint WHERE raw_record_id IN "
+            "(SELECT id FROM raw_record WHERE run_id = :run_id)"
+        ),
+        {"run_id": run_id},
+    )
+    return int(records or 0), int(datapoints or 0)
+
+
+def _tail(message: str, *, limit: int = 2000) -> str:
+    message = (message or "").strip()
+    return message[-limit:]

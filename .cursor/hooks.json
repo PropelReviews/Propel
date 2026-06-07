@@ -7,6 +7,11 @@
         "command": ".cursor/hooks/check-format.sh",
         "matcher": "Write|StrReplace|EditNotebook",
         "timeout": 30
+      },
+      {
+        "command": ".cursor/hooks/check-ruff.sh",
+        "matcher": "Write|StrReplace|EditNotebook",
+        "timeout": 30
       }
     ]
   }

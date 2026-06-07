@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export type AuthUser = {
   id: string;
@@ -78,6 +78,16 @@ async function parseJson(response: Response): Promise<unknown> {
   }
 }
 
+/** Authenticated GET that returns parsed JSON or throws `ApiError`. */
+export async function authedGet<T>(path: string, token: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = await parseJson(response);
+  if (!response.ok) throw extractError(response.status, body);
+  return body as T;
+}
+
 export async function register(input: {
   email: string;
   password: string;
@@ -127,4 +137,15 @@ export async function getMe(token: string): Promise<AuthUser> {
   const body = await parseJson(response);
   if (!response.ok) throw extractError(response.status, body);
   return body as AuthUser;
+}
+
+export type Tenant = {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+};
+
+export async function listTenants(token: string): Promise<Tenant[]> {
+  return authedGet<Tenant[]>("/api/v1/tenants/", token);
 }

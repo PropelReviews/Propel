@@ -1,0 +1,100 @@
+import json
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.dependencies import require_admin
+from app.auth.manager import current_active_user
+from app.config import get_settings
+from app.db.session import get_async_session
+from app.models.user import User
+from app.schemas.connection import (
+    ConnectionRead,
+    ConnectionStatusUpdate,
+    GitHubInstallURL,
+)
+from app.services import connections as connection_service
+
+router = APIRouter(prefix="/api/v1", tags=["connections"])
+settings = get_settings()
+
+
+@router.get(
+    "/tenants/{tenant_id}/connections",
+    response_model=list[ConnectionRead],
+)
+async def list_connections(
+    ctx=Depends(require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    accounts = await connection_service.list_connections(session, ctx.tenant.id)
+    return [ConnectionRead.model_validate(a) for a in accounts]
+
+
+@router.get(
+    "/tenants/{tenant_id}/connections/github/install",
+    response_model=GitHubInstallURL,
+)
+async def github_install_url(
+    ctx=Depends(require_admin),
+    user: User = Depends(current_active_user),
+):
+    url = connection_service.build_github_install_url(ctx.tenant.id, user.id)
+    return GitHubInstallURL(install_url=url)
+
+
+@router.patch(
+    "/tenants/{tenant_id}/connections/{connection_id}",
+    response_model=ConnectionRead,
+)
+async def update_connection(
+    connection_id: uuid.UUID,
+    payload: ConnectionStatusUpdate,
+    ctx=Depends(require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    account = await connection_service.update_connection_status(
+        session, ctx.tenant.id, connection_id, payload
+    )
+    return ConnectionRead.model_validate(account)
+
+
+@router.get("/connections/github/setup")
+async def github_setup_callback(
+    installation_id: str,
+    state: str,
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """GitHub redirects here after install with installation_id + signed state."""
+    await connection_service.bind_github_installation(
+        session, user.id, installation_id, state
+    )
+    # Bounce the admin back to the SPA connections view.
+    return RedirectResponse(
+        url=f"{settings.oauth_callback_base_url}/connections?github=connected",
+        status_code=303,
+    )
+
+
+@router.post("/webhooks/github", status_code=202)
+async def github_webhook(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+):
+    body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256")
+    if not connection_service.verify_webhook_signature(body, signature):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    event = request.headers.get("X-GitHub-Event", "")
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+
+    if event == "installation":
+        await connection_service.process_installation_webhook(session, payload)
+    return {"status": "accepted"}

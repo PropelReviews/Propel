@@ -1,0 +1,62 @@
+version: 1
+default_environment: dev
+project_id: propel-ingestion
+
+# Extraction layer for Propel (ingestion spec). Meltano pulls provider data via
+# Singer taps and lands it through the custom target-propel loader, which writes
+# raw_record + thin datapoint envelopes to Postgres. No transforms here.
+#
+# The orchestrator (app.ingestion) sets the per-run environment before invoking
+# `meltano run <job>`:
+#   GITHUB_INSTALLATION_TOKEN   minted per connected_account
+#   TAP_GITHUB_REPOSITORIES     JSON array of "org/repo" for the installation
+#   TAP_GITHUB_START_DATE       backfill window / watermark
+#   COPILOT_ORG                 org login for Copilot usage metrics
+#   PROPEL_DATABASE_URL, PROPEL_TENANT_ID, PROPEL_CONNECTED_ACCOUNT_ID,
+#   PROPEL_RUN_ID, PROPEL_SOURCE   passed through to target-propel
+
+environments:
+  - name: dev
+
+plugins:
+  extractors:
+    - name: tap-github
+      variant: meltanolabs
+      pip_url: meltanolabs-tap-github
+      config:
+        auth_token: ${GITHUB_INSTALLATION_TOKEN}
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+        start_date: ${TAP_GITHUB_START_DATE}
+      select:
+        - pull_requests.*
+        - commits.*
+        - issues.*
+        - issue_comments.*
+        - pull_request_review_comments.*
+        - reviews.*
+
+    - name: tap-github-copilot
+      namespace: tap_github_copilot
+      pip_url: -e ./tap-github-copilot
+      executable: tap-github-copilot
+      capabilities:
+        - state
+        - catalog
+        - discover
+      config:
+        org: ${COPILOT_ORG}
+        auth_token: ${GITHUB_INSTALLATION_TOKEN}
+
+  loaders:
+    - name: target-propel
+      namespace: target_propel
+      pip_url: -e ./target-propel
+      executable: target-propel
+
+jobs:
+  - name: github_sync
+    tasks:
+      - tap-github target-propel
+  - name: copilot_sync
+    tasks:
+      - tap-github-copilot target-propel

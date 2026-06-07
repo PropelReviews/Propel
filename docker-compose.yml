@@ -51,6 +51,11 @@ services:
         condition: service_healthy
     env_file:
       - .env
+      # Shared dev ingestion creds (GitHub App), pulled from AWS Secrets Manager
+      # via scripts/dev-ingestion-secrets.sh. Optional so the stack still starts
+      # for anyone who hasn't pulled them.
+      - path: .env.ingestion.local
+        required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-propel-backend}
@@ -58,6 +63,33 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
+
+  # Hourly ingestion scheduler (V1). Same image as `backend`, but runs crond in
+  # the foreground (the entrypoint detects the `cron` command) instead of
+  # uvicorn. The crontab invokes `python -m app.ingestion.cli run` each hour.
+  ingestion-cron:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    container_name: propel-ingestion-cron
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+      # GitHub App creds for the hourly ingestion run (see backend service above).
+      - path: .env.ingestion.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
+    volumes:
+      - ${PROPEL_HOST_DIR:-.}/backend:/app
+      # Meltano's .meltano (plugin venvs + SQLite systemdb) on a dedicated volume,
+      # NOT the bind mount: WAL/locking is reliable on the volume filesystem and it
+      # isn't shared with other containers, so no "database is locked" races.
+      - meltano-cron:/app/meltano/.meltano
+    command: ["cron", "-f"]
 
   frontend:
     build:
@@ -115,3 +147,4 @@ services:
 
 volumes:
   pgdata:
+  meltano-cron:

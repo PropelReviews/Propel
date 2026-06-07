@@ -62,8 +62,9 @@ async def clean_db(db_engine):
     async with db_engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE tenant_invites, tenant_memberships, tenants, "
-                "oauth_accounts, users RESTART IDENTITY CASCADE"
+                "TRUNCATE ingestion_run, datapoint, raw_record, "
+                "connected_accounts, tenant_invites, tenant_memberships, "
+                "tenants, oauth_accounts, users RESTART IDENTITY CASCADE"
             )
         )
     yield
