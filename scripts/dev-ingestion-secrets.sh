@@ -13,14 +13,18 @@
 #   }
 #
 # Usage:
-#   scripts/dev-ingestion-secrets.sh pull         # fetch -> .env.ingestion.local
-#   scripts/dev-ingestion-secrets.sh push         # upload local values -> secret
-#   scripts/dev-ingestion-secrets.sh show         # print the secret JSON (keys + values)
+#   scripts/dev-ingestion-secrets.sh pull            # fetch -> .env.ingestion.local
+#   scripts/dev-ingestion-secrets.sh push            # upload local values -> secret
+#   scripts/dev-ingestion-secrets.sh show            # print the secret JSON (keys + values)
+#   scripts/dev-ingestion-secrets.sh push-github [env...]
+#                                                    # mirror the GitHub App creds into
+#                                                    # GitHub Environment secrets (default: beta prod)
 #
 # Config (env vars, all optional):
 #   PROPEL_DEV_SECRET_ID   Secrets Manager name/ARN (default: propel/dev/ingestion)
 #   AWS_REGION / AWS_PROFILE   standard AWS CLI selectors
 #   ENV_FILE               output path for `pull` (default: <repo>/.env.ingestion.local)
+#   PROPEL_GH_REPO         owner/repo for `push-github` (default: gh-detected from cwd)
 #
 # `push` reads values from the current environment, or from GITHUB_APP_PRIVATE_KEY_FILE
 # for the PEM (a path to the .pem you downloaded from GitHub). Empty values are
@@ -127,13 +131,64 @@ cmd_show() {
   printf '%s' "$json" | jq .
 }
 
+# Mirror the GitHub App credentials from Secrets Manager into GitHub Environment
+# secrets so the deploy workflows can inject them. GitHub forbids secret names
+# starting with GITHUB_, so each GITHUB_APP_* key lands as GH_APP_* (matching the
+# names referenced in .github/workflows/deploy-*.yml). Reads from the canonical
+# Secrets Manager copy, so it's reproducible (rotation, onboarding).
+cmd_push_github() {
+  command -v gh >/dev/null 2>&1 || die "gh CLI not found (https://cli.github.com/)"
+  gh auth status >/dev/null 2>&1 || die "gh not authenticated (run: gh auth login)"
+
+  local targets=("$@")
+  [[ ${#targets[@]} -gt 0 ]] || targets=(beta prod)
+
+  local repo="${PROPEL_GH_REPO:-}"
+  if [[ -z "$repo" ]]; then
+    repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)" \
+      || die "could not detect repo; set PROPEL_GH_REPO=owner/repo"
+  fi
+
+  local json
+  json="$(fetch_secret_json)" || die "could not read secret '$secret_id' (check AWS creds/region)"
+  [[ -n "$json" && "$json" != "None" ]] || die "secret '$secret_id' is empty"
+
+  local pushed=0
+  for key in "${keys[@]}"; do
+    # Only the GitHub App keys are consumed by the deploy workflows.
+    case "$key" in GITHUB_APP_*) ;; *) continue ;; esac
+
+    local val
+    val="$(printf '%s' "$json" | jq -r --arg k "$key" '.[$k] // ""')"
+    if [[ -z "$val" ]]; then
+      echo "skip ${key} (absent from secret)"
+      continue
+    fi
+
+    # GITHUB_APP_ID -> GH_APP_ID, etc. (GitHub rejects the GITHUB_ prefix).
+    local gh_name="GH_${key#GITHUB_}"
+    for env in "${targets[@]}"; do
+      # stdin (not --body) preserves the multi-line PEM and avoids quoting issues.
+      printf '%s' "$val" | gh secret set "$gh_name" --env "$env" --repo "$repo"
+      echo "set ${gh_name} -> ${repo} (env: ${env})"
+      pushed=$((pushed + 1))
+    done
+  done
+
+  [[ "$pushed" -gt 0 ]] || die "nothing pushed — no GITHUB_APP_* keys found in '$secret_id'"
+}
+
 require_tools
 case "${1:-}" in
   pull) cmd_pull ;;
   push) cmd_push ;;
   show) cmd_show ;;
+  push-github)
+    shift
+    cmd_push_github "$@"
+    ;;
   *)
-    echo "usage: $(basename "$0") {pull|push|show}" >&2
+    echo "usage: $(basename "$0") {pull|push|show|push-github [env...]}" >&2
     exit 2
     ;;
 esac

@@ -8,7 +8,10 @@ if [ "${SKIP_UV_SYNC:-0}" != "1" ] && [ -f /app/pyproject.toml ] && [ -f /app/uv
   uv sync --frozen --no-install-project --no-dev --directory /app
 fi
 
-if [ -f /app/alembic.ini ]; then
+# Deploys (the API service) own schema migrations. SKIP_MIGRATIONS=1 lets the
+# scheduled ingestion task run without touching the schema, so an hourly run can
+# never race an in-flight migration.
+if [ "${SKIP_MIGRATIONS:-0}" != "1" ] && [ -f /app/alembic.ini ]; then
   echo "==> Applying database migrations (alembic upgrade head)"
   alembic -c /app/alembic.ini upgrade head
 fi

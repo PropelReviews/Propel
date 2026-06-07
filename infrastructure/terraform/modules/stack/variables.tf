@@ -95,6 +95,18 @@ variable "api_desired_count" {
   description = "Number of API tasks (fixed; no autoscaling)."
 }
 
+variable "ingestion_enabled" {
+  type        = bool
+  default     = false
+  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
+}
+
+variable "ingestion_schedule_expression" {
+  type        = string
+  default     = "rate(1 hour)"
+  description = "EventBridge Scheduler expression driving the ingestion run."
+}
+
 variable "tags" {
   type        = map(string)
   default     = {}
