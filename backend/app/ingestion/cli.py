@@ -50,9 +50,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.command == "run":
             asyncio.run(
-                orchestrator.run_all(
-                    account_id=args.account_id, job_name=args.job_name
-                )
+                orchestrator.run_all(account_id=args.account_id, job_name=args.job_name)
             )
     finally:
         if logging_enabled:

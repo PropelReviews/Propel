@@ -216,9 +216,7 @@ async def run_account_job(
                 status=IngestionRunStatus.error,
                 error=error,
             )
-            fail_extra = _ingestion_extra(
-                account, job, run=run, status="error"
-            )
+            fail_extra = _ingestion_extra(account, job, run=run, status="error")
             fail_extra["process.returncode"] = result.returncode
             fail_extra["error.message"] = error
             logger.error(
