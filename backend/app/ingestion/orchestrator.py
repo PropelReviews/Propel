@@ -77,6 +77,26 @@ JOBS: list[JobSpec] = [
 _IDENTITY_SYNC_JOB = "github_user_profiles_sync"
 
 
+def _ingestion_extra(
+    account: ConnectedAccount,
+    job: JobSpec,
+    *,
+    run: IngestionRun | None = None,
+    **fields: object,
+) -> dict[str, object]:
+    extra: dict[str, object] = {
+        "event": "extraction.run",
+        "ingestion.job": job.name,
+        "ingestion.resource_type": job.resource_type,
+        "connected_account.id": str(account.id),
+        "tenant.id": str(account.tenant_id),
+    }
+    if run is not None:
+        extra["ingestion.run_id"] = str(run.id)
+    extra.update(fields)
+    return extra
+
+
 async def run_all(
     *,
     account_id: uuid.UUID | None = None,
@@ -85,14 +105,29 @@ async def run_all(
     """Entry point used by the CLI/cron. Iterates accounts and runs jobs."""
     jobs = [j for j in JOBS if job_name is None or j.name == job_name]
     if not jobs:
-        logger.warning("No ingestion job matches %r", job_name)
+        logger.warning(
+            "No ingestion job matches filter",
+            extra={"event": "extraction.batch", "ingestion.job_filter": job_name},
+        )
         return
 
     async with async_session_maker() as session:
         accounts = await _active_github_accounts(session, account_id)
 
+    logger.info(
+        "Ingestion batch starting",
+        extra={
+            "event": "extraction.batch",
+            "ingestion.job_count": len(jobs),
+            "ingestion.account_count": len(accounts),
+            "ingestion.jobs": [job.name for job in jobs],
+        },
+    )
     if not accounts:
-        logger.info("No active GitHub connected accounts to ingest")
+        logger.info(
+            "No active GitHub connected accounts to ingest",
+            extra={"event": "extraction.batch"},
+        )
         return
 
     for account in accounts:
@@ -101,6 +136,15 @@ async def run_all(
             # is isolated and the run row is always finalized.
             async with async_session_maker() as session:
                 await run_account_job(session, account, job)
+
+    logger.info(
+        "Ingestion batch finished",
+        extra={
+            "event": "extraction.batch",
+            "ingestion.job_count": len(jobs),
+            "ingestion.account_count": len(accounts),
+        },
+    )
 
 
 async def _active_github_accounts(
@@ -121,9 +165,13 @@ async def run_account_job(
 ) -> IngestionRun | None:
     if await _has_running(session, account.id, job.resource_type):
         logger.info(
-            "Skipping %s for account %s: a run is already in progress",
-            job.name,
-            account.id,
+            "Skipping extraction run: already in progress",
+            extra=_ingestion_extra(
+                account,
+                job,
+                status="skipped",
+                skip_reason="overlap_guard",
+            ),
         )
         return None
 
@@ -139,19 +187,43 @@ async def run_account_job(
     await session.refresh(run)
 
     started_at = run.started_at or datetime.now(UTC)
+    logger.info(
+        "Extraction run started",
+        extra=_ingestion_extra(account, job, run=run, status="running"),
+    )
     try:
         env = await _build_env(session, account, job, run)
         if env is None:
             await _finalize(session, run, status=IngestionRunStatus.success)
+            logger.info(
+                "Extraction run skipped: nothing to ingest",
+                extra=_ingestion_extra(
+                    account,
+                    job,
+                    run=run,
+                    status="success",
+                    skip_reason="nothing_to_ingest",
+                ),
+            )
             return run
 
         result = await meltano_runner.run_job(job.name, env)
         if not result.ok:
+            error = _tail(result.stderr or result.stdout)
             await _finalize(
                 session,
                 run,
                 status=IngestionRunStatus.error,
-                error=_tail(result.stderr or result.stdout),
+                error=error,
+            )
+            fail_extra = _ingestion_extra(
+                account, job, run=run, status="error"
+            )
+            fail_extra["process.returncode"] = result.returncode
+            fail_extra["error.message"] = error
+            logger.error(
+                "Extraction run failed: Meltano exited non-zero",
+                extra=fail_extra,
             )
             return run
 
@@ -161,10 +233,18 @@ async def run_account_job(
             status=IngestionRunStatus.success,
             watermark=started_at,
         )
+        duration_ms = _duration_ms(run.started_at, run.finished_at)
+        complete_extra = _ingestion_extra(account, job, run=run, status="success")
+        complete_extra["ingestion.records_pulled"] = run.records_pulled
+        complete_extra["ingestion.datapoints_written"] = run.datapoints_written
+        complete_extra["ingestion.duration_ms"] = duration_ms
+        logger.info("Extraction run completed", extra=complete_extra)
         if job.name == _IDENTITY_SYNC_JOB:
             await _reconcile_identities(session, account)
     except Exception as exc:  # noqa: BLE001 — record failure on the run, keep going
-        logger.exception("Ingestion run %s failed", run.id)
+        fail_extra = _ingestion_extra(account, job, run=run, status="error")
+        fail_extra["error.message"] = str(exc)
+        logger.exception("Extraction run failed", extra=fail_extra)
         await _finalize(session, run, status=IngestionRunStatus.error, error=str(exc))
     return run
 
@@ -210,8 +290,13 @@ async def _build_env(
 ) -> dict[str, str] | None:
     """Build the per-run environment, or None to skip (nothing to ingest)."""
     if account.auth_type != AuthType.github_app_installation.value:
+        skip_extra = _ingestion_extra(
+            account, job, run=run, skip_reason="unsupported_auth_type"
+        )
+        skip_extra["connected_account.auth_type"] = account.auth_type
         logger.warning(
-            "Account %s is not a GitHub App installation; skipping", account.id
+            "Skipping extraction run: unsupported auth type",
+            extra=skip_extra,
         )
         return None
 
@@ -229,7 +314,15 @@ async def _build_env(
     if job.needs_repos:
         repos = await app_auth.list_installation_repositories(token.token)
         if not repos:
-            logger.info("Account %s has no accessible repositories", account.id)
+            logger.info(
+                "Skipping extraction run: no accessible repositories",
+                extra=_ingestion_extra(
+                    account,
+                    job,
+                    run=run,
+                    skip_reason="no_repositories",
+                ),
+            )
             return None
         env["TAP_GITHUB_REPOSITORIES"] = json.dumps(repos)
         env["TAP_GITHUB_START_DATE"] = await _start_date(
@@ -237,7 +330,15 @@ async def _build_env(
         )
 
     if job.needs_org and not account.external_account_name:
-        logger.info("Account %s has no org login; skipping %s", account.id, job.name)
+        logger.info(
+            "Skipping extraction run: no org login on connected account",
+            extra=_ingestion_extra(
+                account,
+                job,
+                run=run,
+                skip_reason="no_org_login",
+            ),
+        )
         return None
 
     if job.org_mode == "array":
@@ -251,7 +352,15 @@ async def _build_env(
     if job.needs_member_logins:
         logins = await _member_logins(session, account)
         if not logins:
-            logger.info("Account %s has no synced org members yet", account.id)
+            logger.info(
+                "Skipping extraction run: org members not synced yet",
+                extra=_ingestion_extra(
+                    account,
+                    job,
+                    run=run,
+                    skip_reason="no_org_members",
+                ),
+            )
             return None
         env["TAP_GITHUB_USER_USERNAMES"] = json.dumps(logins)
         env["TAP_GITHUB_START_DATE"] = await _start_date(
@@ -340,3 +449,11 @@ async def _run_counts(session: AsyncSession, run_id: uuid.UUID) -> tuple[int, in
 def _tail(message: str, *, limit: int = 2000) -> str:
     message = (message or "").strip()
     return message[-limit:]
+
+
+def _duration_ms(
+    started_at: datetime | None, finished_at: datetime | None
+) -> float | None:
+    if started_at is None or finished_at is None:
+        return None
+    return round((finished_at - started_at).total_seconds() * 1000, 2)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import hmac
+import logging
 import time
 import uuid
 from hashlib import sha256
@@ -26,6 +27,8 @@ from app.models.connected_account import ConnectedAccount
 from app.models.enums import AuthType, ConnectionStatus, IntegrationProvider, Role
 from app.models.membership import TenantMembership
 from app.schemas.connection import ConnectionStatusUpdate
+
+logger = logging.getLogger("propel.connections")
 
 settings = get_settings()
 
@@ -53,11 +56,26 @@ def verify_install_state(state: str) -> tuple[uuid.UUID, uuid.UUID]:
         payload, signature = raw.rsplit(":", 1)
         tenant_str, user_str, exp_str = payload.split(":")
     except (ValueError, UnicodeDecodeError) as exc:
+        logger.warning(
+            "Invalid GitHub install state",
+            extra={"event": "connection.install", "error.message": "invalid_state"},
+        )
         raise HTTPException(status_code=400, detail="Invalid install state") from exc
 
     if not hmac.compare_digest(signature, _sign(payload)):
+        logger.warning(
+            "GitHub install state signature mismatch",
+            extra={
+                "event": "connection.install",
+                "error.message": "signature_mismatch",
+            },
+        )
         raise HTTPException(status_code=400, detail="Install state signature mismatch")
     if int(exp_str) < int(time.time()):
+        logger.warning(
+            "GitHub install state expired",
+            extra={"event": "connection.install", "error.message": "state_expired"},
+        )
         raise HTTPException(status_code=400, detail="Install state expired")
     return uuid.UUID(tenant_str), uuid.UUID(user_str)
 
@@ -111,6 +129,14 @@ async def bind_github_installation(
 ) -> ConnectedAccount:
     tenant_id, state_user_id = verify_install_state(state)
     if state_user_id != user_id:
+        logger.warning(
+            "GitHub install state user mismatch",
+            extra={
+                "event": "connection.install",
+                "tenant.id": str(tenant_id),
+                "error.message": "user_mismatch",
+            },
+        )
         raise HTTPException(
             status_code=403, detail="Install state does not match the current user"
         )
@@ -123,6 +149,15 @@ async def bind_github_installation(
     )
     membership = membership.scalar_one_or_none()
     if membership is None or membership.role != Role.admin:
+        logger.warning(
+            "Non-admin attempted GitHub install binding",
+            extra={
+                "event": "connection.install",
+                "tenant.id": str(tenant_id),
+                "user.id": str(user_id),
+                "error.message": "not_admin",
+            },
+        )
         raise HTTPException(
             status_code=403, detail="Only a tenant admin can connect GitHub"
         )
@@ -157,10 +192,28 @@ async def bind_github_installation(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
+        logger.error(
+            "GitHub connection binding failed",
+            extra={
+                "event": "connection.install",
+                "tenant.id": str(tenant_id),
+                "github.installation_id": installation_id,
+                "error.message": "integrity_error",
+            },
+        )
         raise HTTPException(
             status_code=409, detail="Connection could not be created"
         ) from exc
     await session.refresh(account)
+    logger.info(
+        "GitHub connection bound",
+        extra={
+            "event": "connection.install",
+            "tenant.id": str(tenant_id),
+            "connected_account.id": str(account.id),
+            "github.installation_id": installation_id,
+        },
+    )
     return account
 
 
@@ -169,6 +222,13 @@ async def _fetch_installation_account_name(installation_id: str) -> str | None:
     try:
         installation = await app_auth.get_installation(installation_id)
     except Exception:  # noqa: BLE001 — enrichment must not fail provisioning
+        logger.warning(
+            "Could not enrich GitHub installation with account name",
+            extra={
+                "event": "connection.install",
+                "github.installation_id": installation_id,
+            },
+        )
         return None
     account = installation.get("account") or {}
     return account.get("login")
@@ -211,6 +271,7 @@ async def process_installation_webhook(session: AsyncSession, payload: dict) -> 
     if account is None:
         return
 
+    previous_status = account.status
     if action in {"deleted", "revoked"}:
         account.status = ConnectionStatus.revoked.value
     elif action == "suspend":
@@ -222,5 +283,19 @@ async def process_installation_webhook(session: AsyncSession, payload: dict) -> 
             account.external_account_name = github_account["login"]
         if installation.get("permissions"):
             account.scopes = installation["permissions"]
+    else:
+        return
 
     await session.commit()
+    logger.info(
+        "GitHub installation webhook processed",
+        extra={
+            "event": "connection.webhook",
+            "github.webhook_action": action,
+            "github.installation_id": installation_id,
+            "connected_account.id": str(account.id),
+            "tenant.id": str(account.tenant_id),
+            "connection.status_before": previous_status,
+            "connection.status_after": account.status,
+        },
+    )

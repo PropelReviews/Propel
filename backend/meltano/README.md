@@ -9,12 +9,18 @@ taps and lands records through the custom `target-propel` loader, which writes
 
 ```
 meltano/
-├── meltano.yml          # plugins + jobs (github_sync, copilot_sync)
+├── meltano.yml          # plugins + jobs (github_sync, github_org_sync,
+│                        #   github_user_profiles_sync, copilot_sync)
 ├── target-propel/       # custom Singer target → raw_record + datapoint
 └── tap-github-copilot/  # custom tap for Copilot usage metrics (measurement)
 ```
 
-`tap-github` is the MeltanoLabs variant pulled from the hub.
+`tap-github` is the MeltanoLabs variant pulled from the hub. Because the tap
+requires exactly one discovery mode per invocation, the base `tap-github`
+(auth + watermark only) is inherited by three children that each set one mode and
+its own stream selection: `tap-github-repos` (repositories), `tap-github-org`
+(organizations → `organization_members`), and `tap-github-users`
+(`user_usernames` → `users`).
 
 ## How it runs
 
@@ -23,9 +29,17 @@ active `connected_accounts` row. It mints a GitHub App installation token, sets
 the per-run environment, and invokes a job:
 
 ```bash
-meltano run github_sync     # PRs, commits, issues, comments, reviews
-meltano run copilot_sync    # Copilot per-user-day usage (measurement)
+meltano run github_sync                # PRs, commits, issues, comments, reviews
+meltano run github_org_sync            # org member roster (organization_members)
+meltano run github_user_profiles_sync  # member name/email profiles (users)
+meltano run copilot_sync               # Copilot per-user-day usage (measurement)
 ```
+
+After `github_user_profiles_sync` the orchestrator reconciles the roster into
+`external_identities` and tenant memberships (see
+[`docs/backend/data-model.md`](../../docs/backend/data-model.md#github-identity-linking-migration-003)).
+The org/admin lookups need the GitHub App's **Organization → Members: Read-only**
+permission.
 
 ### Per-run environment (set by the orchestrator)
 
@@ -33,6 +47,8 @@ meltano run copilot_sync    # Copilot per-user-day usage (measurement)
 |---|---|
 | `GITHUB_INSTALLATION_TOKEN` | tap auth, minted fresh per run |
 | `TAP_GITHUB_REPOSITORIES` | JSON array of `org/repo` for the installation |
+| `TAP_GITHUB_ORGANIZATIONS` | JSON array of org logins (org member roster) |
+| `TAP_GITHUB_USER_USERNAMES` | JSON array of logins (member profile enrichment) |
 | `TAP_GITHUB_START_DATE` | backfill window / watermark |
 | `COPILOT_ORG` | org login for Copilot metrics |
 | `PROPEL_DATABASE_URL` | sync `postgresql://` URL for `target-propel` |

@@ -256,12 +256,20 @@ images bundle Meltano + the taps; plugins install on first container start):
 ```bash
 # Trigger a run on demand (no need to wait for the top of the hour):
 docker compose exec ingestion-cron python -m app.ingestion.cli run
-docker compose exec ingestion-cron python -m app.ingestion.cli run --job github_sync   # or copilot_sync
+docker compose exec ingestion-cron python -m app.ingestion.cli run --job github_sync   # or github_org_sync / github_user_profiles_sync / copilot_sync
 docker compose exec ingestion-cron python -m app.ingestion.cli run --account-id <uuid>
 
 # Same wrapper cron fires hourly (sources the env snapshot, then runs the CLI):
 docker compose exec ingestion-cron /usr/local/bin/propel-ingestion
 ```
+
+Beyond activity (PRs, commits, issues), a run also ingests the connected org's
+**member roster** (`github_org_sync` → `github_user_profiles_sync`) and links each
+GitHub member to a Propel user, auto-provisioning members and mapping GitHub org
+owners to Propel admins. See
+[`docs/backend/data-model.md`](../docs/backend/data-model.md#github-identity-linking-migration-003)
+for the linking rules. This requires the ingestion GitHub App to grant
+**Organization permissions → Members: Read-only**.
 
 A run only does work when there's an **active** `connected_accounts` row for a
 GitHub App installation. Create one either through the install flow

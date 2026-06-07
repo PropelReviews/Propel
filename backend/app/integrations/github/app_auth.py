@@ -8,6 +8,7 @@ environment (see app/ingestion).
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,6 +17,8 @@ import httpx
 import jwt
 
 from app.config import get_settings
+
+logger = logging.getLogger("propel.integrations.github")
 
 GITHUB_API = "https://api.github.com"
 # GitHub rejects app JWTs with exp more than 10 minutes out; stay well under.
@@ -40,6 +43,10 @@ def _normalize_private_key(raw: str) -> str:
 def mint_app_jwt() -> str:
     settings = get_settings()
     if not settings.github_app_id or not settings.github_app_private_key:
+        logger.error(
+            "GitHub App credentials are not configured",
+            extra={"event": "github.app_auth", "error.message": "missing_credentials"},
+        )
         raise GitHubAppAuthError(
             "GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY must be configured."
         )
@@ -68,6 +75,14 @@ async def get_installation(installation_id: str) -> dict:
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(url, headers=headers)
     if response.status_code != 200:
+        logger.error(
+            "GitHub installation lookup failed",
+            extra={
+                "event": "github.app_auth",
+                "github.installation_id": installation_id,
+                "http.status_code": response.status_code,
+            },
+        )
         raise GitHubAppAuthError(
             f"Installation lookup failed ({response.status_code}): {response.text}"
         )
@@ -86,6 +101,14 @@ async def get_installation_token(installation_id: str) -> InstallationToken:
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(url, headers=headers)
     if response.status_code != 201:
+        logger.error(
+            "GitHub installation token exchange failed",
+            extra={
+                "event": "github.app_auth",
+                "github.installation_id": installation_id,
+                "http.status_code": response.status_code,
+            },
+        )
         raise GitHubAppAuthError(
             f"Installation token exchange failed ({response.status_code}): "
             f"{response.text}"
@@ -123,6 +146,13 @@ async def list_installation_repositories(token: str) -> list[str]:
         while url:
             response = await client.get(url, headers=headers)
             if response.status_code != 200:
+                logger.error(
+                    "GitHub repository listing failed",
+                    extra={
+                        "event": "github.app_auth",
+                        "http.status_code": response.status_code,
+                    },
+                )
                 raise GitHubAppAuthError(
                     f"Repository listing failed ({response.status_code}): "
                     f"{response.text}"
@@ -153,6 +183,14 @@ async def list_org_admin_logins(token: str, org: str) -> set[str]:
         while url:
             response = await client.get(url, headers=headers)
             if response.status_code != 200:
+                logger.error(
+                    "GitHub org admin listing failed",
+                    extra={
+                        "event": "github.app_auth",
+                        "github.org": org,
+                        "http.status_code": response.status_code,
+                    },
+                )
                 raise GitHubAppAuthError(
                     f"Org admin listing failed ({response.status_code}): "
                     f"{response.text}"
