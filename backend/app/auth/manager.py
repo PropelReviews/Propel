@@ -13,6 +13,7 @@ from app.auth.database import get_user_db
 from app.auth.password import validate_password_strength
 from app.config import get_settings
 from app.models.user import User
+from app.services import github_identity
 
 settings = get_settings()
 
@@ -41,6 +42,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def on_after_register(self, user: User, request: Request | None = None):
         pass
+
+    async def oauth_callback(self, oauth_name: str, *args, **kwargs) -> User:
+        user = await super().oauth_callback(oauth_name, *args, **kwargs)
+        # When a user signs in with GitHub, claim any pending org identities whose
+        # GitHub user id matches — closing the loop for provisioned/pending members.
+        if oauth_name == "github":
+            account_id = args[1] if len(args) > 1 else kwargs.get("account_id")
+            if account_id:
+                await github_identity.link_oauth_identity(
+                    self.user_db.session, user.id, str(account_id)
+                )
+        return user
 
 
 async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db)):

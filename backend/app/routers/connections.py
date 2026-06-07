@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,6 +17,8 @@ from app.schemas.connection import (
     GitHubInstallURL,
 )
 from app.services import connections as connection_service
+
+logger = logging.getLogger("propel.connections")
 
 router = APIRouter(prefix="/api/v1", tags=["connections"])
 settings = get_settings()
@@ -87,6 +90,10 @@ async def github_webhook(
     body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256")
     if not connection_service.verify_webhook_signature(body, signature):
+        logger.warning(
+            "Rejected GitHub webhook: invalid signature",
+            extra={"event": "connection.webhook", "error.message": "invalid_signature"},
+        )
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     event = request.headers.get("X-GitHub-Event", "")

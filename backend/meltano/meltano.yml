@@ -10,6 +10,8 @@ project_id: propel-ingestion
 # `meltano run <job>`:
 #   GITHUB_INSTALLATION_TOKEN   minted per connected_account
 #   TAP_GITHUB_REPOSITORIES     JSON array of "org/repo" for the installation
+#   TAP_GITHUB_ORGANIZATIONS    JSON array of org logins (org member roster)
+#   TAP_GITHUB_USER_USERNAMES   JSON array of logins (user profile enrichment)
 #   TAP_GITHUB_START_DATE       backfill window / watermark
 #   COPILOT_ORG                 org login for Copilot usage metrics
 #   PROPEL_DATABASE_URL, PROPEL_TENANT_ID, PROPEL_CONNECTED_ACCOUNT_ID,
@@ -20,13 +22,21 @@ environments:
 
 plugins:
   extractors:
+    # Shared GitHub base: auth + watermark only, no discovery mode. tap-github
+    # requires exactly one of repositories / organizations / user_usernames per
+    # invocation, so each child below adds exactly one mode and its own select.
+    # Children inherit this definition and share its virtualenv (and lock file).
     - name: tap-github
       variant: meltanolabs
       pip_url: meltanolabs-tap-github
       config:
         auth_token: ${GITHUB_INSTALLATION_TOKEN}
-        repositories: ${TAP_GITHUB_REPOSITORIES}
         start_date: ${TAP_GITHUB_START_DATE}
+
+    - name: tap-github-repos
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
       select:
         - pull_requests.*
         - commits.*
@@ -34,6 +44,20 @@ plugins:
         - issue_comments.*
         - pull_request_review_comments.*
         - reviews.*
+
+    - name: tap-github-org
+      inherit_from: tap-github
+      config:
+        organizations: ${TAP_GITHUB_ORGANIZATIONS}
+      select:
+        - organization_members.*
+
+    - name: tap-github-users
+      inherit_from: tap-github
+      config:
+        user_usernames: ${TAP_GITHUB_USER_USERNAMES}
+      select:
+        - users.*
 
     - name: tap-github-copilot
       namespace: tap_github_copilot
@@ -56,7 +80,13 @@ plugins:
 jobs:
   - name: github_sync
     tasks:
-      - tap-github target-propel
+      - tap-github-repos target-propel
+  - name: github_org_sync
+    tasks:
+      - tap-github-org target-propel
+  - name: github_user_profiles_sync
+    tasks:
+      - tap-github-users target-propel
   - name: copilot_sync
     tasks:
       - tap-github-copilot target-propel

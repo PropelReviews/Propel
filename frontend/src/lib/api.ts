@@ -1,4 +1,21 @@
+import posthog from "posthog-js";
+
 export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+/** Headers that link backend OTLP logs to PostHog person + session replay. */
+function posthogLogHeaders(): Record<string, string> {
+  if (!posthog.__loaded) return {};
+  const headers: Record<string, string> = {};
+  const distinctId = posthog.get_distinct_id();
+  const sessionId = posthog.get_session_id();
+  if (distinctId) headers["X-PostHog-Distinct-Id"] = distinctId;
+  if (sessionId) headers["X-PostHog-Session-Id"] = sessionId;
+  return headers;
+}
+
+function apiHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return { ...posthogLogHeaders(), ...extra };
+}
 
 export type AuthUser = {
   id: string;
@@ -81,7 +98,7 @@ async function parseJson(response: Response): Promise<unknown> {
 /** Authenticated GET that returns parsed JSON or throws `ApiError`. */
 export async function authedGet<T>(path: string, token: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: apiHeaders({ Authorization: `Bearer ${token}` }),
   });
   const body = await parseJson(response);
   if (!response.ok) throw extractError(response.status, body);
@@ -95,7 +112,7 @@ export async function register(input: {
 }): Promise<AuthUser> {
   const response = await fetch(`${API_BASE}/api/v1/auth/register`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       email: input.email,
       password: input.password,
@@ -120,7 +137,9 @@ export async function login(input: {
 
   const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: apiHeaders({
+      "Content-Type": "application/x-www-form-urlencoded",
+    }),
     body: form.toString(),
   });
 
@@ -131,7 +150,7 @@ export async function login(input: {
 
 export async function getMe(token: string): Promise<AuthUser> {
   const response = await fetch(`${API_BASE}/api/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: apiHeaders({ Authorization: `Bearer ${token}` }),
   });
 
   const body = await parseJson(response);

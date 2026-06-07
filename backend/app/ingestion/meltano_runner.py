@@ -8,9 +8,12 @@ also the boundary a future Dagster op would call.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger("propel.ingestion")
 
 
 def project_dir() -> Path:
@@ -44,6 +47,16 @@ async def run_job(
     command.append(job)
 
     merged_env = {**os.environ, **env}
+    run_id = env.get("PROPEL_RUN_ID")
+    extra = {
+        "event": "extraction.meltano",
+        "ingestion.job": job,
+        "ingestion.run_id": run_id,
+        "connected_account.id": env.get("PROPEL_CONNECTED_ACCOUNT_ID"),
+        "tenant.id": env.get("PROPEL_TENANT_ID"),
+    }
+    logger.info("Meltano job starting", extra=extra)
+
     process = await asyncio.create_subprocess_exec(
         *command,
         cwd=str(project_dir()),
@@ -52,8 +65,20 @@ async def run_job(
         stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await process.communicate()
-    return RunResult(
+    result = RunResult(
         returncode=process.returncode or 0,
         stdout=stdout.decode(errors="replace"),
         stderr=stderr.decode(errors="replace"),
     )
+    outcome = {**extra, "process.returncode": result.returncode}
+    if result.ok:
+        logger.info("Meltano job completed", extra=outcome)
+    else:
+        outcome["error.message"] = _tail(result.stderr or result.stdout)
+        logger.error("Meltano job failed", extra=outcome)
+    return result
+
+
+def _tail(message: str, *, limit: int = 500) -> str:
+    message = (message or "").strip()
+    return message[-limit:]

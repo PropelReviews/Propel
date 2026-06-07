@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.middleware import AuthSecurityMiddleware
 from app.config import get_settings
 from app.feature_flags import init_posthog, shutdown_posthog
+from app.logging_middleware import RequestLoggingMiddleware
+from app.otel_logging import setup_logging, shutdown_logging
 from app.routers import auth, connections, ingestion, invites, members, tenants
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
 
@@ -15,16 +17,20 @@ tracer = get_tracer("propel-backend")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging_enabled = setup_logging()
     tracing_enabled = setup_tracing(app)
     init_posthog()
     yield
     shutdown_posthog()
     if tracing_enabled:
         shutdown_tracing()
+    if logging_enabled:
+        shutdown_logging()
 
 
 app = FastAPI(title="Propel", lifespan=lifespan)
 
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(AuthSecurityMiddleware)
 
 # Allow the browser SPA (a different origin) to call the API, including the
@@ -40,6 +46,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(tenants.router)
 app.include_router(members.router)
+app.include_router(members.github_members_router)
 app.include_router(invites.router)
 app.include_router(connections.router)
 app.include_router(ingestion.router)

@@ -202,6 +202,58 @@ erDiagram
 - **`datapoint` measurements**: partial unique index `datapoint_measure_uq (tenant_id, tool, name, subject_id, period_start) where kind='measurement'`. Restatements upsert, but only when the incoming `observed_at` is newer (newest-wins) — this is what prevents double-counting when a provider republishes a period.
 - **`raw_record`**: never deduped or updated; dedup/restatement is resolved only at the `datapoint` layer.
 
+## GitHub identity linking (migration `003`)
+
+Ingestion also pulls the connected org's **member roster** and links each GitHub member to a Propel user. Two extra Meltano jobs land the data — `github_org_sync` (the `organization_members` stream) and `github_user_profiles_sync` (the `users` stream for names/emails) — and the `github_identity` service reconciles it into a new bridge table.
+
+| Entity | Table | Description |
+|---|---|---|
+| ExternalIdentity | `external_identities` | One row per GitHub org member, scoped to a tenant's connected account. Bridges a GitHub user (`external_user_id` / `external_login`) to a Propel `users.id`. This is identity *linkage*, not user-record merging. |
+
+```mermaid
+erDiagram
+    tenants ||--o{ external_identities : has
+    connected_accounts ||--o{ external_identities : sourced_from
+    users ||--o| external_identities : linked_to
+
+    external_identities {
+        uuid id PK
+        uuid tenant_id FK
+        uuid connected_account_id FK
+        string provider
+        string external_user_id
+        string external_login
+        string external_email
+        string external_name
+        string github_org_role
+        uuid propel_user_id FK
+        string link_method
+        string status
+        jsonb metadata
+        timestamp last_synced_at
+        timestamp linked_at
+    }
+```
+
+### Linking rules
+
+After each sync, every unlinked identity is resolved in priority order:
+
+1. **GitHub OAuth id (certain):** matches `oauth_accounts.account_id` for `oauth_name='github'` → `link_method='oauth_id'`.
+2. **Exact email (certain):** matches an existing `users.email` (case-insensitive) → `link_method='email'`.
+3. **Auto-provision:** no match but the member's public email is known → a Propel `users` row is created (unusable password; sign-in via GitHub OAuth or a future invite) → `link_method='provisioned'`.
+4. **Pending:** no email and no match → `status='pending_email'`. The link is claimed later when the member signs in with GitHub (the OAuth callback calls `link_oauth_identity`).
+
+Each linked or provisioned member gets a `tenant_memberships` row. **Role mapping:** a GitHub org **owner** (the `admin` role from `GET /orgs/{org}/members?role=admin`) becomes a Propel `admin`; everyone else is `individual`. Roles are reconciled on every sync (GitHub is the source of truth), except the **last admin is never demoted** — the same guard used elsewhere in membership management.
+
+### Integrity rules
+
+- **`external_identities`**: unique `(tenant_id, provider, external_user_id)` and unique `(tenant_id, provider, external_login)`. A partial unique index `uq_external_identity_propel_user (tenant_id, provider, propel_user_id) where propel_user_id is not null` ensures at most one GitHub identity per Propel user per tenant.
+- The `organization_members` stream only exposes `id`, `login`, and `avatar_url`; `name`/`email` come from the `users` stream and only when the member has a public email — which is why many members provision or stay `pending_email`.
+- The ingestion GitHub App must grant **Organization permissions → Members: Read-only** for `github_org_sync` and the admin-role lookup to succeed.
+
+The matching `StrEnum`s (`GitHubOrgRole`, `IdentityLinkMethod`, `IdentityStatus`) live in `backend/app/models/enums.py`.
+
 ## Related docs
 
 - [Backend README](../../backend/README.md) — API endpoints and local setup
