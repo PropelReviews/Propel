@@ -64,33 +64,34 @@ services:
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
 
-  # Hourly ingestion scheduler (V1). Same image as `backend`, but runs crond in
-  # the foreground (the entrypoint detects the `cron` command) instead of
-  # uvicorn. The crontab invokes `python -m app.ingestion.cli run` each hour.
-  ingestion-cron:
+  # Ingestion service: always-on Dagster orchestrator. Runs Meltano workflows
+  # in-process (hourly schedule, one subgraph per org). UI on :3000.
+  ingestion:
     build:
       context: .
       dockerfile: infrastructure/docker/backend.Dockerfile
-    container_name: propel-ingestion-cron
+    container_name: propel-ingestion
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - .env
-      # GitHub App creds for the hourly ingestion run (see backend service above).
       - path: .env.ingestion.local
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
-      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion-cron}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion}
+      DAGSTER_HOME: /app/dagster_home
+      SKIP_MIGRATIONS: "1"
+    ports:
+      - "${DAGSTER_PORT:-3000}:3000"
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
-      # Meltano's .meltano (plugin venvs + SQLite systemdb) on a dedicated volume,
-      # NOT the bind mount: WAL/locking is reliable on the volume filesystem and it
-      # isn't shared with other containers, so no "database is locked" races.
-      - meltano-cron:/app/meltano/.meltano
-    command: ["cron", "-f"]
+      - ${PROPEL_HOST_DIR:-.}/orchestration:/app/orchestration
+      - meltano-ingestion:/app/meltano/.meltano
+      - dagster-home:/app/dagster_home
+    command: ["ingestion"]
 
   frontend:
     build:
@@ -148,4 +149,5 @@ services:
 
 volumes:
   pgdata:
-  meltano-cron:
+  meltano-ingestion:
+  dagster-home:

@@ -41,9 +41,8 @@ backend/
 │   ├── routers/          # auth, tenants, members, invites, connections
 │   ├── services/         # tenant + connection domain logic
 │   ├── integrations/     # GitHub App auth (JWT → installation token)
-│   └── ingestion/        # orchestrator + Meltano runner + CLI
+│   └── ingestion/        # orchestrator + Meltano runner + Dagster + CLI
 ├── meltano/              # taps (tap-github, tap-github-copilot) + target-propel
-├── cron/                 # hourly ingestion crontab + wrapper
 ├── tests/
 ├── pyproject.toml
 ├── uv.lock
@@ -248,19 +247,14 @@ that is a later layer. The pieces:
 - **Orchestration:** `app/ingestion` iterates active `connected_accounts`, mints a
   GitHub App installation token, runs the Meltano job, and owns the
   `ingestion_run` lifecycle (with an overlap guard for the hourly cadence).
-- **Scheduling:** on-server `cron`, hourly (see below).
+- **Scheduling:** Dagster (`ingestion` service), hourly — see below.
 
-Run it manually inside the running container (the `backend` and `ingestion-cron`
-images bundle Meltano + the taps; plugins install on first container start):
+Run manually from the ingestion container (same orchestrator Dagster uses):
 
 ```bash
-# Trigger a run on demand (no need to wait for the top of the hour):
-docker compose exec ingestion-cron python -m app.ingestion.cli run
-docker compose exec ingestion-cron python -m app.ingestion.cli run --job github_sync   # or github_org_sync / github_user_profiles_sync / copilot_sync
-docker compose exec ingestion-cron python -m app.ingestion.cli run --account-id <uuid>
-
-# Same wrapper cron fires hourly (sources the env snapshot, then runs the CLI):
-docker compose exec ingestion-cron /usr/local/bin/propel-ingestion
+docker compose exec ingestion python -m app.ingestion.cli run
+docker compose exec ingestion python -m app.ingestion.cli run --job github_sync
+docker compose exec ingestion python -m app.ingestion.cli run --account-id <uuid>
 ```
 
 Beyond activity (PRs, commits, issues), a run also ingests the connected org's
@@ -292,10 +286,10 @@ synced with [`scripts/dev-ingestion-secrets.sh`](../scripts/dev-ingestion-secret
 
 ```bash
 ./scripts/dev-ingestion-secrets.sh pull       # writes .env.ingestion.local (gitignored)
-docker compose up -d backend ingestion-cron   # both services auto-load that file
+docker compose up -d backend ingestion   # both services auto-load that file
 ```
 
-`.env.ingestion.local` is wired into the `backend` and `ingestion-cron` services
+`.env.ingestion.local` is wired into the `backend` and `ingestion` services
 as an optional `env_file`, so the stack still starts for anyone who hasn't pulled
 it. The multi-line PEM is stored on one line with `\n` escapes (the app
 un-escapes it before signing the App JWT).
@@ -315,21 +309,23 @@ with the standard `AWS_PROFILE` / `AWS_REGION`. Run `… show` to print the curr
 secret. For a one-off without AWS, you can still set the `GITHUB_APP_*` vars
 directly in `.env`.
 
-#### Scheduling — on-server cron (hourly)
+#### Ingestion service (Dagster)
 
-Locally, the `ingestion-cron` Compose service runs `crond` in the foreground and
-invokes the CLI each hour:
+The `ingestion` Compose service and ECS task run Dagster (daemon + webserver).
+Workflows execute **inside that container** — Dagster ops call the orchestrator,
+which shells out to Meltano. See [`orchestration/README.md`](../orchestration/README.md).
 
 ```bash
-docker compose up -d ingestion-cron
-docker logs -f propel-ingestion-cron
+docker compose up -d ingestion
+docker logs -f propel-ingestion   # JSON structured logs
+open http://localhost:3000         # Dagster UI
 ```
 
-In production the same crontab ships in the API image; set
-`INGESTION_CRON_ENABLED=1` to have the entrypoint start `crond` alongside
-uvicorn. The crontab lives at [`cron/ingestion`](cron/ingestion); the wrapper
-([`cron/propel-ingestion.sh`](cron/propel-ingestion.sh)) restores the container
-environment (which cron strips) before running the CLI.
+#### Logging
+
+Ingestion emits structured JSON to stdout and forwards records to PostHog via
+OTLP when `POSTHOG_TOKEN` is configured (`OTEL_SERVICE_NAME=propel-ingestion`).
+Meltano subprocess output streams line-by-line as `meltano.line` fields.
 
 #### Testing ingestion
 
@@ -339,6 +335,7 @@ environment (which cron strips) before running the CLI.
 | Datapoint idempotency (DB) | `tests/test_ingestion_idempotency.py` | `backend` job |
 | Connections API + webhook | `tests/test_connections.py` | `backend` job |
 | Orchestrator lifecycle (Meltano mocked) | `tests/test_ingestion_orchestrator.py` | `backend` job |
+| Dagster job graph | `tests/test_ingestion_dagster.py` | `backend` job |
 | Writers against Postgres | `meltano/target-propel/tests/test_writers.py` | `ingestion-integration` job |
 | **End-to-end Singer stream → Postgres** | `meltano/target-propel/tests/test_target_integration.py` | `ingestion-integration` job |
 
@@ -368,13 +365,6 @@ uv run --no-sync pytest meltano/target-propel/tests -v
 `test_writers.py` and `test_target_integration.py` skip automatically if
 `PROPEL_DATABASE_URL` is unset or the ingestion tables are missing, so the suite
 degrades gracefully when run without a database.
-
-#### Future: Dagster
-
-Dagster will replace cron as the **scheduler only**, as a separate
-`orchestration/` Python project and ECS service. It calls the same
-`app.ingestion.cli run` entrypoint — Meltano, the taps, and `target-propel` stay
-here unchanged. Until then, cron is the V1 scheduler.
 
 ## Related
 

@@ -10,6 +10,11 @@ output "service_name" {
   value = aws_ecs_service.api.name
 }
 
+output "ingestion_service_name" {
+  value       = try(aws_ecs_service.ingestion[0].name, null)
+  description = "ECS service running the Dagster ingestion orchestrator, if enabled."
+}
+
 output "alb_dns_name" {
   value = aws_lb.this.dns_name
 }

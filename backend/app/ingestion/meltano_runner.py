@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger("propel.ingestion")
@@ -29,10 +29,41 @@ class RunResult:
     returncode: int
     stdout: str
     stderr: str
+    stdout_lines: list[str] = field(default_factory=list)
+    stderr_lines: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
         return self.returncode == 0
+
+
+async def _read_stream(
+    stream: asyncio.StreamReader | None,
+    *,
+    extra: dict[str, object],
+    stream_name: str,
+    lines: list[str],
+) -> None:
+    if stream is None:
+        return
+    while True:
+        chunk = await stream.readline()
+        if not chunk:
+            break
+        text = chunk.decode(errors="replace").rstrip()
+        if not text:
+            continue
+        lines.append(text)
+        level = logging.WARNING if stream_name == "stderr" else logging.INFO
+        logger.log(
+            level,
+            "Meltano output",
+            extra={
+                **extra,
+                "meltano.stream": stream_name,
+                "meltano.line": text,
+            },
+        )
 
 
 async def run_job(
@@ -64,13 +95,38 @@ async def run_job(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await process.communicate()
-    result = RunResult(
-        returncode=process.returncode or 0,
-        stdout=stdout.decode(errors="replace"),
-        stderr=stderr.decode(errors="replace"),
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    await asyncio.gather(
+        _read_stream(
+            process.stdout,
+            extra=extra,
+            stream_name="stdout",
+            lines=stdout_lines,
+        ),
+        _read_stream(
+            process.stderr,
+            extra=extra,
+            stream_name="stderr",
+            lines=stderr_lines,
+        ),
     )
-    outcome = {**extra, "process.returncode": result.returncode}
+    returncode = await process.wait()
+    stdout = "\n".join(stdout_lines)
+    stderr = "\n".join(stderr_lines)
+    result = RunResult(
+        returncode=returncode or 0,
+        stdout=stdout,
+        stderr=stderr,
+        stdout_lines=stdout_lines,
+        stderr_lines=stderr_lines,
+    )
+    outcome = {
+        **extra,
+        "process.returncode": result.returncode,
+        "meltano.stdout_lines": len(stdout_lines),
+        "meltano.stderr_lines": len(stderr_lines),
+    }
     if result.ok:
         logger.info("Meltano job completed", extra=outcome)
     else:

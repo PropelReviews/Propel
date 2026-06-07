@@ -1,8 +1,0 @@
-# Propel hourly ingestion (V1 scheduler).
-#
-# cron runs with an empty environment, so the container entrypoint snapshots the
-# process environment to /etc/propel-ingestion.env at startup and the wrapper
-# sources it. Output is sent to PID 1's stdout/stderr so it shows up in
-# `docker logs` (and, in prod, wherever the task's stdout is collected).
-SHELL=/bin/sh
-0 * * * * root /usr/local/bin/propel-ingestion > /proc/1/fd/1 2> /proc/1/fd/2

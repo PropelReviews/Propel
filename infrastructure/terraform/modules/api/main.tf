@@ -76,8 +76,7 @@ locals {
     for key, value in var.app_secrets : key => value if key != "JWT_SECRET"
   }
 
-  # Secrets injected into every task that runs the app (API service + the
-  # scheduled ingestion task), so both share one source of truth.
+  # Secrets injected into every task that runs the app (API + ingestion service).
   container_secrets = concat(
     [{ name = "DATABASE_URL", valueFrom = var.database_url_secret_arn }],
     [{ name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn }],

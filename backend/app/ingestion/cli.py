@@ -1,7 +1,6 @@
 """Ingestion CLI — the single execution entrypoint.
 
-On-server cron invokes this hourly in V1; a future Dagster schedule would call
-the same command (or import `orchestrator.run_all`) without other changes.
+Dagster ops and manual CLI runs call the same orchestrator.
 
     python -m app.ingestion.cli run
     python -m app.ingestion.cli run --account-id <uuid>
@@ -16,7 +15,12 @@ import logging
 import uuid
 
 from app.ingestion import orchestrator
-from app.otel_logging import setup_logging, shutdown_logging
+from app.ingestion.logging_config import (
+    configure_ingestion_logging,
+    shutdown_ingestion_logging,
+)
+
+logger = logging.getLogger("propel.ingestion")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -41,20 +45,26 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
-    logging_enabled = setup_logging()
+    otel_enabled = configure_ingestion_logging(service_name="propel-ingestion")
     args = _build_parser().parse_args(argv)
     try:
         if args.command == "run":
+            logger.info(
+                "Ingestion CLI starting",
+                extra={
+                    "event": "extraction.cli",
+                    "ingestion.account_id": str(args.account_id)
+                    if args.account_id
+                    else None,
+                    "ingestion.job_filter": args.job_name,
+                },
+            )
             asyncio.run(
                 orchestrator.run_all(account_id=args.account_id, job_name=args.job_name)
             )
+            logger.info("Ingestion CLI finished", extra={"event": "extraction.cli"})
     finally:
-        if logging_enabled:
-            shutdown_logging()
+        shutdown_ingestion_logging(otel_enabled)
 
 
 if __name__ == "__main__":

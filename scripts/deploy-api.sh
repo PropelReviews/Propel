@@ -34,7 +34,7 @@ echo "==> Building $ECR_URL:$TAG"
 docker build \
   -f "$REPO_ROOT/infrastructure/docker/backend.prod.Dockerfile" \
   -t "$ECR_URL:$TAG" \
-  "$REPO_ROOT/backend"
+  "$REPO_ROOT"
 
 echo "==> Pushing image"
 docker push "$ECR_URL:$TAG"
@@ -45,5 +45,15 @@ aws ecs update-service \
   --service "$SERVICE" \
   --force-new-deployment \
   --region "$REGION" >/dev/null
+
+INGESTION_SERVICE="$(terraform -chdir="$TF_DIR" output -raw ecs_ingestion_service_name 2>/dev/null || true)"
+if [[ -n "$INGESTION_SERVICE" && "$INGESTION_SERVICE" != "null" ]]; then
+  echo "==> Forcing new ingestion ECS deployment ($CLUSTER/$INGESTION_SERVICE)"
+  aws ecs update-service \
+    --cluster "$CLUSTER" \
+    --service "$INGESTION_SERVICE" \
+    --force-new-deployment \
+    --region "$REGION" >/dev/null
+fi
 
 echo "Done. Deployed $ECR_URL:$TAG to $ENV."

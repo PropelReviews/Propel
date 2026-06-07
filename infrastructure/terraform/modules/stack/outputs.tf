@@ -38,6 +38,10 @@ output "ecs_service_name" {
   value = module.api.service_name
 }
 
+output "ecs_ingestion_service_name" {
+  value = module.api.ingestion_service_name
+}
+
 output "alb_dns_name" {
   value = module.api.alb_dns_name
 }

@@ -97,14 +97,8 @@ variable "api_desired_count" {
 
 variable "ingestion_enabled" {
   type        = bool
-  default     = false
-  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
-}
-
-variable "ingestion_schedule_expression" {
-  type        = string
-  default     = "rate(1 hour)"
-  description = "EventBridge Scheduler expression driving the ingestion run."
+  default     = true
+  description = "Provision the always-on Dagster ingestion ECS service."
 }
 
 variable "tags" {

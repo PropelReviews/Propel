@@ -21,6 +21,8 @@ dependencies = [
     "python-dotenv",
     "email-validator",
     "posthog",
+    "dagster",
+    "dagster-webserver",
 ]
 
 [dependency-groups]

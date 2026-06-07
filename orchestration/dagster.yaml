@@ -1,0 +1,9 @@
+# Dagster instance config for Propel ingestion orchestration.
+# Loaded by dagster-daemon and dagster-webserver (-w orchestration/dagster.yaml).
+
+storage:
+  sqlite:
+    base_dir: /app/dagster_home
+
+telemetry:
+  enabled: false

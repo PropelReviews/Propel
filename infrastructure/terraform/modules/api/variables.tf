@@ -95,24 +95,18 @@ variable "tags" {
 
 variable "ingestion_enabled" {
   type        = bool
-  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
-  default     = false
-}
-
-variable "ingestion_schedule_expression" {
-  type        = string
-  description = "EventBridge Scheduler expression driving the ingestion run."
-  default     = "rate(1 hour)"
+  description = "Provision the always-on Dagster ingestion ECS service."
+  default     = true
 }
 
 variable "ingestion_task_cpu" {
   type        = number
-  description = "Fargate CPU units for the ingestion task."
+  description = "Fargate CPU units for the ingestion service (Meltano needs headroom)."
   default     = 512
 }
 
 variable "ingestion_task_memory" {
   type        = number
-  description = "Fargate memory (MiB) for the ingestion task (Meltano needs headroom)."
+  description = "Fargate memory (MiB) for the ingestion service."
   default     = 1024
 }

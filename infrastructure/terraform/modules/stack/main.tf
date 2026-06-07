@@ -89,8 +89,7 @@ module "api" {
   image_tag               = var.api_image_tag
   desired_count           = var.api_desired_count
 
-  ingestion_enabled             = var.ingestion_enabled
-  ingestion_schedule_expression = var.ingestion_schedule_expression
+  ingestion_enabled = var.ingestion_enabled
 
   tags = var.tags
 }

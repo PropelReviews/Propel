@@ -65,11 +65,5 @@ variable "app_secrets" {
 variable "ingestion_enabled" {
   type        = bool
   default     = true
-  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
-}
-
-variable "ingestion_schedule_expression" {
-  type        = string
-  default     = "rate(1 hour)"
-  description = "EventBridge Scheduler expression driving the ingestion run."
+  description = "Provision the always-on Dagster ingestion ECS service."
 }

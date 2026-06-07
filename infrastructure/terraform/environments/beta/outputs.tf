@@ -38,6 +38,10 @@ output "ecs_service_name" {
   value = module.stack.ecs_service_name
 }
 
+output "ecs_ingestion_service_name" {
+  value = module.stack.ecs_ingestion_service_name
+}
+
 output "frontend_bucket" {
   value = module.stack.frontend_bucket
 }

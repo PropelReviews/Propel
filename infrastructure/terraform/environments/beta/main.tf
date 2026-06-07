@@ -38,8 +38,7 @@ module "stack" {
   app_environment   = var.app_environment
   app_secrets       = var.app_secrets
 
-  ingestion_enabled             = var.ingestion_enabled
-  ingestion_schedule_expression = var.ingestion_schedule_expression
+  ingestion_enabled = var.ingestion_enabled
 
   tags = local.tags
 }

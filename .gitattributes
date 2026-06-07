@@ -2,4 +2,4 @@
 .env.example text eol=lf
 .devcontainer/aws-config text eol=lf
 # Cron crontab has no extension; must stay LF or cron fails to parse it.
-backend/cron/* text eol=lf
+backend/scripts/* text eol=lf
