@@ -13,10 +13,22 @@ type Differentiator = {
 
 const differentiators: Differentiator[] = [
   {
+    icon: ShieldCheck,
+    title: "Fully open source core",
+    description:
+      "Open source and self-hostable. No proprietary engine deciding how your team is scored.",
+  },
+  {
+    icon: GitBranch,
+    title: "Read the code yourself",
+    description:
+      "Disagree with a metric? Trace it, fix it, or open a pull request. The people being measured can change how they're measured.",
+  },
+  {
     icon: Code2,
     title: "Every metric is open SQL",
     description:
-      "No black-box scores. Each number is defined in readable SQL you can open, review, and change.",
+      "No black-box scores. Each number is a query you can open, review, and edit.",
   },
   {
     icon: Eye,
@@ -24,26 +36,14 @@ const differentiators: Differentiator[] = [
     description:
       "Follow any number from the dashboard to the query that produced it, down to the raw event it came from.",
   },
-  {
-    icon: GitBranch,
-    title: "Open source pipeline",
-    description:
-      "Extraction, storage, and transformation are open source or well-known tools you can audit yourself.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Built trust first",
-    description:
-      "Metrics become a shared basis for accountability instead of surveillance, because nothing is hidden.",
-  },
 ];
 
 export function DifferentiatorsSection() {
   return (
     <Section>
       <SectionHeading
-        title="Why Propel is different"
-        description="If you want to know how a number was calculated, you can find out."
+        title="Transparency you can verify"
+        description="If you want to know how a number was calculated, you can find out. Always."
       />
 
       <div className="mt-16 grid gap-6 sm:grid-cols-2">

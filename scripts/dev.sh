@@ -4,6 +4,13 @@
 # compose service names over the shared network.
 set -uo pipefail
 
+# Docker-outside-of-docker: WSL2 / Docker Desktop often bind-mounts the host
+# socket as root:root, so the vscode user (in group docker) cannot connect.
+if [ -S /var/run/docker.sock ] && ! docker info &>/dev/null; then
+  sudo chgrp docker /var/run/docker.sock 2>/dev/null || true
+  sudo chmod 660 /var/run/docker.sock 2>/dev/null || true
+fi
+
 echo
 echo "Propel dev stack (separate containers, hot reload via bind mounts)"
 echo

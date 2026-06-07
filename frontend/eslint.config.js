@@ -5,7 +5,9 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "dist-landing", "storybook-static", "coverage"] },
+  {
+    ignores: ["dist", "dist-landing", "storybook-static", "coverage", ".vitest-cache"],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -1,0 +1,20 @@
+---
+description: Run Prettier format:check after editing frontend files
+alwaysApply: true
+---
+
+# Format Check Guardrail
+
+After editing any file under `frontend/`, verify formatting before finishing the task:
+
+```bash
+cd frontend && npm run format:check
+```
+
+If it fails, auto-fix and re-check:
+
+```bash
+cd frontend && npm run format && npm run format:check
+```
+
+A `postToolUse` hook also checks each edited frontend file and injects formatting failures into context — fix them before moving on.

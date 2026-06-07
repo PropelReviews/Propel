@@ -30,7 +30,7 @@ export function DeploymentSection() {
     <Section id="deploy">
       <SectionHeading
         title="The same software, however you run it"
-        description="Propel is the same open source software whether you run it yourself or we run it for you. Pick the option that fits your team."
+        description="Identical open source software whether you run it or we do. Pick what fits your team."
       />
 
       <div className="mt-16 grid gap-6 lg:grid-cols-2">
@@ -39,21 +39,19 @@ export function DeploymentSection() {
             <FeatureIcon icon={Cloud} className="mb-2" />
             <CardTitle className="text-xl">Propel Cloud</CardTitle>
             <CardDescription className="leading-relaxed">
-              The managed version of Propel. We handle infrastructure, updates, and
-              operations. You get the same metrics, the same SQL, and the same
-              transparency without running anything yourself.
+              Our managed platform. Same metrics, same SQL, same transparency, without
+              running anything yourself.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1">
             <p className="text-muted-foreground text-sm">
-              Best if you want Propel running quickly and do not want to operate the
-              stack.
+              Best if you want Propel up quickly and don't want to operate the stack.
             </p>
           </CardContent>
           <CardFooter>
             <Button asChild>
               <a href={appUrl}>
-                Get started
+                Try Propel Cloud
                 <ArrowRight className="size-4" />
               </a>
             </Button>
@@ -65,9 +63,9 @@ export function DeploymentSection() {
             <FeatureIcon icon={Server} className="mb-2" />
             <CardTitle className="text-xl">Self-hosted</CardTitle>
             <CardDescription className="leading-relaxed">
-              Run Propel entirely in your own infrastructure. Your data never leaves
-              your environment, with full control over where it lives and who can access
-              it.
+              Run the open source core in your own infrastructure. Your data never
+              leaves your environment. Full control over where it lives and who can
+              touch it.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 space-y-4">
