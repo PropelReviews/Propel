@@ -143,9 +143,7 @@ async def run_account_job(
         )
     except Exception as exc:  # noqa: BLE001 — record failure on the run, keep going
         logger.exception("Ingestion run %s failed", run.id)
-        await _finalize(
-            session, run, status=IngestionRunStatus.error, error=str(exc)
-        )
+        await _finalize(session, run, status=IngestionRunStatus.error, error=str(exc))
     return run
 
 
@@ -198,9 +196,7 @@ async def _build_env(
 
     if job.needs_org:
         if not account.external_account_name:
-            logger.info(
-                "Account %s has no org login for Copilot; skipping", account.id
-            )
+            logger.info("Account %s has no org login for Copilot; skipping", account.id)
             return None
         env["COPILOT_ORG"] = account.external_account_name
 

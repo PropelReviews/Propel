@@ -136,9 +136,7 @@ def test_stream_lands_raw_records_and_datapoints(tmp_path, tenant_id):
         assert measurement == ("github_copilot", "copilot.usage", True)
 
         # raw_record carries lineage back to the run.
-        cur.execute(
-            "SELECT count(*) FROM raw_record WHERE run_id = %s", (run_id,)
-        )
+        cur.execute("SELECT count(*) FROM raw_record WHERE run_id = %s", (run_id,))
         assert cur.fetchone()[0] == 2
 
 

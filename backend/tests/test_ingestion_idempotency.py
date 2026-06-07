@@ -59,8 +59,7 @@ async def test_event_conflict_does_nothing(clean_db):
         await session.commit()
         count = await session.scalar(
             text(
-                "SELECT count(*) FROM datapoint "
-                "WHERE tenant_id = :t AND kind = 'event'"
+                "SELECT count(*) FROM datapoint WHERE tenant_id = :t AND kind = 'event'"
             ),
             {"t": tenant_id},
         )

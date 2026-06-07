@@ -146,7 +146,5 @@ async def test_run_all_skips_paused_accounts(client, monkeypatch):
     await orchestrator.run_all()
 
     async with async_session_maker() as session:
-        total = await session.scalar(
-            select(func.count()).select_from(IngestionRun)
-        )
+        total = await session.scalar(select(func.count()).select_from(IngestionRun))
         assert total == 0

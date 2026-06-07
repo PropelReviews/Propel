@@ -37,9 +37,7 @@ _GITHUB_INSTALL_URL = "https://github.com/apps/{slug}/installations/new?state={s
 # Signed install state
 # --------------------------------------------------------------------------- #
 def _sign(payload: str) -> str:
-    return hmac.new(
-        settings.jwt_secret.encode(), payload.encode(), sha256
-    ).hexdigest()
+    return hmac.new(settings.jwt_secret.encode(), payload.encode(), sha256).hexdigest()
 
 
 def build_install_state(tenant_id: uuid.UUID, user_id: uuid.UUID) -> str:
@@ -182,15 +180,16 @@ async def _fetch_installation_account_name(installation_id: str) -> str | None:
 def verify_webhook_signature(body: bytes, signature_header: str | None) -> bool:
     if not settings.github_app_webhook_secret or not signature_header:
         return False
-    expected = "sha256=" + hmac.new(
-        settings.github_app_webhook_secret.encode(), body, sha256
-    ).hexdigest()
+    expected = (
+        "sha256="
+        + hmac.new(
+            settings.github_app_webhook_secret.encode(), body, sha256
+        ).hexdigest()
+    )
     return hmac.compare_digest(expected, signature_header)
 
 
-async def process_installation_webhook(
-    session: AsyncSession, payload: dict
-) -> None:
+async def process_installation_webhook(session: AsyncSession, payload: dict) -> None:
     """Keep an already-bound connection in sync with GitHub install events.
 
     Tenant binding happens in the setup callback (which carries our signed

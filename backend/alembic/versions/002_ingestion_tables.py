@@ -169,9 +169,7 @@ def upgrade() -> None:
             server_default="running",
             nullable=False,
         ),
-        sa.Column(
-            "records_pulled", sa.Integer(), server_default="0", nullable=False
-        ),
+        sa.Column("records_pulled", sa.Integer(), server_default="0", nullable=False),
         sa.Column(
             "datapoints_written", sa.Integer(), server_default="0", nullable=False
         ),
