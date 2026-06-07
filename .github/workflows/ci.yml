@@ -1,6 +1,6 @@
 name: CI
 
-# Pre-merge checks: Terraform validation, backend tests, frontend tests.
+# Pre-merge checks: formatting, linting, tests, and builds.
 on:
   pull_request:
   push:
@@ -41,7 +41,7 @@ jobs:
           terraform validate
 
   backend:
-    name: Backend tests
+    name: Backend checks
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -75,11 +75,17 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
       - name: Run pytest
         run: uv run pytest
 
   frontend:
-    name: Frontend tests
+    name: Frontend checks
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -96,5 +102,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Run tests
         run: npm test
+
+      - name: Build app
+        run: npm run build
+
+      - name: Build landing
+        run: npm run build:landing

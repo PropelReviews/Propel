@@ -1,7 +1,10 @@
 import uuid
 from datetime import datetime
 
-from fastapi_users.db import SQLAlchemyBaseOAuthAccountTableUUID, SQLAlchemyBaseUserTableUUID
+from fastapi_users.db import (
+    SQLAlchemyBaseOAuthAccountTableUUID,
+    SQLAlchemyBaseUserTableUUID,
+)
 from sqlalchemy import DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

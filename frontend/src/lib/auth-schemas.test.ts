@@ -10,15 +10,15 @@ describe("signInSchema", () => {
   });
 
   it("rejects an invalid email", () => {
-    expect(
-      signInSchema.safeParse({ email: "nope", password: "x" }).success,
-    ).toBe(false);
+    expect(signInSchema.safeParse({ email: "nope", password: "x" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects an empty password", () => {
-    expect(
-      signInSchema.safeParse({ email: "a@b.com", password: "" }).success,
-    ).toBe(false);
+    expect(signInSchema.safeParse({ email: "a@b.com", password: "" }).success).toBe(
+      false,
+    );
   });
 });
 

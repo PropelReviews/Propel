@@ -25,7 +25,8 @@ if settings.oauth_google_client_id and settings.oauth_google_client_secret:
             auth_backend,
             settings.jwt_secret,
             redirect_url=f"{settings.oauth_callback_base_url}/api/v1/auth/google/callback",
-            # Disabled until email verification prevents account pre-registration attacks.
+            # Disabled until email verification prevents account
+            # pre-registration attacks.
             associate_by_email=False,
             is_verified_by_default=True,
         ),

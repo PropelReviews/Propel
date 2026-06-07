@@ -1,13 +1,13 @@
-import enum
+from enum import StrEnum
 
 
-class Role(str, enum.Enum):
+class Role(StrEnum):
     admin = "admin"
     manager = "manager"
     individual = "individual"
 
 
-class IntegrationProvider(str, enum.Enum):
+class IntegrationProvider(StrEnum):
     """Stub for v2 connected_accounts — tool OAuth, not login."""
 
     github = "github"

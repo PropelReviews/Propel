@@ -49,10 +49,7 @@ export function readCachedDistinctId(): {
   };
 }
 
-export function writeCachedDistinctId(
-  distinctId: string,
-  isIdentified = true,
-) {
+export function writeCachedDistinctId(distinctId: string, isIdentified = true) {
   writeStorage(DISTINCT_ID_KEY, distinctId);
   writeStorage(IDENTIFIED_KEY, isIdentified ? "true" : "false");
 }

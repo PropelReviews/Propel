@@ -1,11 +1,6 @@
 import { Code2, Eye, GitBranch, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FeatureIcon } from "@/components/ui/feature-icon";
 import { Section } from "@/components/ui/section";
 import { SectionHeading } from "@/components/ui/section-heading";

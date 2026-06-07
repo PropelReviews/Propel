@@ -25,14 +25,12 @@ export function SignUpPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Create your account</CardTitle>
-          <CardDescription>
-            Start trusting your engineering metrics.
-          </CardDescription>
+          <CardDescription>Start trusting your engineering metrics.</CardDescription>
         </CardHeader>
         <CardContent>
           <SignUpForm onSuccess={() => navigate("/", { replace: true })} />
         </CardContent>
-        <CardFooter className="justify-center text-sm text-muted-foreground">
+        <CardFooter className="text-muted-foreground justify-center text-sm">
           <span>
             Already have an account?{" "}
             <Link to="/signin" className="text-foreground underline underline-offset-4">

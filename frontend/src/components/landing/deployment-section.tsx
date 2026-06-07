@@ -39,15 +39,15 @@ export function DeploymentSection() {
             <FeatureIcon icon={Cloud} className="mb-2" />
             <CardTitle className="text-xl">Propel Cloud</CardTitle>
             <CardDescription className="leading-relaxed">
-              The managed version of Propel. We handle infrastructure, updates,
-              and operations. You get the same metrics, the same SQL, and the
-              same transparency without running anything yourself.
+              The managed version of Propel. We handle infrastructure, updates, and
+              operations. You get the same metrics, the same SQL, and the same
+              transparency without running anything yourself.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1">
             <p className="text-muted-foreground text-sm">
-              Best if you want Propel running quickly and do not want to operate
-              the stack.
+              Best if you want Propel running quickly and do not want to operate the
+              stack.
             </p>
           </CardContent>
           <CardFooter>
@@ -65,9 +65,9 @@ export function DeploymentSection() {
             <FeatureIcon icon={Server} className="mb-2" />
             <CardTitle className="text-xl">Self-hosted</CardTitle>
             <CardDescription className="leading-relaxed">
-              Run Propel entirely in your own infrastructure. Your data never
-              leaves your environment, with full control over where it lives and
-              who can access it.
+              Run Propel entirely in your own infrastructure. Your data never leaves
+              your environment, with full control over where it lives and who can access
+              it.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 space-y-4">

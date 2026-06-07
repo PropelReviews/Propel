@@ -10,8 +10,7 @@ import {
 } from "@/lib/posthog-persistence";
 
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY;
-const posthogHost =
-  import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com";
+const posthogHost = import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
 const isPostHogEnabled = Boolean(posthogKey);
 
@@ -30,9 +29,7 @@ if (isPostHogEnabled && !posthog.__loaded) {
     },
     bootstrap: {
       featureFlags: readCachedFeatureFlags(),
-      ...(distinctId
-        ? { distinctID: distinctId, isIdentifiedID: isIdentified }
-        : {}),
+      ...(distinctId ? { distinctID: distinctId, isIdentifiedID: isIdentified } : {}),
     },
     loaded: (ph) => {
       ph.register({

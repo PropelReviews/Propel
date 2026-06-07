@@ -107,7 +107,9 @@ def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def create_tenant(client: AsyncClient, token: str, name: str = "Acme", slug: str = "acme"):
+async def create_tenant(
+    client: AsyncClient, token: str, name: str = "Acme", slug: str = "acme"
+):
     response = await client.post(
         "/api/v1/tenants/",
         json={"name": name, "slug": slug},

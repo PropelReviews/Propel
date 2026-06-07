@@ -57,7 +57,9 @@ async def assign_role(
     )
     row = result.one_or_none()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
 
     membership, user = row
     if membership.role == Role.admin and payload.role != Role.admin:
@@ -91,7 +93,9 @@ async def remove_member(
     )
     membership = result.scalar_one_or_none()
     if membership is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
 
     if membership.role == Role.admin:
         admin_count = await count_admins(session, tenant_id)

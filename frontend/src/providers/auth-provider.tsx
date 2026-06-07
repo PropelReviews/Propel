@@ -31,11 +31,7 @@ type AuthContextValue = {
   token: string | null;
   status: AuthStatus;
   signIn: (input: { email: string; password: string }) => Promise<void>;
-  signUp: (input: {
-    email: string;
-    password: string;
-    name?: string;
-  }) => Promise<void>;
+  signUp: (input: { email: string; password: string; name?: string }) => Promise<void>;
   signOut: () => void;
 };
 
@@ -108,10 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Bootstrap the session from a persisted token on mount.
   useEffect(() => {
     const existing = readToken();
-    if (!existing) {
-      setStatus("anonymous");
-      return;
-    }
+    if (!existing) return;
 
     const cachedUser = readCachedUser();
     if (cachedUser) {

@@ -49,8 +49,9 @@ For metric-related issues, include which metric is affected and, if you can, the
 
 1. Fork the repository and create a branch from `main`
 2. Make your changes
-3. Test locally with `docker-compose up`
-4. Open a pull request against `main`
+3. Run checks locally (see [Code quality](#code-quality))
+4. Test locally with `docker-compose up`
+5. Open a pull request against `main`
 
 **Pull request guidelines:**
 
@@ -68,6 +69,35 @@ Add cycle time metric for pull requests
 
 Defines cycle time as time from PR open to merge, using the
 github_pull_requests dbt model.
+```
+
+## Code quality
+
+CI runs linting, formatting, type checks, tests, and builds on every pull request. Run the same checks locally before opening a PR:
+
+```bash
+# Frontend (from frontend/)
+npm run lint          # ESLint
+npm run format:check  # Prettier
+npm run typecheck     # TypeScript
+npm test
+npm run build
+npm run build:landing
+
+# Backend (from backend/)
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+
+# Terraform (from infrastructure/terraform/)
+terraform fmt -check -recursive
+```
+
+To auto-fix formatting issues:
+
+```bash
+cd frontend && npm run format
+cd backend && uv run ruff format .
 ```
 
 ## Code of conduct

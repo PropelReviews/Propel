@@ -10,7 +10,9 @@ from app.models.enums import Role
 
 class TenantMembership(Base):
     __tablename__ = "tenant_memberships"
-    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_tenant_membership"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_tenant_membership"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(

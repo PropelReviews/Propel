@@ -41,7 +41,7 @@ export function SignUpForm({ onSuccess }: { onSuccess?: () => void }) {
       {serverError && (
         <p
           role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-sm"
         >
           {serverError}
         </p>
@@ -57,7 +57,7 @@ export function SignUpForm({ onSuccess }: { onSuccess?: () => void }) {
           {...register("name")}
         />
         {errors.name && (
-          <p className="text-sm text-destructive">{errors.name.message}</p>
+          <p className="text-destructive text-sm">{errors.name.message}</p>
         )}
       </div>
 
@@ -71,7 +71,7 @@ export function SignUpForm({ onSuccess }: { onSuccess?: () => void }) {
           {...register("email")}
         />
         {errors.email && (
-          <p className="text-sm text-destructive">{errors.email.message}</p>
+          <p className="text-destructive text-sm">{errors.email.message}</p>
         )}
       </div>
 
@@ -85,7 +85,7 @@ export function SignUpForm({ onSuccess }: { onSuccess?: () => void }) {
           {...register("password")}
         />
         {errors.password && (
-          <p className="text-sm text-destructive">{errors.password.message}</p>
+          <p className="text-destructive text-sm">{errors.password.message}</p>
         )}
       </div>
 

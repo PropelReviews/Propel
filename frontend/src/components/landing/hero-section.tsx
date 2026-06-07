@@ -18,14 +18,14 @@ export function HeroSection() {
           Open source. Trust first.
         </Badge>
 
-        <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
+        <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
           Developer analytics your team can actually trust
         </h1>
 
-        <p className="text-muted-foreground mt-6 text-pretty text-lg sm:text-xl">
-          Propel connects to GitHub, Linear, and Cursor and turns raw
-          engineering activity into metrics your team can inspect, question, and
-          own. Every number is open, readable SQL.
+        <p className="text-muted-foreground mt-6 text-lg text-pretty sm:text-xl">
+          Propel connects to GitHub, Linear, and Cursor and turns raw engineering
+          activity into metrics your team can inspect, question, and own. Every number
+          is open, readable SQL.
         </p>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -44,8 +44,7 @@ export function HeroSection() {
         </div>
 
         <p className="text-muted-foreground mt-6 text-sm">
-          Self-host in minutes or use Propel Cloud. No telemetry unless you opt
-          in.
+          Self-host in minutes or use Propel Cloud. No telemetry unless you opt in.
         </p>
       </div>
     </Section>

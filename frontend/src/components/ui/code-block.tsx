@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 // Read-only, preformatted code snippet (e.g. shell commands).
 function CodeBlock({
@@ -19,7 +19,7 @@ function CodeBlock({
     >
       <code>{code}</code>
     </pre>
-  )
+  );
 }
 
-export { CodeBlock }
+export { CodeBlock };
