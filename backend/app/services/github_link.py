@@ -94,9 +94,7 @@ async def build_authorize_url(user_id: uuid.UUID) -> str:
             detail="GitHub sign-in is not configured",
         )
     state = build_link_state(user_id)
-    return await github_oauth_client.get_authorization_url(
-        _redirect_uri(), state=state
-    )
+    return await github_oauth_client.get_authorization_url(_redirect_uri(), state=state)
 
 
 # --------------------------------------------------------------------------- #
