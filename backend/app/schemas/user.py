@@ -14,6 +14,17 @@ class UserCreate(schemas.BaseUserCreate):
     name: str | None = None
 
 
+class GitHubConnection(BaseModel):
+    connected: bool = False
+    account_id: str | None = None
+    account_email: str | None = None
+    login: str | None = None
+
+
+class GitHubLinkURL(BaseModel):
+    authorization_url: str
+
+
 class UserMeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -23,3 +34,4 @@ class UserMeRead(BaseModel):
     is_active: bool
     is_verified: bool
     created_at: datetime | None = None
+    github: GitHubConnection = GitHubConnection()
