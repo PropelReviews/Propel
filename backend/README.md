@@ -132,7 +132,15 @@ Login and register are rate-limited per client IP (`AUTH_RATE_LIMIT_*` env vars)
 Optional Google/GitHub login: set `OAUTH_*` client IDs/secrets and register redirect URLs:
 
 - `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/google/callback`
-- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/callback`
+- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/callback` (fastapi-users built-in)
+- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/login/callback` (SPA sign in / sign up)
+- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/link/callback` (Connect with GitHub on the profile)
+
+`OAUTH_CALLBACK_BASE_URL` is the **API** origin (where the provider returns the
+code). The SPA sign-in/link flows then redirect the browser to the **frontend**
+origin set by `FRONTEND_BASE_URL` (e.g. `https://app.<zone>` in AWS;
+`http://localhost:5173` locally). The two are distinct because the API
+(`api.<zone>`) and SPA (`app.<zone>`) are separate origins.
 
 ### Endpoints
 
@@ -153,7 +161,11 @@ Auth (`/api/v1/auth`):
 | GET | `/google/authorize` | Start Google OAuth (when configured) |
 | GET | `/google/callback` | Complete Google OAuth |
 | GET | `/github/authorize` | Start GitHub OAuth (when configured) |
-| GET | `/github/callback` | Complete GitHub OAuth |
+| GET | `/github/callback` | Complete GitHub OAuth (fastapi-users built-in, JSON) |
+| GET | `/github/login/authorize` | Start GitHub sign in / sign up for the SPA |
+| GET | `/github/login/callback` | Complete sign-in; redirect to SPA with session token |
+| GET | `/github/link/authorize` | Start linking GitHub to the signed-in account |
+| GET | `/github/link/callback` | Complete linking; redirect to SPA profile |
 
 Tenants (`/api/v1/tenants`):
 

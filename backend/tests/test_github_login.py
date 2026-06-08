@@ -96,7 +96,11 @@ async def test_callback_signs_up_new_user_and_issues_token(
     )
     assert response.status_code == 303
     location = response.headers["location"]
-    assert "/auth/github/callback#access_token=" in location
+    # Redirect must target the SPA origin (separate from the API), not the
+    # OAuth callback host.
+    assert location.startswith(
+        f"{github_login.settings.frontend_base_url}/auth/github/callback#access_token="
+    )
 
     token = location.split("#access_token=")[1]
     # The minted token authenticates as the new user.

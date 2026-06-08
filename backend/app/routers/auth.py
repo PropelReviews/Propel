@@ -112,7 +112,7 @@ async def github_login_callback(
     fragment (fragments are never sent to a server). On failure we redirect with
     an `error` marker instead.
     """
-    handler = f"{settings.oauth_callback_base_url}/auth/github/callback"
+    handler = f"{settings.frontend_base_url}/auth/github/callback"
     try:
         github_login.verify_login_state(state)
         access_token, account_id, account_email = await github_login.exchange_code(code)
@@ -156,7 +156,7 @@ async def github_link_callback(
     endpoint is reachable as a top-level browser navigation. On success we bounce
     back to the SPA profile page.
     """
-    redirect_base = f"{settings.oauth_callback_base_url}/profile"
+    redirect_base = f"{settings.frontend_base_url}/profile"
     try:
         await github_link.complete_link(session, code, state)
     except Exception:  # noqa: BLE001 — surface failure to the SPA, don't 500 the redirect
