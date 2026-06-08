@@ -88,7 +88,7 @@ def verify_link_state(state: str) -> uuid.UUID:
 # Authorize
 # --------------------------------------------------------------------------- #
 async def build_authorize_url(user_id: uuid.UUID) -> str:
-    if not (settings.oauth_github_client_id and settings.oauth_github_client_secret):
+    if not settings.github_oauth_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="GitHub sign-in is not configured",
@@ -109,8 +109,12 @@ async def complete_link(session: AsyncSession, code: str, state: str) -> User:
 
     token = await github_oauth_client.get_access_token(code, _redirect_uri())
     access_token = token["access_token"]
-    account_id, account_email = await github_oauth_client.get_id_email(access_token)
-    account_id = str(account_id)
+    # Linking only needs the GitHub user id, so read the profile directly
+    # (`/user`) instead of `get_id_email`, which also hits `/user/emails` and
+    # would require the GitHub App's "Email addresses" permission.
+    profile = await github_oauth_client.get_profile(access_token)
+    account_id = str(profile["id"])
+    account_email = profile.get("email")
 
     await _attach_oauth_account(session, user, account_id, account_email, access_token)
     await session.commit()

@@ -52,7 +52,7 @@ if settings.oauth_google_client_id and settings.oauth_google_client_secret:
         prefix="/google",
     )
 
-if settings.oauth_github_client_id and settings.oauth_github_client_secret:
+if settings.github_oauth_enabled:
     router.include_router(
         fastapi_users.get_oauth_router(
             github_oauth_client,

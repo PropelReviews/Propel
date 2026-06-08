@@ -31,11 +31,11 @@ def _mock_github_oauth(monkeypatch, *, account_id: str, email: str | None) -> No
     async def fake_access_token(code, redirect_uri, code_verifier=None):
         return {"access_token": f"tok-{code}"}
 
-    async def fake_id_email(token):
-        return account_id, email
+    async def fake_profile(token):
+        return {"id": int(account_id), "login": "ghuser", "email": email}
 
     monkeypatch.setattr(github_oauth_client, "get_access_token", fake_access_token)
-    monkeypatch.setattr(github_oauth_client, "get_id_email", fake_id_email)
+    monkeypatch.setattr(github_oauth_client, "get_profile", fake_profile)
 
 
 # --------------------------------------------------------------------------- #

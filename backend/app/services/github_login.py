@@ -75,7 +75,7 @@ def verify_login_state(state: str) -> None:
 
 
 async def build_authorize_url() -> str:
-    if not (settings.oauth_github_client_id and settings.oauth_github_client_secret):
+    if not settings.github_oauth_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="GitHub sign-in is not configured",

@@ -239,7 +239,7 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | `POSTHOG_PROJECT_ID` | `245238` | SPA build (source map upload) |
    | `POSTHOG_PERSONAL_API_KEY` | `phx_...` | SPA build (source map upload; keep secret) |
    | `AUTH_REGISTRATION_ENABLED` | `true` | API (allow signup when ready) |
-   | `OAUTH_GITHUB_CLIENT_ID` | `Iv1...` | API (GitHub login/link; pair with the `OAUTH_GITHUB_CLIENT_SECRET` secret) |
+   | `GITHUB_APP_CLIENT_ID` | `Iv1...` | API (GitHub login/link; the ingestion App's user-OAuth client id; pair with the `GH_APP_CLIENT_SECRET` secret) |
    | `OAUTH_CALLBACK_BASE_URL` | `https://api.beta.propel.ninja` | API origin GitHub returns the OAuth code to |
    | `FRONTEND_BASE_URL` | `https://app.beta.propel.ninja` | SPA origin OAuth callbacks redirect the browser back to |
 
@@ -260,7 +260,8 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | Secret | Required | Notes |
    |--------|----------|-------|
    | `OAUTH_GOOGLE_CLIENT_SECRET` | No | When Google login is enabled |
-   | `OAUTH_GITHUB_CLIENT_SECRET` | No | When GitHub login is enabled |
+   | `GH_APP_CLIENT_SECRET` | No | GitHub App user-OAuth secret — enables Sign in / Connect with GitHub by reusing the ingestion App (pair with the `GITHUB_APP_CLIENT_ID` variable) |
+   | `OAUTH_GITHUB_CLIENT_SECRET` | No | Only if using a **standalone** GitHub OAuth app instead of the App above |
 
    **`JWT_SECRET` is not stored in GitHub.** Terraform generates a 64-character
    secret on first apply and stores it in Secrets Manager (same pattern as the
