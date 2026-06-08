@@ -30,6 +30,14 @@ output "ecs_service_name" {
   value = module.stack.ecs_service_name
 }
 
+output "ingestion_service_name" {
+  value = module.stack.ingestion_service_name
+}
+
+output "dagster_url" {
+  value = module.stack.dagster_url
+}
+
 output "frontend_bucket" {
   value = module.stack.frontend_bucket
 }

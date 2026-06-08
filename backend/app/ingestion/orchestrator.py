@@ -13,6 +13,7 @@ the datapoint partial unique indexes dedupe any re-pulled rows.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -43,6 +44,12 @@ settings = get_settings()
 # ~2-day restatement) are captured; dedupe handles the rest.
 _WATERMARK_OVERLAP = timedelta(days=1)
 
+# A run still marked `running` after this long is assumed dead (its worker was
+# killed mid-run — ECS deploy, OOM, timeout). Left untouched it would block the
+# overlap guard forever; we mark it `error` at the start of every batch so the
+# next run can proceed.
+_STALE_RUN_MAX_AGE = timedelta(hours=2)
+
 
 @dataclass(frozen=True)
 class JobSpec:
@@ -55,9 +62,10 @@ class JobSpec:
 
 
 # Run order matters: org roster is synced before user profiles so the profile
-# job can target the discovered logins.
+# job can target the discovered logins. Repo activity is split per resource
+# (commits / pull_requests / issues) so each is its own granular run with an
+# independent watermark and failure boundary.
 JOBS: list[JobSpec] = [
-    JobSpec("github_sync", "github", needs_repos=True),
     JobSpec(
         "github_org_sync",
         "github.org_members",
@@ -70,6 +78,9 @@ JOBS: list[JobSpec] = [
         needs_org=True,
         needs_member_logins=True,
     ),
+    JobSpec("github_commits_sync", "github.commits", needs_repos=True),
+    JobSpec("github_pull_requests_sync", "github.pull_requests", needs_repos=True),
+    JobSpec("github_issues_sync", "github.issues", needs_repos=True),
     JobSpec("copilot_sync", "copilot.usage", needs_org=True, org_mode="copilot"),
 ]
 
@@ -101,15 +112,25 @@ async def run_all(
     *,
     account_id: uuid.UUID | None = None,
     job_name: str | None = None,
-) -> None:
-    """Entry point used by the CLI/cron. Iterates accounts and runs jobs."""
+) -> list[IngestionRun]:
+    """Run the matching jobs for the matching accounts.
+
+    Scopes to a single org when ``account_id`` is set (the per-org Dagster runs
+    pass it from the run tags); with ``account_id=None`` it processes every
+    active account (manual "run everything"). Returns the ``IngestionRun`` rows
+    that actually executed (overlap-skipped runs are omitted) so callers can
+    report per-resource outcomes (e.g. Dagster asset materializations).
+    """
     jobs = [j for j in JOBS if job_name is None or j.name == job_name]
     if not jobs:
         logger.warning(
             "No ingestion job matches filter",
             extra={"event": "extraction.batch", "ingestion.job_filter": job_name},
         )
-        return
+        return []
+
+    async with async_session_maker() as session:
+        await _clear_stale_runs(session)
 
     async with async_session_maker() as session:
         accounts = await _active_github_accounts(session, account_id)
@@ -121,6 +142,10 @@ async def run_all(
             "ingestion.job_count": len(jobs),
             "ingestion.account_count": len(accounts),
             "ingestion.jobs": [job.name for job in jobs],
+            "ingestion.account_ids": [str(account.id) for account in accounts],
+            "ingestion.org_logins": [
+                account.external_account_name for account in accounts
+            ],
         },
     )
     if not accounts:
@@ -128,14 +153,17 @@ async def run_all(
             "No active GitHub connected accounts to ingest",
             extra={"event": "extraction.batch"},
         )
-        return
+        return []
 
+    runs: list[IngestionRun] = []
     for account in accounts:
         for job in jobs:
             # Each (account, job) uses its own short-lived session so a failure
             # is isolated and the run row is always finalized.
             async with async_session_maker() as session:
-                await run_account_job(session, account, job)
+                run = await run_account_job(session, account, job)
+            if run is not None:
+                runs.append(run)
 
     logger.info(
         "Ingestion batch finished",
@@ -145,6 +173,7 @@ async def run_all(
             "ingestion.account_count": len(accounts),
         },
     )
+    return runs
 
 
 async def _active_github_accounts(
@@ -158,6 +187,44 @@ async def _active_github_accounts(
         query = query.where(ConnectedAccount.id == account_id)
     result = await session.execute(query)
     return list(result.scalars().all())
+
+
+async def discover_installed_orgs(account_id: uuid.UUID | None = None) -> int:
+    """Log the active connected GitHub orgs (installations) we will ingest.
+
+    This is the first, lightweight step in the granular Dagster DAG ("get
+    installed orgs"). It does no GitHub I/O — it surfaces which installations are
+    active so the downstream per-resource ops have visible context in the logs.
+    Returns the number of active accounts.
+    """
+    async with async_session_maker() as session:
+        accounts = await _active_github_accounts(session, account_id)
+
+    logger.info(
+        "Discovered installed GitHub orgs",
+        extra={
+            "event": "extraction.discover",
+            "ingestion.account_count": len(accounts),
+            "ingestion.account_ids": [str(account.id) for account in accounts],
+            "ingestion.org_logins": [
+                account.external_account_name for account in accounts
+            ],
+        },
+    )
+    return len(accounts)
+
+
+async def list_active_accounts(
+    account_id: uuid.UUID | None = None,
+) -> list[tuple[str, str | None]]:
+    """Return ``(account_id, org_login)`` for active GitHub accounts.
+
+    Used by the Dagster schedule to fan out one run per org. Returns plain tuples
+    (not ORM rows) so the caller can use them after the session closes.
+    """
+    async with async_session_maker() as session:
+        accounts = await _active_github_accounts(session, account_id)
+    return [(str(account.id), account.external_account_name) for account in accounts]
 
 
 async def run_account_job(
@@ -206,6 +273,8 @@ async def run_account_job(
                 ),
             )
             return run
+
+        _log_env_built(account, job, run, env)
 
         result = await meltano_runner.run_job(job.name, env)
         if not result.ok:
@@ -265,6 +334,70 @@ async def _reconcile_identities(
         logger.exception(
             "GitHub identity reconciliation failed for account %s", account.id
         )
+
+
+def _log_env_built(
+    account: ConnectedAccount,
+    job: JobSpec,
+    run: IngestionRun,
+    env: dict[str, str],
+) -> None:
+    """Log what the run will actually pull, so 0-record runs are explainable."""
+    extra = _ingestion_extra(account, job, run=run, status="running")
+    extra["event"] = "ingestion.env_built"
+
+    repos_raw = env.get("TAP_GITHUB_REPOSITORIES")
+    if repos_raw:
+        with contextlib.suppress(ValueError, TypeError):
+            extra["ingestion.repository_count"] = len(json.loads(repos_raw))
+    members_raw = env.get("TAP_GITHUB_USER_USERNAMES")
+    if members_raw:
+        with contextlib.suppress(ValueError, TypeError):
+            extra["ingestion.member_login_count"] = len(json.loads(members_raw))
+    if env.get("TAP_GITHUB_START_DATE"):
+        extra["ingestion.start_date"] = env["TAP_GITHUB_START_DATE"]
+    if env.get("COPILOT_ORG"):
+        extra["ingestion.copilot_org"] = env["COPILOT_ORG"]
+
+    logger.info("Extraction environment built", extra=extra)
+
+
+async def _clear_stale_runs(
+    session: AsyncSession, max_age: timedelta = _STALE_RUN_MAX_AGE
+) -> int:
+    """Mark long-stuck `running` runs as `error` so the overlap guard unblocks.
+
+    A worker killed mid-run never finalizes its ingestion_run row; the leftover
+    `running` status then makes `_has_running` skip every future run for that
+    (account, resource_type). Reaping them here makes ingestion self-heal.
+    """
+    cutoff = datetime.now(UTC) - max_age
+    result = await session.execute(
+        select(IngestionRun).where(
+            IngestionRun.status == IngestionRunStatus.running.value,
+            IngestionRun.started_at < cutoff,
+        )
+    )
+    stale = list(result.scalars().all())
+    if not stale:
+        return 0
+
+    finished_at = datetime.now(UTC)
+    for run in stale:
+        run.status = IngestionRunStatus.error.value
+        run.finished_at = finished_at
+        run.error = "stale run cleanup: exceeded max age while still running"
+    await session.commit()
+
+    logger.warning(
+        "Cleared stale ingestion runs",
+        extra={
+            "event": "ingestion.stale_runs_cleared",
+            "ingestion.stale_runs_cleared": len(stale),
+            "ingestion.stale_run_ids": [str(run.id) for run in stale],
+        },
+    )
+    return len(stale)
 
 
 async def _has_running(

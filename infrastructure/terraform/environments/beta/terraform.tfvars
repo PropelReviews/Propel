@@ -7,10 +7,11 @@
 #   app_environment = { POSTHOG_TOKEN = "phc_...", POSTHOG_HOST = "https://us.i.posthog.com" }
 # Sensitive values go in app_secrets (stored in Secrets Manager) instead.
 
-environment   = "beta"
-zone_name     = "beta.propel.ninja"
-api_subdomain = "api"
-app_subdomain = "app"
+environment       = "beta"
+zone_name         = "beta.propel.ninja"
+api_subdomain     = "api"
+app_subdomain     = "app"
+dagster_subdomain = "dagster"
 
 db_min_acu        = 0.5
 db_max_acu        = 2

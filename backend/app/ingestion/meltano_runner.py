@@ -72,6 +72,9 @@ async def run_job(
     )
     outcome = {**extra, "process.returncode": result.returncode}
     if result.ok:
+        # Tail stdout even on success: Singer/Meltano print extracted/loaded row
+        # counts here, which is the quickest way to explain a 0-record run.
+        outcome["process.stdout_tail"] = _tail(result.stdout)
         logger.info("Meltano job completed", extra=outcome)
     else:
         outcome["error.message"] = _tail(result.stderr or result.stdout)

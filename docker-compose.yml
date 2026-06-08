@@ -64,33 +64,45 @@ services:
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
 
-  # Hourly ingestion scheduler (V1). Same image as `backend`, but runs crond in
-  # the foreground (the entrypoint detects the `cron` command) instead of
-  # uvicorn. The crontab invokes `python -m app.ingestion.cli run` each hour.
-  ingestion-cron:
+  # Dagster ingestion scheduler (V2). Same image as `backend`, but runs the
+  # combined `dagster dev` (webserver + daemon) from a dedicated Dagster venv.
+  # The daemon owns the hourly schedule that calls `app.ingestion.orchestrator`;
+  # the UI is at http://localhost:3001. Trigger a run on demand from the UI
+  # Launchpad, or `docker compose exec ingestion python -m app.ingestion.cli run`.
+  ingestion:
     build:
       context: .
       dockerfile: infrastructure/docker/backend.Dockerfile
-    container_name: propel-ingestion-cron
+    container_name: propel-ingestion
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - .env
-      # GitHub App creds for the hourly ingestion run (see backend service above).
+      # GitHub App creds for ingestion runs (see backend service above).
       - path: .env.ingestion.local
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
-      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion-cron}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion}
+      DAGSTER_HOME: /tmp/dagster
+      # Run Dagster from its own venv; import bind-mounted `app` + orchestration.
+      PATH: /opt/orchestration-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PYTHONPATH: /app:/orchestration
+      # The app venv sync and migrations are owned by the `backend` service.
+      SKIP_UV_SYNC: "1"
+      SKIP_MIGRATIONS: "1"
+    ports:
+      - "${DAGSTER_PORT:-3001}:3001"
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
+      - ${PROPEL_HOST_DIR:-.}/orchestration:/orchestration
       # Meltano's .meltano (plugin venvs + SQLite systemdb) on a dedicated volume,
       # NOT the bind mount: WAL/locking is reliable on the volume filesystem and it
       # isn't shared with other containers, so no "database is locked" races.
-      - meltano-cron:/app/meltano/.meltano
-    command: ["cron", "-f"]
+      - meltano-ingestion:/app/meltano/.meltano
+    command: ["dagster", "dev", "-h", "0.0.0.0", "-p", "3001", "-w", "/orchestration/workspace.yaml"]
 
   frontend:
     build:
@@ -148,4 +160,4 @@ services:
 
 volumes:
   pgdata:
-  meltano-cron:
+  meltano-ingestion:

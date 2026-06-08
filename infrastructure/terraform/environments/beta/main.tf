@@ -4,9 +4,10 @@ data "aws_route53_zone" "this" {
 }
 
 locals {
-  name_prefix = "propel-${var.environment}"
-  api_fqdn    = "${var.api_subdomain}.${var.zone_name}"
-  app_fqdn    = "${var.app_subdomain}.${var.zone_name}"
+  name_prefix  = "propel-${var.environment}"
+  api_fqdn     = "${var.api_subdomain}.${var.zone_name}"
+  app_fqdn     = "${var.app_subdomain}.${var.zone_name}"
+  dagster_fqdn = "${var.dagster_subdomain}.${var.zone_name}"
   # Landing site on the zone apex + www (e.g. beta.propel.ninja +
   # www.beta.propel.ninja). The apex (first entry) is the canonical URL.
   landing_fqdns = [var.zone_name, "www.${var.zone_name}"]
@@ -38,8 +39,9 @@ module "stack" {
   app_environment   = var.app_environment
   app_secrets       = var.app_secrets
 
-  ingestion_enabled             = var.ingestion_enabled
-  ingestion_schedule_expression = var.ingestion_schedule_expression
+  ingestion_enabled     = var.ingestion_enabled
+  dagster_fqdn          = local.dagster_fqdn
+  dagster_allowed_cidrs = var.dagster_allowed_cidrs
 
   tags = local.tags
 }

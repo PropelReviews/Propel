@@ -1,0 +1,18 @@
+# Production storage for the Dagster ingestion service.
+#
+# Run, event-log, and schedule state live in the application's Postgres under a
+# dedicated `dagster` schema so Dagster's own `alembic_version` table never
+# collides with the app's Alembic migrations. The schema is created and the
+# schema-scoped connection URL (DAGSTER_PG_URL) is exported by entrypoint.sh via
+# scripts/prepare_dagster_db.py before the daemon and webserver start.
+#
+# In local dev (`dagster dev`) this file is NOT copied into DAGSTER_HOME, so
+# Dagster falls back to its default ephemeral SQLite storage.
+storage:
+  postgres:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+# No phone-home from a backend service.
+telemetry:
+  enabled: false

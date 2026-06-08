@@ -1,11 +1,11 @@
 """Ingestion CLI — the single execution entrypoint.
 
-On-server cron invokes this hourly in V1; a future Dagster schedule would call
-the same command (or import `orchestrator.run_all`) without other changes.
+The Dagster schedule drives ingestion in deployed environments by importing
+`orchestrator.run_all`; this CLI runs the same code path for local/manual runs.
 
     python -m app.ingestion.cli run
     python -m app.ingestion.cli run --account-id <uuid>
-    python -m app.ingestion.cli run --job github_sync
+    python -m app.ingestion.cli run --job github_commits_sync
 """
 
 from __future__ import annotations

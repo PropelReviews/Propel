@@ -38,6 +38,14 @@ output "ecs_service_name" {
   value = module.api.service_name
 }
 
+output "ingestion_service_name" {
+  value = module.api.ingestion_service_name
+}
+
+output "dagster_url" {
+  value = var.ingestion_enabled && var.dagster_fqdn != "" ? "https://${var.dagster_fqdn}" : null
+}
+
 output "alb_dns_name" {
   value = module.api.alb_dns_name
 }

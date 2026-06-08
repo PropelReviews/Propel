@@ -4,15 +4,17 @@ Infrastructure-as-code for Propel's AWS deployment, in **us-east-1**:
 
 - **Aurora PostgreSQL Serverless v2** (private subnets)
 - **FastAPI on ECS Fargate** behind a **public HTTPS ALB**
+- **Dagster ingestion service on ECS Fargate** (daemon + webserver), UI on the same ALB
 - **Vite app + landing site on S3 + CloudFront** (private buckets, Origin Access Control)
 - **ACM + Route53** for TLS and DNS
-- **No CloudWatch** — the API ships observability to PostHog via OpenTelemetry
+- **No CloudWatch** — the API and ingestion ship observability to PostHog via OpenTelemetry
 
 ```
 modules/
   network/    VPC (2 AZs, public/private), single NAT, ALB/ECS/RDS security groups
   database/   Aurora Serverless v2 cluster + writer, Secrets Manager DATABASE_URL
-  api/        ECR, ECS Fargate cluster/task/service (no logConfiguration), ALB
+  api/        ECR, ECS Fargate cluster/task/service (no logConfiguration), ALB,
+              + long-running Dagster ingestion service (ingestion.tf) on the same ALB
   frontend/   private S3 bucket + CloudFront (OAC, SPA fallback) for the app
   landing/    private S3 bucket + CloudFront for the marketing site (apex + www,
               www->apex redirect via CloudFront Function)
@@ -25,13 +27,20 @@ environments/
 
 ## Accounts & domains
 
-| Env  | Account        | Zone                | API                       | App                       | Landing (apex + www)                          |
-|------|----------------|---------------------|---------------------------|---------------------------|-----------------------------------------------|
-| beta | 536270449640   | `beta.propel.ninja` | `api.beta.propel.ninja`   | `app.beta.propel.ninja`   | `beta.propel.ninja`, `www.beta.propel.ninja`  |
-| prod | 616938645090   | `propel.ninja`      | `api.propel.ninja`        | `app.propel.ninja`        | `propel.ninja`, `www.propel.ninja`            |
+| Env  | Account        | Zone                | API                       | App                       | Dagster                       | Landing (apex + www)                          |
+|------|----------------|---------------------|---------------------------|---------------------------|-------------------------------|-----------------------------------------------|
+| beta | 536270449640   | `beta.propel.ninja` | `api.beta.propel.ninja`   | `app.beta.propel.ninja`   | `dagster.beta.propel.ninja`   | `beta.propel.ninja`, `www.beta.propel.ninja`  |
+| prod | 616938645090   | `propel.ninja`      | `api.propel.ninja`        | `app.propel.ninja`        | `dagster.propel.ninja`        | `propel.ninja`, `www.propel.ninja`            |
 
 The landing site is served from the zone apex and `www`; `www.*` is 301-redirected
 to the apex (the canonical URL) by a CloudFront Function. The app stays on `app.*`.
+
+The Dagster ingestion UI is served on `dagster.<zone>` via a host-based routing
+rule on the shared API ALB (the same ECS cluster runs both the API service and a
+long-running Dagster service). Ingestion logs ship to PostHog under
+`service.name = propel-ingestion`, filterable separately from the API
+(`propel-backend`). Note: Dagster OSS has no built-in auth — restrict the UI at
+the network layer if the URL should not be world-reachable.
 
 The prod config delegates `beta.propel.ninja` from the `propel.ninja` zone by
 reading the beta zone's name servers cross-account (read-only) and writing the

@@ -98,13 +98,19 @@ variable "api_desired_count" {
 variable "ingestion_enabled" {
   type        = bool
   default     = false
-  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
+  description = "Provision the long-running Dagster ingestion ECS service + UI."
 }
 
-variable "ingestion_schedule_expression" {
+variable "dagster_fqdn" {
   type        = string
-  default     = "rate(1 hour)"
-  description = "EventBridge Scheduler expression driving the ingestion run."
+  default     = ""
+  description = "Dagster UI FQDN served via the ALB, e.g. dagster.beta.propel.ninja."
+}
+
+variable "dagster_allowed_cidrs" {
+  type        = list(string)
+  default     = []
+  description = "Source IP CIDRs allowed to reach the Dagster UI. Empty = open (no auth)."
 }
 
 variable "tags" {

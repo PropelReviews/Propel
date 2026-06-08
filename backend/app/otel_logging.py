@@ -62,6 +62,9 @@ def setup_logging() -> bool:
 
     handler = LoggingHandler(level=logging.NOTSET, logger_provider=provider)
     handler.name = _OTEL_HANDLER_NAME
+    # Keep a reference to the provider so shutdown can force-flush the batch
+    # processor; LoggingHandler.flush() alone does not drain the export queue.
+    handler._propel_logger_provider = provider  # type: ignore[attr-defined]
     root.addHandler(handler)
 
     # Ensure app loggers reach the root handler without replacing uvicorn output.
@@ -73,14 +76,26 @@ def setup_logging() -> bool:
 
 
 def shutdown_logging() -> None:
-    """Flush queued log records on application shutdown."""
+    """Flush and drain queued log records on application/run shutdown.
+
+    Each Dagster run executes in its own worker process, so the OTLP batch queue
+    must be drained before the process exits or the tail of a run's logs is lost.
+    We force-flush and shut down the provider directly (the standard library
+    ``Handler.flush()`` does not drain the batch processor).
+    """
     root = logging.getLogger()
     for handler in root.handlers:
         if getattr(handler, "name", None) != _OTEL_HANDLER_NAME:
             continue
+        provider = getattr(handler, "_propel_logger_provider", None)
+        if provider is not None:
+            force_flush = getattr(provider, "force_flush", None)
+            if callable(force_flush):
+                force_flush()
+            shutdown = getattr(provider, "shutdown", None)
+            if callable(shutdown):
+                shutdown()
+            continue
         flush = getattr(handler, "flush", None)
         if callable(flush):
             flush()
-        shutdown = getattr(handler, "shutdown", None)
-        if callable(shutdown):
-            shutdown()

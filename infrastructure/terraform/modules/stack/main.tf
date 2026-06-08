@@ -69,6 +69,7 @@ module "dns" {
   zone_id       = var.zone_id
   api_fqdn      = var.api_fqdn
   app_fqdn      = var.app_fqdn
+  dagster_fqdn  = var.ingestion_enabled ? var.dagster_fqdn : ""
   landing_fqdns = var.landing_fqdns
   tags          = var.tags
 }
@@ -89,8 +90,9 @@ module "api" {
   image_tag               = var.api_image_tag
   desired_count           = var.api_desired_count
 
-  ingestion_enabled             = var.ingestion_enabled
-  ingestion_schedule_expression = var.ingestion_schedule_expression
+  ingestion_enabled     = var.ingestion_enabled
+  dagster_fqdn          = var.dagster_fqdn
+  dagster_allowed_cidrs = var.dagster_allowed_cidrs
 
   tags = var.tags
 }
@@ -117,6 +119,20 @@ module "landing" {
 resource "aws_route53_record" "api" {
   zone_id = var.zone_id
   name    = var.api_fqdn
+  type    = "A"
+
+  alias {
+    name                   = module.api.alb_dns_name
+    zone_id                = module.api.alb_zone_id
+    evaluate_target_health = true
+  }
+}
+
+# dagster.<zone> -> ALB (host-based routing to the Dagster webserver target group)
+resource "aws_route53_record" "dagster" {
+  count   = var.ingestion_enabled ? 1 : 0
+  zone_id = var.zone_id
+  name    = var.dagster_fqdn
   type    = "A"
 
   alias {

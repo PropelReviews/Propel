@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
@@ -11,7 +11,7 @@ from app.models.connected_account import ConnectedAccount
 from app.models.ingestion_run import IngestionRun
 from app.models.tenant import Tenant
 
-GITHUB_JOB = next(j for j in orchestrator.JOBS if j.name == "github_sync")
+GITHUB_JOB = next(j for j in orchestrator.JOBS if j.name == "github_commits_sync")
 
 
 async def _seed_account(status: str = "active") -> ConnectedAccount:
@@ -70,7 +70,7 @@ async def test_successful_run_records_lifecycle(client, monkeypatch):
     assert run is not None
     assert run.status == "success"
     assert run.finished_at is not None
-    assert run.resource_type == "github"
+    assert run.resource_type == "github.commits"
     # No real Meltano wrote rows, so counts are zero but populated.
     assert run.records_pulled == 0
     assert run.datapoints_written == 0
@@ -111,7 +111,7 @@ async def test_overlap_guard_skips_when_run_in_progress(client, monkeypatch):
                 tenant_id=account.tenant_id,
                 connected_account_id=account.id,
                 source="github",
-                resource_type="github",
+                resource_type="github.commits",
                 status="running",
             )
         )
@@ -131,6 +131,95 @@ async def test_overlap_guard_skips_when_run_in_progress(client, monkeypatch):
             .where(IngestionRun.connected_account_id == account.id)
         )
         assert total == 1
+
+
+@pytest.mark.asyncio
+async def test_clear_stale_runs_marks_old_running_as_error(client):
+    account = await _seed_account()
+    now = datetime.now(UTC)
+
+    async with async_session_maker() as session:
+        stale = IngestionRun(
+            tenant_id=account.tenant_id,
+            connected_account_id=account.id,
+            source="github",
+            resource_type="github",
+            status="running",
+            started_at=now - timedelta(hours=3),
+        )
+        fresh = IngestionRun(
+            tenant_id=account.tenant_id,
+            connected_account_id=account.id,
+            source="github",
+            resource_type="github.org_members",
+            status="running",
+            started_at=now - timedelta(minutes=5),
+        )
+        session.add_all([stale, fresh])
+        await session.commit()
+        stale_id, fresh_id = stale.id, fresh.id
+
+    async with async_session_maker() as session:
+        cleared = await orchestrator._clear_stale_runs(session)
+    assert cleared == 1
+
+    async with async_session_maker() as session:
+        stale_row = await session.get(IngestionRun, stale_id)
+        fresh_row = await session.get(IngestionRun, fresh_id)
+    assert stale_row.status == "error"
+    assert stale_row.finished_at is not None
+    assert stale_row.error and "stale run cleanup" in stale_row.error
+    # A recently started run is left alone (it may still be making progress).
+    assert fresh_row.status == "running"
+
+
+@pytest.mark.asyncio
+async def test_run_all_reaps_stale_run_so_next_run_proceeds(client, monkeypatch):
+    account = await _seed_account()
+    _patch_github(monkeypatch)
+
+    # A run stuck `running` from a killed worker would block the overlap guard.
+    async with async_session_maker() as session:
+        session.add(
+            IngestionRun(
+                tenant_id=account.tenant_id,
+                connected_account_id=account.id,
+                source="github",
+                resource_type="github.commits",
+                status="running",
+                started_at=datetime.now(UTC) - timedelta(hours=3),
+            )
+        )
+        await session.commit()
+
+    ran_jobs: list[str] = []
+
+    async def fake_run(job, env, **kwargs):
+        ran_jobs.append(job)
+        return meltano_runner.RunResult(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(orchestrator.meltano_runner, "run_job", fake_run)
+
+    await orchestrator.run_all(job_name="github_commits_sync")
+
+    # The stale run was reaped at batch start, so the commits job actually ran.
+    assert ran_jobs == ["github_commits_sync"]
+
+    async with async_session_maker() as session:
+        statuses = (
+            (
+                await session.execute(
+                    select(IngestionRun.status).where(
+                        IngestionRun.connected_account_id == account.id,
+                        IngestionRun.resource_type == "github.commits",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert "error" in statuses  # the reaped stale run
+    assert "success" in statuses  # the fresh run that proceeded
 
 
 @pytest.mark.asyncio

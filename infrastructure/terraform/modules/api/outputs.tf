@@ -10,6 +10,10 @@ output "service_name" {
   value = aws_ecs_service.api.name
 }
 
+output "ingestion_service_name" {
+  value = var.ingestion_enabled ? aws_ecs_service.ingestion[0].name : null
+}
+
 output "alb_dns_name" {
   value = aws_lb.this.dns_name
 }

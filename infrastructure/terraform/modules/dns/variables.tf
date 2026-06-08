@@ -13,6 +13,12 @@ variable "app_fqdn" {
   description = "Frontend fully-qualified domain name, e.g. app.beta.propel.ninja."
 }
 
+variable "dagster_fqdn" {
+  type        = string
+  description = "Dagster UI FQDN added as a certificate SAN, e.g. dagster.beta.propel.ninja. Empty to omit."
+  default     = ""
+}
+
 variable "landing_fqdns" {
   type        = list(string)
   description = "Landing site FQDNs (apex + www) added as certificate SANs, e.g. [\"propel.ninja\", \"www.propel.ninja\"]."

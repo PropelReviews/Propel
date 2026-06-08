@@ -43,6 +43,7 @@ jobs:
           GITHUB_APP_SLUG: ${{ secrets.GH_APP_SLUG }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.GH_APP_CLIENT_SECRET }}
           POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          DAGSTER_ALLOWED_CIDRS: ${{ vars.DAGSTER_ALLOWED_CIDRS }}
         run: ./scripts/generate-app-tfvars.sh terraform-app-config.json
 
       - uses: actions/upload-artifact@v4

@@ -79,7 +79,7 @@ cmd_pull() {
 
   chmod 600 "$env_file"
   echo "Wrote $(printf '%s' "$json" | jq 'length') keys to ${env_file}"
-  echo "Restart the stack to load them:  docker compose up -d backend ingestion-cron"
+  echo "Restart the stack to load them:  docker compose up -d backend ingestion"
 }
 
 cmd_push() {

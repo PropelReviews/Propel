@@ -12,9 +12,13 @@ terraform {
 # the app CloudFront distribution, and the landing CloudFront distribution
 # (apex + www). DNS-validated against the environment's hosted zone.
 resource "aws_acm_certificate" "this" {
-  domain_name               = var.api_fqdn
-  subject_alternative_names = concat([var.app_fqdn], var.landing_fqdns)
-  validation_method         = "DNS"
+  domain_name = var.api_fqdn
+  subject_alternative_names = concat(
+    [var.app_fqdn],
+    var.landing_fqdns,
+    var.dagster_fqdn != "" ? [var.dagster_fqdn] : [],
+  )
+  validation_method = "DNS"
 
   lifecycle {
     create_before_destroy = true

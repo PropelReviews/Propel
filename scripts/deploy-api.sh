@@ -24,17 +24,22 @@ TF_DIR="$REPO_ROOT/infrastructure/terraform/environments/$ENV"
 ECR_URL="$(terraform -chdir="$TF_DIR" output -raw ecr_repository_url)"
 CLUSTER="$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)"
 SERVICE="$(terraform -chdir="$TF_DIR" output -raw ecs_service_name)"
+# Optional: the long-running Dagster ingestion service (null when ingestion is
+# disabled). `2>/dev/null || true` keeps deploys working before it is provisioned.
+INGESTION_SERVICE="$(terraform -chdir="$TF_DIR" output -raw ingestion_service_name 2>/dev/null || true)"
 REGISTRY="${ECR_URL%%/*}"
 
 echo "==> Logging in to ECR ($REGISTRY)"
 aws ecr get-login-password --region "$REGION" |
   docker login --username AWS --password-stdin "$REGISTRY"
 
+# Build context is the repo root: the image bundles backend/ + orchestration/ so
+# the same image serves the API and the Dagster ingestion service.
 echo "==> Building $ECR_URL:$TAG"
 docker build \
   -f "$REPO_ROOT/infrastructure/docker/backend.prod.Dockerfile" \
   -t "$ECR_URL:$TAG" \
-  "$REPO_ROOT/backend"
+  "$REPO_ROOT"
 
 echo "==> Pushing image"
 docker push "$ECR_URL:$TAG"
@@ -45,5 +50,15 @@ aws ecs update-service \
   --service "$SERVICE" \
   --force-new-deployment \
   --region "$REGION" >/dev/null
+
+# The ingestion service runs the same image; roll it too so it picks up new code.
+if [ -n "${INGESTION_SERVICE:-}" ] && [ "$INGESTION_SERVICE" != "null" ]; then
+  echo "==> Forcing new ECS deployment ($CLUSTER/$INGESTION_SERVICE)"
+  aws ecs update-service \
+    --cluster "$CLUSTER" \
+    --service "$INGESTION_SERVICE" \
+    --force-new-deployment \
+    --region "$REGION" >/dev/null
+fi
 
 echo "Done. Deployed $ECR_URL:$TAG to $ENV."

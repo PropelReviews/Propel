@@ -9,17 +9,22 @@ taps and lands records through the custom `target-propel` loader, which writes
 
 ```
 meltano/
-├── meltano.yml          # plugins + jobs (github_sync, github_org_sync,
-│                        #   github_user_profiles_sync, copilot_sync)
+├── meltano.yml          # plugins + jobs (github_org_sync, github_user_profiles_sync,
+│                        #   github_commits_sync, github_pull_requests_sync,
+│                        #   github_issues_sync, copilot_sync)
 ├── target-propel/       # custom Singer target → raw_record + datapoint
 └── tap-github-copilot/  # custom tap for Copilot usage metrics (measurement)
 ```
 
 `tap-github` is the MeltanoLabs variant pulled from the hub. Because the tap
 requires exactly one discovery mode per invocation, the base `tap-github`
-(auth + watermark only) is inherited by three children that each set one mode and
-its own stream selection: `tap-github-repos` (repositories), `tap-github-org`
-(organizations → `organization_members`), and `tap-github-users`
+(auth + watermark only) is inherited by children that each set one mode and its
+own stream selection. Repo activity is split per resource so each runs as its
+own granular Meltano job / Dagster op: `tap-github-commits` (`commits`),
+`tap-github-pull-requests` (`pull_requests`, `reviews`,
+`pull_request_review_comments`), and `tap-github-issues` (`issues`,
+`issue_comments`) — all over `repositories`. Org/user modes stay as
+`tap-github-org` (organizations → `organization_members`) and `tap-github-users`
 (`user_usernames` → `users`).
 
 ## How it runs
@@ -29,9 +34,11 @@ active `connected_accounts` row. It mints a GitHub App installation token, sets
 the per-run environment, and invokes a job:
 
 ```bash
-meltano run github_sync                # PRs, commits, issues, comments, reviews
 meltano run github_org_sync            # org member roster (organization_members)
 meltano run github_user_profiles_sync  # member name/email profiles (users)
+meltano run github_commits_sync        # commits across the installation's repos
+meltano run github_pull_requests_sync  # PRs + reviews + review comments
+meltano run github_issues_sync         # issues + issue comments
 meltano run copilot_sync               # Copilot per-user-day usage (measurement)
 ```
 
@@ -69,5 +76,5 @@ by GitHub at ~28 days).
 ```bash
 cd backend/meltano
 pipx run meltano install        # or: meltano install
-meltano run github_sync
+meltano run github_commits_sync
 ```

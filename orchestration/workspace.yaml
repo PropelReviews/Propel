@@ -1,0 +1,5 @@
+# Code location for the Dagster webserver and daemon. The `propel_orchestration`
+# package is importable via PYTHONPATH (set by entrypoint.sh / docker-compose),
+# and it imports the backend `app` package the same way.
+load_from:
+  - python_module: propel_orchestration.definitions

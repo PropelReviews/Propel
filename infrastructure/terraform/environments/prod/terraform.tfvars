@@ -5,10 +5,11 @@
 # Local example:
 #   app_environment = { POSTHOG_TOKEN = "phc_...", POSTHOG_HOST = "https://us.i.posthog.com" }
 
-environment   = "prod"
-zone_name     = "propel.ninja"
-api_subdomain = "api"
-app_subdomain = "app"
+environment       = "prod"
+zone_name         = "propel.ninja"
+api_subdomain     = "api"
+app_subdomain     = "app"
+dagster_subdomain = "dagster"
 
 # Cross-account role assumed read-only to delegate beta.propel.ninja.
 beta_zone_name    = "beta.propel.ninja"

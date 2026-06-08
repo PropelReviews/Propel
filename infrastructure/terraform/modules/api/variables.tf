@@ -95,14 +95,14 @@ variable "tags" {
 
 variable "ingestion_enabled" {
   type        = bool
-  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
+  description = "Provision the long-running Dagster ingestion ECS service + UI."
   default     = false
 }
 
-variable "ingestion_schedule_expression" {
-  type        = string
-  description = "EventBridge Scheduler expression driving the ingestion run."
-  default     = "rate(1 hour)"
+variable "ingestion_desired_count" {
+  type        = number
+  description = "Number of Dagster ingestion tasks (keep at 1: the daemon owns the schedule)."
+  default     = 1
 }
 
 variable "ingestion_task_cpu" {
@@ -115,4 +115,22 @@ variable "ingestion_task_memory" {
   type        = number
   description = "Fargate memory (MiB) for the ingestion task (Meltano needs headroom)."
   default     = 1024
+}
+
+variable "dagster_fqdn" {
+  type        = string
+  description = "Dagster UI FQDN served via the ALB, e.g. dagster.beta.propel.ninja."
+  default     = ""
+}
+
+variable "dagster_port" {
+  type        = number
+  description = "Port the Dagster webserver listens on inside the task."
+  default     = 3000
+}
+
+variable "dagster_allowed_cidrs" {
+  type        = list(string)
+  description = "Source IP CIDRs allowed to reach the Dagster UI (e.g. office/VPN). Empty = open to anyone (Dagster OSS has no auth)."
+  default     = []
 }

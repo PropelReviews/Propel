@@ -33,17 +33,33 @@ plugins:
         auth_token: ${GITHUB_INSTALLATION_TOKEN}
         start_date: ${TAP_GITHUB_START_DATE}
 
-    - name: tap-github-repos
+    # Repo activity is split per resource so each lands as its own Dagster op /
+    # Meltano job (granular runs, per-resource watermarks, isolated failures).
+    # Each child inherits auth + watermark and adds the repositories mode plus a
+    # single resource's stream selection.
+    - name: tap-github-commits
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
+        - commits.*
+
+    - name: tap-github-pull-requests
       inherit_from: tap-github
       config:
         repositories: ${TAP_GITHUB_REPOSITORIES}
       select:
         - pull_requests.*
-        - commits.*
+        - reviews.*
+        - pull_request_review_comments.*
+
+    - name: tap-github-issues
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
         - issues.*
         - issue_comments.*
-        - pull_request_review_comments.*
-        - reviews.*
 
     - name: tap-github-org
       inherit_from: tap-github
@@ -78,15 +94,21 @@ plugins:
       executable: target-propel
 
 jobs:
-  - name: github_sync
-    tasks:
-      - tap-github-repos target-propel
   - name: github_org_sync
     tasks:
       - tap-github-org target-propel
   - name: github_user_profiles_sync
     tasks:
       - tap-github-users target-propel
+  - name: github_commits_sync
+    tasks:
+      - tap-github-commits target-propel
+  - name: github_pull_requests_sync
+    tasks:
+      - tap-github-pull-requests target-propel
+  - name: github_issues_sync
+    tasks:
+      - tap-github-issues target-propel
   - name: copilot_sync
     tasks:
       - tap-github-copilot target-propel

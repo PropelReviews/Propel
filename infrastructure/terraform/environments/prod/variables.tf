@@ -26,6 +26,12 @@ variable "app_subdomain" {
   default = "app"
 }
 
+variable "dagster_subdomain" {
+  type        = string
+  default     = "dagster"
+  description = "Subdomain label for the Dagster ingestion UI."
+}
+
 variable "beta_zone_name" {
   type        = string
   default     = "beta.propel.ninja"
@@ -75,11 +81,11 @@ variable "app_secrets" {
 variable "ingestion_enabled" {
   type        = bool
   default     = true
-  description = "Provision the hourly ingestion ECS task + EventBridge schedule."
+  description = "Provision the long-running Dagster ingestion ECS service + UI."
 }
 
-variable "ingestion_schedule_expression" {
-  type        = string
-  default     = "rate(1 hour)"
-  description = "EventBridge Scheduler expression driving the ingestion run."
+variable "dagster_allowed_cidrs" {
+  type        = list(string)
+  default     = []
+  description = "Source IP CIDRs allowed to reach the Dagster UI. Empty = open (no auth)."
 }
