@@ -17,6 +17,13 @@ function apiHeaders(extra: Record<string, string> = {}): Record<string, string> 
   return { ...posthogLogHeaders(), ...extra };
 }
 
+export type GitHubConnection = {
+  connected: boolean;
+  account_id: string | null;
+  account_email: string | null;
+  login: string | null;
+};
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -24,6 +31,7 @@ export type AuthUser = {
   is_active: boolean;
   is_verified: boolean;
   created_at: string | null;
+  github?: GitHubConnection;
 };
 
 export type LoginResult = {
@@ -156,6 +164,19 @@ export async function getMe(token: string): Promise<AuthUser> {
   const body = await parseJson(response);
   if (!response.ok) throw extractError(response.status, body);
   return body as AuthUser;
+}
+
+/**
+ * Fetch the GitHub authorization URL for linking the signed-in user's account.
+ * The caller redirects the browser to this URL; GitHub returns to the backend
+ * callback, which bounces back to `/profile?github=connected`.
+ */
+export async function getGithubLinkUrl(token: string): Promise<string> {
+  const { authorization_url } = await authedGet<{ authorization_url: string }>(
+    "/api/v1/auth/github/link/authorize",
+    token,
+  );
+  return authorization_url;
 }
 
 export type Tenant = {

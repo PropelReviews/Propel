@@ -35,6 +35,9 @@ function App() {
             <Button asChild analyticsName="nav_data">
               <Link to="/data">View data</Link>
             </Button>
+            <Button asChild variant="outline" analyticsName="nav_profile">
+              <Link to="/profile">Profile</Link>
+            </Button>
             <Button variant="outline" analyticsName="sign_out" onClick={signOut}>
               Sign out
             </Button>

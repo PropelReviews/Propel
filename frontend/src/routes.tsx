@@ -6,6 +6,7 @@ import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { ChartDemoPage } from "@/pages/chart-demo";
 import { DataPage } from "@/pages/data";
+import { ProfilePage } from "@/pages/profile";
 import { SignInPage } from "@/pages/sign-in";
 import { SignUpPage } from "@/pages/sign-up";
 
@@ -41,6 +42,14 @@ export function AppRoutes() {
         element={
           <RequireAuthFlag>
             <SignUpPage />
+          </RequireAuthFlag>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <RequireAuthFlag>
+            <ProfilePage />
           </RequireAuthFlag>
         }
       />
