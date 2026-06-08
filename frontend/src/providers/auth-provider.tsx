@@ -32,6 +32,7 @@ type AuthContextValue = {
   status: AuthStatus;
   signIn: (input: { email: string; password: string }) => Promise<void>;
   signUp: (input: { email: string; password: string; name?: string }) => Promise<void>;
+  signInWithToken: (accessToken: string) => Promise<void>;
   signOut: () => void;
   refreshUser: () => Promise<void>;
 };
@@ -197,6 +198,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [establishSession],
   );
 
+  // Establish a session from a JWT minted by an OAuth (GitHub) redirect.
+  const signInWithToken = useCallback(
+    async (accessToken: string) => {
+      await establishSession(accessToken);
+      posthog?.capture("sign_in_succeeded", { method: "github" });
+    },
+    [establishSession],
+  );
+
   const refreshUser = useCallback(async () => {
     const existing = readToken();
     if (!existing) return;
@@ -216,8 +226,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, token, status, signIn, signUp, signOut, refreshUser }),
-    [user, token, status, signIn, signUp, signOut, refreshUser],
+    () => ({
+      user,
+      token,
+      status,
+      signIn,
+      signUp,
+      signInWithToken,
+      signOut,
+      refreshUser,
+    }),
+    [user, token, status, signIn, signUp, signInWithToken, signOut, refreshUser],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

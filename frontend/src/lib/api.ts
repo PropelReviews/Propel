@@ -179,6 +179,20 @@ export async function getGithubLinkUrl(token: string): Promise<string> {
   return authorization_url;
 }
 
+/**
+ * Fetch the GitHub authorization URL to sign in / sign up with GitHub. No auth
+ * required. The backend callback mints a session JWT and redirects to
+ * `/auth/github/callback#access_token=...`, which the SPA consumes.
+ */
+export async function getGithubLoginUrl(): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/v1/auth/github/login/authorize`, {
+    headers: apiHeaders(),
+  });
+  const body = await parseJson(response);
+  if (!response.ok) throw extractError(response.status, body);
+  return (body as { authorization_url: string }).authorization_url;
+}
+
 export type Tenant = {
   id: string;
   name: string;

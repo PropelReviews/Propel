@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.manager import auth_backend, current_active_user, fastapi_users
+from app.auth.manager import (
+    auth_backend,
+    current_active_user,
+    fastapi_users,
+    get_jwt_strategy,
+    get_user_manager,
+)
 from app.auth.oauth import github_oauth_client, google_oauth_client
 from app.config import get_settings
 from app.db.session import get_async_session
@@ -16,7 +22,7 @@ from app.schemas.user import (
     UserMeRead,
     UserRead,
 )
-from app.services import github_link
+from app.services import github_link, github_login
 
 logger = logging.getLogger("propel.auth")
 settings = get_settings()
@@ -83,6 +89,52 @@ async def me(
         created_at=user.created_at,
         github=github,
     )
+
+
+@router.get("/github/login/authorize", response_model=GitHubLinkURL)
+async def github_login_authorize():
+    """Return the GitHub authorization URL to sign in / sign up with GitHub."""
+    url = await github_login.build_authorize_url()
+    return GitHubLinkURL(authorization_url=url)
+
+
+@router.get("/github/login/callback")
+async def github_login_callback(
+    code: str,
+    state: str,
+    user_manager=Depends(get_user_manager),
+    strategy=Depends(get_jwt_strategy),
+):
+    """GitHub redirects here after the user authorizes sign-in.
+
+    Finds or creates the Propel user for this GitHub identity, mints a session
+    JWT, and bounces back to the SPA OAuth handler with the token in the URL
+    fragment (fragments are never sent to a server). On failure we redirect with
+    an `error` marker instead.
+    """
+    handler = f"{settings.oauth_callback_base_url}/auth/github/callback"
+    try:
+        github_login.verify_login_state(state)
+        access_token, account_id, account_email = await github_login.exchange_code(code)
+        user = await user_manager.oauth_callback(
+            "github",
+            access_token,
+            account_id,
+            account_email or "",
+            associate_by_email=False,
+            is_verified_by_default=True,
+        )
+        if not user.is_active:
+            return RedirectResponse(
+                url=f"{handler}#error=account_inactive", status_code=303
+            )
+        token = await strategy.write_token(user)
+    except Exception:  # noqa: BLE001 — report failure to the SPA, don't 500 the redirect
+        logger.exception("GitHub login failed")
+        return RedirectResponse(
+            url=f"{handler}#error=github_login_failed", status_code=303
+        )
+    return RedirectResponse(url=f"{handler}#access_token={token}", status_code=303)
 
 
 @router.get("/github/link/authorize", response_model=GitHubLinkURL)
