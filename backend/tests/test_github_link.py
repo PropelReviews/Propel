@@ -3,6 +3,7 @@
 import uuid
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import select
 from tests.conftest import auth_headers, login_user, register_user
@@ -53,7 +54,7 @@ def test_link_state_rejects_tampering():
     raw = base64.urlsafe_b64decode(state.encode()).decode()
     payload, _signature = raw.rsplit(":", 1)
     forged = base64.urlsafe_b64encode(f"{payload}:{'0' * 64}".encode()).decode()
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException):
         github_link.verify_link_state(forged)
 
 
@@ -67,9 +68,7 @@ async def test_authorize_requires_auth(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_authorize_returns_url_when_configured(
-    client: AsyncClient, monkeypatch
-):
+async def test_authorize_returns_url_when_configured(client: AsyncClient, monkeypatch):
     await register_user(client, "linker@example.com")
     token = await login_user(client, "linker@example.com")
 
@@ -158,7 +157,9 @@ async def test_complete_link_creates_oauth_account_and_claims_org_identity(
         assert oauth.account_id == "555"
 
         identity = await session.scalar(
-            select(ExternalIdentity).where(ExternalIdentity.external_login == "sarossilli")
+            select(ExternalIdentity).where(
+                ExternalIdentity.external_login == "sarossilli"
+            )
         )
         assert identity.propel_user_id == user_id
         assert identity.status == IdentityStatus.linked.value
@@ -194,7 +195,11 @@ async def test_complete_link_is_idempotent(clean_db, monkeypatch):
 
     async with async_session_maker() as session:
         rows = (
-            (await session.execute(select(OAuthAccount).where(OAuthAccount.user_id == user_id)))
+            (
+                await session.execute(
+                    select(OAuthAccount).where(OAuthAccount.user_id == user_id)
+                )
+            )
             .scalars()
             .all()
         )
@@ -236,9 +241,9 @@ async def test_complete_link_conflict_when_github_owned_by_other_user(
         me_id = me.id
 
         state = github_link.build_link_state(me_id)
-        with pytest.raises(Exception) as exc:
+        with pytest.raises(HTTPException) as exc:
             await github_link.complete_link(session, code="c", state=state)
-        assert getattr(exc.value, "status_code", None) == 409
+        assert exc.value.status_code == 409
 
 
 @pytest.mark.asyncio
