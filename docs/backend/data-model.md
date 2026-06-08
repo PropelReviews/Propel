@@ -110,6 +110,8 @@ Enforced in `backend/app/auth/permissions.py` and FastAPI dependencies.
 
 Signing in with GitHub does **not** automatically connect the tenant's GitHub org. Those are separate user actions with different OAuth apps/scopes. Tenant tool connections live in `connected_accounts` (below), and for GitHub specifically a tenant admin installs the **GitHub App** (not the login OAuth app) via `/api/v1/tenants/{tenant_id}/connections/github/install`.
 
+The browser SPA signs in / signs up with GitHub through a redirect-based login flow (`GET /api/v1/auth/github/login/authorize` and `GET /api/v1/auth/github/login/callback`, see `app/services/github_login.py`). The callback finds-or-creates the user via the user manager's `oauth_callback` (which also runs the org-identity claim), mints a session JWT, and redirects to the SPA handler `/auth/github/callback` with the token in the URL fragment. This is distinct from fastapi-users' built-in OAuth router (whose callback returns the JWT as a JSON body, unusable from a top-level navigation).
+
 ## Ingestion entities (migration `002`)
 
 V1 ingestion is **landing only**: Meltano (`tap-github` → custom `target-propel`) pulls provider data and writes it to Postgres. No transforms run at ingest — that is a later dbt layer. See the [backend README](../../backend/README.md#ingestion-v1--landing-only) for how runs are driven.
