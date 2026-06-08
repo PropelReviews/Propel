@@ -129,10 +129,33 @@ docker compose exec backend alembic -c /app/alembic.ini upgrade head
 
 Login and register are rate-limited per client IP (`AUTH_RATE_LIMIT_*` env vars). OAuth providers do not auto-link to existing email/password accounts until email verification is implemented.
 
-Optional Google/GitHub login: set `OAUTH_*` client IDs/secrets and register redirect URLs:
+Optional Google/GitHub login. Register these provider redirect URLs (under the
+**API** origin):
 
 - `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/google/callback`
-- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/callback`
+- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/callback` (fastapi-users built-in)
+- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/login/callback` (SPA sign in / sign up)
+- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/link/callback` (Connect with GitHub on the profile)
+
+`OAUTH_CALLBACK_BASE_URL` is the **API** origin (where the provider returns the
+code). The SPA sign-in/link flows then redirect the browser to the **frontend**
+origin set by `FRONTEND_BASE_URL` (e.g. `https://app.<zone>` in AWS;
+`http://localhost:5173` locally). The two are distinct because the API
+(`api.<zone>`) and SPA (`app.<zone>`) are separate origins.
+
+**GitHub credentials** — the login/link client resolves to, in order:
+
+1. `GITHUB_APP_CLIENT_ID` + `GITHUB_APP_CLIENT_SECRET` — **reuse the ingestion
+   GitHub App** for user login. These are the App's user-OAuth Client ID
+   (`Iv1...`) and a generated client secret, distinct from `GITHUB_APP_ID`
+   (numeric, app JWT) and `GITHUB_APP_PRIVATE_KEY`. To use the App for login you
+   must, on the GitHub App settings: add the two `github/{login,link}/callback`
+   URLs above to the **User authorization callback URL** (GitHub Apps allow
+   multiple), generate a **client secret**, and grant **Account permissions →
+   Email addresses: Read-only** (needed so first-time sign-up can read the
+   user's email when it isn't public).
+2. `OAUTH_GITHUB_CLIENT_ID` + `OAUTH_GITHUB_CLIENT_SECRET` — a standalone GitHub
+   OAuth app (fallback when the App vars are unset).
 
 ### Endpoints
 
@@ -153,7 +176,11 @@ Auth (`/api/v1/auth`):
 | GET | `/google/authorize` | Start Google OAuth (when configured) |
 | GET | `/google/callback` | Complete Google OAuth |
 | GET | `/github/authorize` | Start GitHub OAuth (when configured) |
-| GET | `/github/callback` | Complete GitHub OAuth |
+| GET | `/github/callback` | Complete GitHub OAuth (fastapi-users built-in, JSON) |
+| GET | `/github/login/authorize` | Start GitHub sign in / sign up for the SPA |
+| GET | `/github/login/callback` | Complete sign-in; redirect to SPA with session token |
+| GET | `/github/link/authorize` | Start linking GitHub to the signed-in account |
+| GET | `/github/link/callback` | Complete linking; redirect to SPA profile |
 
 Tenants (`/api/v1/tenants`):
 

@@ -75,9 +75,10 @@ async def github_setup_callback(
     await connection_service.bind_github_installation(
         session, user.id, installation_id, state
     )
-    # Bounce the admin back to the SPA connections view.
+    # Bounce the admin back to the SPA connections view (the SPA is a separate
+    # origin from the API, so use the frontend base URL, not the callback host).
     return RedirectResponse(
-        url=f"{settings.oauth_callback_base_url}/connections?github=connected",
+        url=f"{settings.frontend_base_url}/connections?github=connected",
         status_code=303,
     )
 

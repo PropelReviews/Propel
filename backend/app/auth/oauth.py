@@ -10,7 +10,9 @@ google_oauth_client = GoogleOAuth2(
     settings.oauth_google_client_secret,
 )
 
+# Login/link OAuth client. Prefers the ingestion GitHub App's user-authorization
+# credentials (reuse one app) and falls back to a standalone GitHub OAuth app.
 github_oauth_client = GitHubOAuth2(
-    settings.oauth_github_client_id,
-    settings.oauth_github_client_secret,
+    settings.github_oauth_client_id,
+    settings.github_oauth_client_secret,
 )

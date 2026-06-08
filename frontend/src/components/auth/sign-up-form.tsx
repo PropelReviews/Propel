@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { AuthDivider, GithubAuthButton } from "@/components/auth/github-auth-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,6 +98,9 @@ export function SignUpForm({ onSuccess }: { onSuccess?: () => void }) {
       >
         {isSubmitting ? "Creating account..." : "Create account"}
       </Button>
+
+      <AuthDivider />
+      <GithubAuthButton label="Sign up with GitHub" />
     </form>
   );
 }

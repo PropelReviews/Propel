@@ -34,15 +34,45 @@ class Settings(BaseSettings):
     oauth_google_client_secret: str = ""
     oauth_github_client_id: str = ""
     oauth_github_client_secret: str = ""
+    # Base URL of the API itself — where providers send the OAuth callback (the
+    # backend). Used to build OAuth `redirect_uri`s, e.g.
+    # {oauth_callback_base_url}/api/v1/auth/github/login/callback.
     oauth_callback_base_url: str = "http://localhost:8000"
+    # Base URL of the browser SPA. The API and SPA are separate origins in
+    # deployment (api.<zone> vs app.<zone>), so OAuth callbacks finish by
+    # redirecting the browser here (e.g. {frontend_base_url}/auth/github/callback).
+    # Defaults to the local Vite dev server.
+    frontend_base_url: str = "http://localhost:5173"
 
-    # GitHub App used for data ingestion (separate from the login OAuth app
-    # above). The private key signs the short-lived app JWT that is exchanged
-    # for per-installation tokens; the webhook secret verifies install events.
+    # GitHub App used for data ingestion. The private key signs the short-lived
+    # app JWT that is exchanged for per-installation tokens; the webhook secret
+    # verifies install events.
     github_app_id: str = ""
     github_app_private_key: str = ""
     github_app_webhook_secret: str = ""
     github_app_slug: str = ""
+
+    # The same GitHub App's user-authorization (OAuth) credentials, used to
+    # "Sign in / Connect with GitHub". These are the App's **Client ID** (e.g.
+    # `Iv1...`) and a generated **client secret** — distinct from
+    # `github_app_id` (numeric, app JWT) and `github_app_private_key`. When set,
+    # they take precedence over the standalone `oauth_github_*` app below, so a
+    # single GitHub App covers both ingestion and login.
+    github_app_client_id: str = ""
+    github_app_client_secret: str = ""
+
+    @property
+    def github_oauth_client_id(self) -> str:
+        """Effective GitHub login client id (App reused, else standalone app)."""
+        return self.github_app_client_id or self.oauth_github_client_id
+
+    @property
+    def github_oauth_client_secret(self) -> str:
+        return self.github_app_client_secret or self.oauth_github_client_secret
+
+    @property
+    def github_oauth_enabled(self) -> bool:
+        return bool(self.github_oauth_client_id and self.github_oauth_client_secret)
 
     # Fernet key for encrypting OAuth tool tokens (future providers). GitHub App
     # installs mint tokens per run and do not use this.
