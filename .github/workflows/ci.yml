@@ -134,6 +134,68 @@ jobs:
       - name: Run target-propel tests
         run: uv run --no-sync pytest meltano/target-propel/tests -v
 
+  dbt:
+    name: dbt checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: propel
+          POSTGRES_PASSWORD: propel
+          POSTGRES_DB: propel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DBT_HOST: localhost
+      DBT_PORT: "5432"
+      DBT_USER: propel
+      DBT_PASSWORD: propel
+      DBT_DBNAME: propel_test
+      PGPASSWORD: propel
+    defaults:
+      run:
+        working-directory: transformation/dbt
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      # Same dbt pins as orchestration/pyproject.toml so CI matches what
+      # Dagster runs in production. The runner's Python is externally managed
+      # (PEP 668), so install into a uv venv and put it on PATH.
+      - name: Install dbt + sqlfluff
+        run: |
+          uv venv .ci-venv
+          uv pip install --python .ci-venv/bin/python "dbt-postgres>=1.8,<2" "sqlfluff>=3,<4"
+          echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Lint SQL (sqlfluff)
+        run: sqlfluff lint models
+
+      - name: Parse project
+        run: dbt parse --project-dir . --profiles-dir .
+
+      - name: Load raw_record fixture
+        run: psql -h localhost -U propel -d propel_test -v ON_ERROR_STOP=1 -f ci/fixture_raw_record.sql
+
+      - name: Build models + run dbt tests (full refresh)
+        run: dbt build --full-refresh --project-dir . --profiles-dir .
+
+      # Exercise the tenant-scoped incremental path Dagster uses in production.
+      - name: Build models + run dbt tests (tenant-scoped incremental)
+        run: >-
+          dbt build --vars "tenant_id: aaaaaaaa-0000-0000-0000-000000000001"
+          --project-dir . --profiles-dir .
+
+      - name: Smoke-check mart output
+        run: psql -h localhost -U propel -d propel_test -v ON_ERROR_STOP=1 -f ci/smoke_check.sql
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest

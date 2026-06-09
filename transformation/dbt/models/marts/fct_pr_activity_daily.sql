@@ -20,7 +20,7 @@ with prs as (
     select *
     from {{ ref('stg_github_pull_requests') }}
     {% if var('tenant_id', none) %}
-    where tenant_id = '{{ var("tenant_id") }}'::uuid
+        where tenant_id = '{{ var("tenant_id") }}'::uuid
     {% endif %}
 
 ),

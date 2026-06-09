@@ -38,6 +38,9 @@ docker compose exec ingestion python -m app.ingestion.cli run --start-date 2026-
 # dbt manually (Dagster runs it automatically after each org ingestion)
 docker compose exec ingestion dbt build --full-refresh \
   --project-dir /transformation/dbt --profiles-dir /transformation/dbt
+
+# dbt lint (config: transformation/dbt/.sqlfluff; CI gate in .github/workflows/ci.yml "dbt checks")
+cd transformation/dbt && uvx --from "sqlfluff>=3,<4" sqlfluff lint models
 ```
 
 ## Data contract

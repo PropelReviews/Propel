@@ -27,4 +27,4 @@ where
     source = 'github'
     and resource_type = 'pull_requests'
     and payload ->> 'node_id' is not null
-order by tenant_id, payload ->> 'node_id', fetched_at desc
+order by tenant_id asc, payload ->> 'node_id' asc, fetched_at desc

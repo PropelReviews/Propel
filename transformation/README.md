@@ -25,6 +25,10 @@ transformation/
 └── dbt/                                    # dbt project root
     ├── dbt_project.yml
     ├── profiles.yml                        # postgres profile, DBT_* env vars
+    ├── .sqlfluff                           # SQL lint rules (postgres dialect, jinja templater)
+    ├── ci/
+    │   ├── fixture_raw_record.sql          # minimal raw_record + sample PRs for CI builds
+    │   └── smoke_check.sql                 # asserts mart output matches the fixture
     └── models/
         ├── sources.yml                     # public.raw_record (lineage -> github/pull_requests asset)
         ├── staging/
@@ -54,6 +58,24 @@ docker compose exec ingestion dbt build \
 ```
 
 Connection credentials come from `DBT_HOST` / `DBT_PORT` / `DBT_USER` / `DBT_PASSWORD` / `DBT_DBNAME` env vars (derived from `DATABASE_URL` automatically inside the Dagster service; defaults match local docker compose).
+
+## Linting and CI
+
+SQL style is enforced with [sqlfluff](https://sqlfluff.com) (config in `dbt/.sqlfluff`):
+
+```bash
+cd transformation/dbt
+uvx --from "sqlfluff>=3,<4" sqlfluff lint models   # check
+uvx --from "sqlfluff>=3,<4" sqlfluff fix models    # auto-fix
+```
+
+The `dbt checks` job in `.github/workflows/ci.yml` gates every PR:
+
+1. `sqlfluff lint models` — SQL style.
+2. `dbt parse` — project/ref validity.
+3. Load `ci/fixture_raw_record.sql` into a throwaway Postgres (sample PR payloads).
+4. `dbt build --full-refresh` then a tenant-scoped incremental `dbt build` — models execute and schema tests pass on both paths Dagster uses.
+5. `ci/smoke_check.sql` — mart rows match the expected aggregates (including dedup of re-fetched PRs).
 
 ## Related
 
