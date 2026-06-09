@@ -22,19 +22,38 @@ Example metrics:
 
 ```
 transformation/
-└── dbt/            # dbt project root (models, macros, tests)
+└── dbt/                                    # dbt project root
+    ├── dbt_project.yml
+    ├── profiles.yml                        # postgres profile, DBT_* env vars
+    └── models/
+        ├── sources.yml                     # public.raw_record (lineage -> github/pull_requests asset)
+        ├── staging/
+        │   └── stg_github_pull_requests.sql
+        └── marts/
+            ├── fct_pr_activity_daily.sql   # incremental, delete+insert per tenant/day
+            └── schema.yml
 ```
 
-## Setup
+Models land in the `analytics` Postgres schema (raw landing tables stay in `public`). The `analytics` schema is dbt-owned — like Dagster's `dagster` schema, it is not managed by Alembic.
 
-Setup instructions coming soon. Once the dbt project is initialized:
+## Running
+
+Dagster owns scheduled execution: every successful per-org ingestion run triggers a tenant-partitioned `dbt build --vars '{tenant_id: ...}'` (see `orchestration/propel_orchestration/analytics.py`). The incremental marts only recompute that tenant's rows.
+
+Manual runs from the ingestion container (dbt is installed in the Dagster venv and the project is mounted at `/transformation`):
 
 ```bash
-cd transformation/dbt
-dbt deps
-dbt run
-dbt test
+# Full rebuild of every tenant
+docker compose exec ingestion dbt build --full-refresh \
+  --project-dir /transformation/dbt --profiles-dir /transformation/dbt
+
+# One tenant only
+docker compose exec ingestion dbt build \
+  --vars '{tenant_id: <uuid>}' \
+  --project-dir /transformation/dbt --profiles-dir /transformation/dbt
 ```
+
+Connection credentials come from `DBT_HOST` / `DBT_PORT` / `DBT_USER` / `DBT_PASSWORD` / `DBT_DBNAME` env vars (derived from `DATABASE_URL` automatically inside the Dagster service; defaults match local docker compose).
 
 ## Related
 

@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: fct_pr_activity_daily
+    description: >
+      Daily pull-request activity per tenant: PRs opened (created_at), merged
+      (merged_at), and closed without merging (closed_at with no merged_at).
+      Served by the backend metrics API with day/week/month bucketing.
+    columns:
+      - name: tenant_id
+        description: Propel tenant that owns the activity.
+        data_tests:
+          - not_null
+      - name: activity_date
+        description: UTC calendar day of the activity.
+        data_tests:
+          - not_null
+      - name: prs_opened
+        data_tests:
+          - not_null
+      - name: prs_merged
+        data_tests:
+          - not_null
+      - name: prs_closed
+        data_tests:
+          - not_null
+
+  - name: stg_github_pull_requests
+    description: Latest snapshot of every GitHub pull request (one row per PR).
+    columns:
+      - name: pr_node_id
+        data_tests:
+          - not_null

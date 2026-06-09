@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { formatCount } from "@/components/charts";
 import { ConnectTools } from "@/components/connect-tools";
+import { PrActivityChart } from "@/components/pr-activity-chart";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -24,7 +25,12 @@ import { useAuth } from "@/providers/auth-provider";
 
 type LoadState =
   | { status: "loading" }
-  | { status: "ready"; runs: IngestionRun[]; stats: IngestionStats }
+  | {
+      status: "ready";
+      tenantId: string;
+      runs: IngestionRun[];
+      stats: IngestionStats;
+    }
   | { status: "empty" } // authenticated but no tenant
   | { status: "error"; message: string };
 
@@ -82,7 +88,7 @@ export function DataPage() {
           getIngestionStats(token, tenant.id),
         ]);
         if (cancelled) return;
-        setState({ status: "ready", runs, stats });
+        setState({ status: "ready", tenantId: tenant.id, runs, stats });
       } catch (error) {
         if (cancelled) return;
         const message =
@@ -132,7 +138,7 @@ export function DataPage() {
           </CardHeader>
         </Card>
       ) : (
-        <Loaded runs={state.runs} stats={state.stats} />
+        <Loaded tenantId={state.tenantId} runs={state.runs} stats={state.stats} />
       )}
     </main>
   );
@@ -151,7 +157,15 @@ function LoadingState() {
   );
 }
 
-function Loaded({ runs, stats }: { runs: IngestionRun[]; stats: IngestionStats }) {
+function Loaded({
+  tenantId,
+  runs,
+  stats,
+}: {
+  tenantId: string;
+  runs: IngestionRun[];
+  stats: IngestionStats;
+}) {
   return (
     <div className="space-y-12">
       <section>
@@ -173,6 +187,11 @@ function Loaded({ runs, stats }: { runs: IngestionRun[]; stats: IngestionStats }
             </CardHeader>
           </Card>
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Pull request activity</h2>
+        <PrActivityChart tenantId={tenantId} />
       </section>
 
       {stats.by_kind.length > 0 && (
