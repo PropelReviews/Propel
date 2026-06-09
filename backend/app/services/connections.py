@@ -26,7 +26,9 @@ from app.integrations.github import app_auth
 from app.models.connected_account import ConnectedAccount
 from app.models.enums import AuthType, ConnectionStatus, IntegrationProvider, Role
 from app.models.membership import TenantMembership
+from app.models.tenant import Tenant
 from app.schemas.connection import ConnectionStatusUpdate
+from app.services import github_identity
 
 logger = logging.getLogger("propel.connections")
 
@@ -235,6 +237,162 @@ async def _fetch_installation_account_name(installation_id: str) -> str | None:
 
 
 # --------------------------------------------------------------------------- #
+# Installation discovery (GitHub is the source of truth)
+# --------------------------------------------------------------------------- #
+async def _tenant_for_org_login(session: AsyncSession, login: str) -> Tenant:
+    """Find or create the tenant for a GitHub org (slug = lowercased login)."""
+    slug = login.lower()
+    result = await session.execute(select(Tenant).where(Tenant.slug == slug))
+    tenant = result.scalar_one_or_none()
+    if tenant is not None:
+        return tenant
+    tenant = Tenant(name=login, slug=slug)
+    session.add(tenant)
+    await session.flush()
+    logger.info(
+        "Auto-provisioned tenant for GitHub org",
+        extra={
+            "event": "connection.discover",
+            "tenant.id": str(tenant.id),
+            "github.org": login,
+        },
+    )
+    return tenant
+
+
+def _provision_account_for_installation(
+    session: AsyncSession, tenant: Tenant, installation: dict
+) -> ConnectedAccount:
+    account = ConnectedAccount(
+        tenant_id=tenant.id,
+        provider=IntegrationProvider.github.value,
+        auth_type=AuthType.github_app_installation.value,
+        external_account_id=str(installation["id"]),
+        external_account_name=(installation.get("account") or {}).get("login"),
+        scopes=installation.get("permissions"),
+        status=(
+            ConnectionStatus.paused.value
+            if installation.get("suspended_at")
+            else ConnectionStatus.active.value
+        ),
+    )
+    session.add(account)
+    return account
+
+
+async def sync_installations_from_github(session: AsyncSession) -> dict[str, int]:
+    """Reconcile connected_accounts against the App's actual installations.
+
+    Every org with the app installed gets an active connected_accounts row
+    (auto-provisioning a tenant on first sight); rows whose installation no
+    longer exists on GitHub are revoked. This makes installing the app the only
+    step needed for an org to be ingested.
+    """
+    installations = await app_auth.list_installations()
+    seen_ids: set[str] = set()
+    created = updated = 0
+    new_accounts: list[ConnectedAccount] = []
+
+    for installation in installations:
+        installation_id = str(installation.get("id") or "")
+        login = (installation.get("account") or {}).get("login")
+        if not installation_id or not login:
+            continue
+        seen_ids.add(installation_id)
+        status = (
+            ConnectionStatus.paused.value
+            if installation.get("suspended_at")
+            else ConnectionStatus.active.value
+        )
+
+        result = await session.execute(
+            select(ConnectedAccount).where(
+                ConnectedAccount.provider == IntegrationProvider.github.value,
+                ConnectedAccount.external_account_id == installation_id,
+            )
+        )
+        account = result.scalar_one_or_none()
+        if account is None:
+            tenant = await _tenant_for_org_login(session, login)
+            account = _provision_account_for_installation(
+                session, tenant, installation
+            )
+            new_accounts.append(account)
+            created += 1
+            logger.info(
+                "Auto-provisioned GitHub connection from installation",
+                extra={
+                    "event": "connection.discover",
+                    "tenant.id": str(tenant.id),
+                    "github.installation_id": installation_id,
+                    "github.org": login,
+                },
+            )
+        elif (
+            account.status != status
+            or account.external_account_name != login
+            or account.scopes != installation.get("permissions")
+        ):
+            account.status = status
+            account.external_account_name = login
+            if installation.get("permissions"):
+                account.scopes = installation["permissions"]
+            updated += 1
+
+    # Installations gone from GitHub mean the app was uninstalled; revoke.
+    revoke_query = select(ConnectedAccount).where(
+        ConnectedAccount.provider == IntegrationProvider.github.value,
+        ConnectedAccount.auth_type == AuthType.github_app_installation.value,
+        ConnectedAccount.status != ConnectionStatus.revoked.value,
+    )
+    if seen_ids:
+        revoke_query = revoke_query.where(
+            ConnectedAccount.external_account_id.not_in(seen_ids)
+        )
+    revoked = 0
+    for account in (await session.execute(revoke_query)).scalars():
+        account.status = ConnectionStatus.revoked.value
+        revoked += 1
+        logger.info(
+            "Revoked GitHub connection: installation no longer exists",
+            extra={
+                "event": "connection.discover",
+                "connected_account.id": str(account.id),
+                "github.installation_id": account.external_account_id,
+            },
+        )
+
+    await session.commit()
+
+    # Pre-import the member roster for orgs we just discovered so identities
+    # and roles exist before anyone signs up (best effort — the hourly
+    # ingestion run also reconciles).
+    for account in new_accounts:
+        try:
+            await github_identity.import_roster_for_account(session, account)
+        except Exception:  # noqa: BLE001 — enrichment must not fail discovery
+            logger.exception(
+                "GitHub roster import failed after discovery",
+                extra={
+                    "event": "connection.discover",
+                    "connected_account.id": str(account.id),
+                    "github.installation_id": account.external_account_id,
+                },
+            )
+
+    summary = {"created": created, "updated": updated, "revoked": revoked}
+    logger.info(
+        "GitHub installation sync complete",
+        extra={
+            "event": "connection.discover",
+            "github.installation_count": len(seen_ids),
+            **{f"connection.{key}": value for key, value in summary.items()},
+        },
+    )
+    return summary
+
+
+# --------------------------------------------------------------------------- #
 # Webhook
 # --------------------------------------------------------------------------- #
 def verify_webhook_signature(body: bytes, signature_header: str | None) -> bool:
@@ -250,10 +408,11 @@ def verify_webhook_signature(body: bytes, signature_header: str | None) -> bool:
 
 
 async def process_installation_webhook(session: AsyncSession, payload: dict) -> None:
-    """Keep an already-bound connection in sync with GitHub install events.
+    """Keep connected_accounts in sync with GitHub install events.
 
-    Tenant binding happens in the setup callback (which carries our signed
-    state); the webhook never sees the state, so it only updates existing rows.
+    A `created` event for an unknown installation auto-provisions a tenant and
+    connection (same as the hourly installation sync); other events update the
+    existing row's status.
     """
     action = payload.get("action")
     installation = payload.get("installation") or {}
@@ -269,6 +428,32 @@ async def process_installation_webhook(session: AsyncSession, payload: dict) -> 
     )
     account = result.scalar_one_or_none()
     if account is None:
+        login = (installation.get("account") or {}).get("login")
+        if action != "created" or not login:
+            return
+        tenant = await _tenant_for_org_login(session, login)
+        account = _provision_account_for_installation(session, tenant, installation)
+        await session.commit()
+        logger.info(
+            "Auto-provisioned GitHub connection from webhook",
+            extra={
+                "event": "connection.webhook",
+                "github.webhook_action": action,
+                "github.installation_id": installation_id,
+                "tenant.id": str(tenant.id),
+            },
+        )
+        try:
+            await github_identity.import_roster_for_account(session, account)
+        except Exception:  # noqa: BLE001 — enrichment must not fail the webhook
+            logger.exception(
+                "GitHub roster import failed after webhook install",
+                extra={
+                    "event": "connection.webhook",
+                    "connected_account.id": str(account.id),
+                    "github.installation_id": installation_id,
+                },
+            )
         return
 
     previous_status = account.status

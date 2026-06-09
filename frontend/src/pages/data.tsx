@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { formatCount } from "@/components/charts";
+import { ConnectTools } from "@/components/connect-tools";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -60,6 +61,7 @@ function formatRunDuration(run: IngestionRun): string {
 export function DataPage() {
   const { token, status: authStatus } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || !token) return;
@@ -92,7 +94,7 @@ export function DataPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, authStatus]);
+  }, [token, authStatus, reloadKey]);
 
   return (
     <main className="bg-background mx-auto min-h-svh max-w-6xl px-6 py-12">
@@ -121,9 +123,7 @@ export function DataPage() {
       ) : state.status === "loading" ? (
         <LoadingState />
       ) : state.status === "empty" ? (
-        <p className="text-muted-foreground text-sm">
-          No workspace found. Create one to start ingesting data.
-        </p>
+        <ConnectTools onConnected={() => setReloadKey((key) => key + 1)} />
       ) : state.status === "error" ? (
         <Card>
           <CardHeader>

@@ -327,6 +327,93 @@ async def test_retroactive_oauth_link_claims_pending_identity(clean_db):
 
 
 @pytest.mark.asyncio
+async def test_register_claims_pending_identity_by_email(client: AsyncClient):
+    async with async_session_maker() as session:
+        account = await _seed_account(session)
+        tenant_id = account.tenant_id
+        session.add(
+            ExternalIdentity(
+                tenant_id=account.tenant_id,
+                connected_account_id=account.id,
+                provider=IntegrationProvider.github.value,
+                external_user_id="8",
+                external_login="newhire",
+                external_email="NewHire@acme.com",
+                status=IdentityStatus.pending_email.value,
+                github_org_role=GitHubOrgRole.admin.value,
+            )
+        )
+        await session.commit()
+
+    # Email match is case-insensitive; the org role maps to the Propel role.
+    registered = await register_user(client, "newhire@ACME.com")
+
+    async with async_session_maker() as session:
+        identity = await session.scalar(
+            select(ExternalIdentity).where(ExternalIdentity.external_login == "newhire")
+        )
+        assert str(identity.propel_user_id) == registered["id"]
+        assert identity.status == IdentityStatus.linked.value
+        assert identity.link_method == IdentityLinkMethod.email.value
+        membership = await session.scalar(
+            select(TenantMembership).where(
+                TenantMembership.tenant_id == tenant_id,
+                TenantMembership.user_id == identity.propel_user_id,
+            )
+        )
+        assert membership is not None
+        assert membership.role == Role.admin
+
+
+@pytest.mark.asyncio
+async def test_import_roster_from_github_api(clean_db, monkeypatch):
+    from app.integrations.github import app_auth
+    from app.integrations.github.app_auth import InstallationToken
+
+    async def fake_token(installation_id: str):
+        from datetime import UTC, datetime
+
+        return InstallationToken(token="t", expires_at=datetime.now(UTC))
+
+    async def fake_members(token: str, org: str):
+        return [
+            {"id": 1, "login": "boss", "avatar_url": "a", "site_admin": False},
+            {"id": 2, "login": "dev", "avatar_url": "b", "site_admin": False},
+        ]
+
+    async def fake_admins(token: str, org: str):
+        return {"boss"}
+
+    monkeypatch.setattr(app_auth, "get_installation_token", fake_token)
+    monkeypatch.setattr(app_auth, "list_org_members", fake_members)
+    monkeypatch.setattr(app_auth, "list_org_admin_logins", fake_admins)
+
+    async with async_session_maker() as session:
+        account = await _seed_account(session)
+        tenant_id = account.tenant_id
+        await session.commit()
+
+        count = await github_identity.import_roster_for_account(session, account)
+        assert count == 2
+
+        identities = {
+            i.external_login: i
+            for i in (
+                await session.execute(
+                    select(ExternalIdentity).where(
+                        ExternalIdentity.tenant_id == tenant_id
+                    )
+                )
+            ).scalars()
+        }
+    assert identities["boss"].github_org_role == GitHubOrgRole.admin.value
+    assert identities["dev"].github_org_role == GitHubOrgRole.member.value
+    # No emails from the members API: identities wait for signup or profile sync.
+    assert identities["dev"].status == IdentityStatus.pending_email.value
+    assert identities["dev"].propel_user_id is None
+
+
+@pytest.mark.asyncio
 async def test_admin_can_list_and_manually_link_github_members(client: AsyncClient):
     await register_user(client, "admin@example.com")
     admin_token = await login_user(client, "admin@example.com")

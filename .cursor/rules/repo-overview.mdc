@@ -1,0 +1,25 @@
+---
+alwaysApply: true
+---
+
+# Propel Repo Map
+
+Propel = transparent engineering analytics. Pipeline: GitHub (via Meltano) → Postgres → dbt (planned) → FastAPI API → React dashboard.
+
+| Directory | What it is |
+|---|---|
+| `backend/` | FastAPI app (Python 3.12, SQLAlchemy async, Alembic, fastapi-users). Also hosts `backend/meltano/` (extraction + custom `target-propel`) |
+| `frontend/` | React 19 + Vite + Tailwind v4 + shadcn. Two builds: app (`dist/`) and landing page (`dist-landing/`) |
+| `orchestration/` | Dagster — hourly ingestion job per GitHub org |
+| `transformation/dbt/` | Empty placeholder — dbt is NOT initialized yet |
+| `infrastructure/` | Terraform (AWS ECS/S3/CloudFront, beta + prod) and Dockerfiles |
+| `scripts/` | Dev setup + manual deploy scripts |
+| `ee/` | Enterprise-licensed code (everything else is MIT) |
+
+Detailed conventions live in project skills under `.cursor/skills/`:
+`propel-backend`, `propel-frontend`, `propel-data-pipeline`, `propel-infra-deploy`.
+
+Key facts:
+- Local dev runs in docker compose (project `propel`): `postgres` (:5432), `backend` (:8000), `frontend` (:5173), `ingestion`/Dagster (:3001).
+- Multi-tenancy is enforced in application code (membership checks + `tenant_id` filters) — there is no Postgres RLS.
+- Quality gates (CI runs all of these): backend `uv run ruff check . && uv run ruff format --check . && uv run pytest`; frontend `npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run build:landing`; terraform `terraform fmt -check -recursive`.

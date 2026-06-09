@@ -27,3 +27,9 @@ class ConnectionStatusUpdate(BaseModel):
 
 class GitHubInstallURL(BaseModel):
     install_url: str
+
+
+class InstallationSyncResult(BaseModel):
+    created: int
+    updated: int
+    revoked: int

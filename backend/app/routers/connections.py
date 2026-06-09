@@ -15,6 +15,7 @@ from app.schemas.connection import (
     ConnectionRead,
     ConnectionStatusUpdate,
     GitHubInstallURL,
+    InstallationSyncResult,
 )
 from app.services import connections as connection_service
 
@@ -62,6 +63,40 @@ async def update_connection(
         session, ctx.tenant.id, connection_id, payload
     )
     return ConnectionRead.model_validate(account)
+
+
+@router.get("/connections/github/app", response_model=GitHubInstallURL)
+async def github_public_install_url(
+    user: User = Depends(current_active_user),
+):
+    """Public GitHub App install URL for onboarding (no tenant required).
+
+    Installing the app is all an org needs: discovery auto-provisions the
+    tenant + connection and imports the member roster with roles.
+    """
+    if not settings.github_app_slug:
+        raise HTTPException(
+            status_code=503, detail="GitHub App is not configured for this deployment"
+        )
+    return GitHubInstallURL(
+        install_url=(
+            f"https://github.com/apps/{settings.github_app_slug}/installations/new"
+        )
+    )
+
+
+@router.post("/connections/github/sync", response_model=InstallationSyncResult)
+async def sync_github_installations(
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Reconcile connections with GitHub installations on demand.
+
+    Lets onboarding pick up a fresh install immediately ("I've installed it")
+    instead of waiting for the webhook or the hourly schedule. Idempotent.
+    """
+    summary = await connection_service.sync_installations_from_github(session)
+    return InstallationSyncResult(**summary)
 
 
 @router.get("/connections/github/setup")

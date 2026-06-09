@@ -189,14 +189,34 @@ async def _active_github_accounts(
     return list(result.scalars().all())
 
 
-async def discover_installed_orgs(account_id: uuid.UUID | None = None) -> int:
-    """Log the active connected GitHub orgs (installations) we will ingest.
+async def _sync_installations() -> None:
+    """Reconcile connected_accounts with the App's installations on GitHub.
 
-    This is the first, lightweight step in the granular Dagster DAG ("get
-    installed orgs"). It does no GitHub I/O — it surfaces which installations are
-    active so the downstream per-resource ops have visible context in the logs.
-    Returns the number of active accounts.
+    Best effort: a GitHub outage must not block ingestion of already-known
+    accounts, so failures are logged and swallowed.
     """
+    from app.services import connections as connection_service
+
+    try:
+        async with async_session_maker() as session:
+            await connection_service.sync_installations_from_github(session)
+    except Exception:  # noqa: BLE001 — discovery must not block ingestion
+        logger.exception(
+            "GitHub installation sync failed; continuing with known accounts",
+            extra={"event": "extraction.discover"},
+        )
+
+
+async def discover_installed_orgs(account_id: uuid.UUID | None = None) -> int:
+    """Sync and log the connected GitHub orgs (installations) we will ingest.
+
+    This is the first step in the granular Dagster DAG ("get installed orgs").
+    For unscoped runs it first reconciles connected_accounts against the App's
+    installations on GitHub, so installing the app is all an org needs to be
+    ingested. Returns the number of active accounts.
+    """
+    if account_id is None:
+        await _sync_installations()
     async with async_session_maker() as session:
         accounts = await _active_github_accounts(session, account_id)
 
@@ -219,9 +239,13 @@ async def list_active_accounts(
 ) -> list[tuple[str, str | None]]:
     """Return ``(account_id, org_login)`` for active GitHub accounts.
 
-    Used by the Dagster schedule to fan out one run per org. Returns plain tuples
-    (not ORM rows) so the caller can use them after the session closes.
+    Used by the Dagster schedule to fan out one run per org. Unscoped calls
+    first sync installations from GitHub so newly installed orgs are picked up
+    without any manual connect step. Returns plain tuples (not ORM rows) so the
+    caller can use them after the session closes.
     """
+    if account_id is None:
+        await _sync_installations()
     async with async_session_maker() as session:
         accounts = await _active_github_accounts(session, account_id)
     return [(str(account.id), account.external_account_name) for account in accounts]

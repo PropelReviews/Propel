@@ -61,6 +61,7 @@ module "database" {
   max_acu               = var.db_max_acu
   skip_final_snapshot   = var.db_skip_final_snapshot
   deletion_protection   = var.db_deletion_protection
+  enable_data_api       = var.db_enable_data_api
   tags                  = var.tags
 }
 

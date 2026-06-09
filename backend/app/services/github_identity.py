@@ -76,6 +76,73 @@ async def sync_and_link(
     await session.commit()
 
 
+async def import_roster_for_account(
+    session: AsyncSession,
+    account: ConnectedAccount,
+) -> int:
+    """Import the org's full member roster directly from the GitHub API.
+
+    Unlike `sync_and_link` (which reads what the ingestion pipeline already
+    landed in `raw_record`), this hits GitHub live so that members and their
+    org roles exist as `external_identities` the moment an org connects —
+    before the first ingestion run. Members who later sign up are then linked
+    and given their role immediately. Returns the roster size.
+    """
+    from app.integrations.github import app_auth
+
+    org = account.external_account_name
+    if not org:
+        return 0
+
+    token = await app_auth.get_installation_token(account.external_account_id)
+    members = await app_auth.list_org_members(token.token, org)
+    admin_logins = await app_auth.list_org_admin_logins(token.token, org)
+
+    roster: list[RosterEntry] = []
+    for member in members:
+        if member.get("id") is None or not member.get("login"):
+            continue
+        login = str(member["login"])
+        roster.append(
+            RosterEntry(
+                external_user_id=str(member["id"]),
+                login=login,
+                email=None,
+                name=None,
+                org_role=(
+                    GitHubOrgRole.admin.value
+                    if login in admin_logins
+                    else GitHubOrgRole.member.value
+                ),
+                metadata={
+                    "avatar_url": member.get("avatar_url"),
+                    "site_admin": member.get("site_admin"),
+                    "html_url": member.get("html_url"),
+                },
+            )
+        )
+    if not roster:
+        return 0
+
+    await _upsert_identities(session, account, roster)
+    await session.commit()
+    await _link_and_provision(session, account)
+    await _reconcile_roles(session, account)
+    await session.commit()
+
+    logger.info(
+        "Imported GitHub org roster",
+        extra={
+            "event": "identity.roster_import",
+            "tenant.id": str(account.tenant_id),
+            "connected_account.id": str(account.id),
+            "github.org": org,
+            "identity.count": len(roster),
+        },
+    )
+    return len(roster)
+
+
 async def _build_roster(
     session: AsyncSession,
     account: ConnectedAccount,
@@ -153,8 +220,12 @@ async def _upsert_identities(
             )
             session.add(identity)
         identity.external_login = entry.login
-        identity.external_email = entry.email
-        identity.external_name = entry.name
+        # Don't erase enrichment from a previous profile sync: the roster import
+        # path (org members API) never carries emails or names.
+        if entry.email is not None:
+            identity.external_email = entry.email
+        if entry.name is not None:
+            identity.external_name = entry.name
         identity.github_org_role = entry.org_role
         identity.meta = entry.metadata
         identity.last_synced_at = now
@@ -364,6 +435,41 @@ async def link_oauth_identity(
             continue
         identity.propel_user_id = user_id
         identity.link_method = IdentityLinkMethod.oauth_id.value
+        identity.status = IdentityStatus.linked.value
+        identity.linked_at = datetime.now(UTC)
+        await _ensure_membership(
+            session,
+            identity.tenant_id,
+            user_id,
+            _propel_role(identity.github_org_role),
+        )
+    await session.commit()
+
+
+async def link_email_identity(
+    session: AsyncSession, user_id: uuid.UUID, email: str
+) -> None:
+    """Claim pending GitHub identities whose email matches a just-registered user.
+
+    Called after email/password registration so members imported from an org
+    roster get their tenant membership and role the moment they sign up.
+    """
+    result = await session.execute(
+        select(ExternalIdentity).where(
+            ExternalIdentity.provider == _GITHUB,
+            func.lower(ExternalIdentity.external_email) == email.lower(),
+            ExternalIdentity.propel_user_id.is_(None),
+        )
+    )
+    identities = list(result.scalars().all())
+    if not identities:
+        return
+
+    for identity in identities:
+        if await _user_already_linked(session, identity.tenant_id, user_id):
+            continue
+        identity.propel_user_id = user_id
+        identity.link_method = IdentityLinkMethod.email.value
         identity.status = IdentityStatus.linked.value
         identity.linked_at = datetime.now(UTC)
         await _ensure_membership(
