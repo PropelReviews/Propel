@@ -65,27 +65,38 @@ resource "aws_security_group" "alb" {
 }
 
 # ECS tasks: only reachable from the ALB on the container port.
+#
+# Rules are standalone aws_security_group_rule resources (NOT inline ingress/
+# egress blocks) because other modules attach additional rules to this group
+# (e.g. the Dagster webserver port in modules/api/ingestion.tf). Mixing inline
+# and standalone rules on one group is unsupported: each apply would reconcile
+# the group back to its inline rules and silently revoke the external ones,
+# which broke the ingestion service's ALB health checks.
 resource "aws_security_group" "ecs" {
   name        = "${var.name_prefix}-ecs"
   description = "ECS Fargate tasks"
   vpc_id      = module.vpc.vpc_id
 
-  ingress {
-    description     = "From ALB"
-    from_port       = var.container_port
-    to_port         = var.container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = merge(var.tags, { Name = "${var.name_prefix}-ecs" })
+}
+
+resource "aws_security_group_rule" "ecs_from_alb" {
+  type                     = "ingress"
+  description              = "From ALB"
+  from_port                = var.container_port
+  to_port                  = var.container_port
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.ecs.id
+  source_security_group_id = aws_security_group.alb.id
+}
+
+resource "aws_security_group_rule" "ecs_egress" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.ecs.id
 }
 
 # RDS: only reachable from the ECS tasks on 5432.
