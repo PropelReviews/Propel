@@ -6,10 +6,12 @@ import uuid
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
+from sqlalchemy import select
 from tests.conftest import auth_headers, create_tenant, login_user, register_user
 
 from app.db.session import async_session_maker
 from app.models.connected_account import ConnectedAccount
+from app.models.tenant import Tenant
 from app.services import connections as connection_service
 
 
@@ -188,3 +190,144 @@ async def test_webhook_bad_signature_rejected(client: AsyncClient, monkeypatch):
         },
     )
     assert response.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# Installation discovery
+# --------------------------------------------------------------------------- #
+def _installation_payload(
+    installation_id: int, login: str, suspended: bool = False
+) -> dict:
+    return {
+        "id": installation_id,
+        "account": {"login": login},
+        "permissions": {"members": "read"},
+        "suspended_at": "2026-01-01T00:00:00Z" if suspended else None,
+    }
+
+
+def _mock_installations(monkeypatch, installations: list[dict]) -> None:
+    async def fake_list() -> list[dict]:
+        return installations
+
+    monkeypatch.setattr(connection_service.app_auth, "list_installations", fake_list)
+
+
+async def _get_account(installation_id: str) -> ConnectedAccount:
+    async with async_session_maker() as session:
+        return (
+            await session.execute(
+                select(ConnectedAccount).where(
+                    ConnectedAccount.external_account_id == installation_id
+                )
+            )
+        ).scalar_one()
+
+
+@pytest.fixture(autouse=True)
+def roster_imports(monkeypatch):
+    """Roster import hits GitHub live; stub it out and record the orgs imported."""
+    imported: list[str] = []
+
+    async def fake_import(session, account):
+        imported.append(account.external_account_name)
+        return 0
+
+    monkeypatch.setattr(
+        connection_service.github_identity, "import_roster_for_account", fake_import
+    )
+    return imported
+
+
+@pytest.mark.asyncio
+async def test_sync_installations_auto_provisions_tenant(
+    clean_db, monkeypatch, roster_imports
+):
+    _mock_installations(monkeypatch, [_installation_payload(555, "AcmeOrg")])
+
+    async with async_session_maker() as session:
+        summary = await connection_service.sync_installations_from_github(session)
+    assert summary == {"created": 1, "updated": 0, "revoked": 0}
+    # A fresh org install triggers an immediate member-roster import.
+    assert roster_imports == ["AcmeOrg"]
+
+    account = await _get_account("555")
+    assert account.status == "active"
+    assert account.external_account_name == "AcmeOrg"
+    async with async_session_maker() as session:
+        tenant = await session.get(Tenant, account.tenant_id)
+    assert tenant.slug == "acmeorg"
+    assert tenant.name == "AcmeOrg"
+
+    # Re-running is a no-op.
+    async with async_session_maker() as session:
+        summary = await connection_service.sync_installations_from_github(session)
+    assert summary == {"created": 0, "updated": 0, "revoked": 0}
+
+
+@pytest.mark.asyncio
+async def test_sync_installations_reuses_tenant_by_slug(clean_db, monkeypatch):
+    async with async_session_maker() as session:
+        tenant = Tenant(name="Acme", slug="acmeorg")
+        session.add(tenant)
+        await session.commit()
+        await session.refresh(tenant)
+
+    _mock_installations(monkeypatch, [_installation_payload(556, "AcmeOrg")])
+    async with async_session_maker() as session:
+        await connection_service.sync_installations_from_github(session)
+
+    account = await _get_account("556")
+    assert account.tenant_id == tenant.id
+
+
+@pytest.mark.asyncio
+async def test_sync_installations_pauses_and_revokes(clean_db, monkeypatch):
+    _mock_installations(
+        monkeypatch,
+        [_installation_payload(1, "OrgOne"), _installation_payload(2, "OrgTwo")],
+    )
+    async with async_session_maker() as session:
+        await connection_service.sync_installations_from_github(session)
+
+    # OrgOne is now suspended; OrgTwo uninstalled the app entirely.
+    _mock_installations(
+        monkeypatch, [_installation_payload(1, "OrgOne", suspended=True)]
+    )
+    async with async_session_maker() as session:
+        summary = await connection_service.sync_installations_from_github(session)
+    assert summary == {"created": 0, "updated": 1, "revoked": 1}
+
+    assert (await _get_account("1")).status == "paused"
+    assert (await _get_account("2")).status == "revoked"
+
+
+@pytest.mark.asyncio
+async def test_webhook_created_auto_provisions(client: AsyncClient, monkeypatch):
+    monkeypatch.setattr(
+        connection_service.settings, "github_app_webhook_secret", "whsec"
+    )
+    payload = {
+        "action": "created",
+        "installation": _installation_payload(777, "NewOrg"),
+    }
+    body = json.dumps(payload).encode()
+    signature = "sha256=" + hmac.new(b"whsec", body, hashlib.sha256).hexdigest()
+
+    response = await client.post(
+        "/api/v1/webhooks/github",
+        content=body,
+        headers={
+            "X-Hub-Signature-256": signature,
+            "X-GitHub-Event": "installation",
+            "Content-Type": "application/json",
+        },
+    )
+    assert response.status_code == 202
+
+    account = await _get_account("777")
+    assert account.status == "active"
+    assert account.external_account_name == "NewOrg"
+    async with async_session_maker() as session:
+        tenant = await session.get(Tenant, account.tenant_id)
+    assert tenant.slug == "neworg"

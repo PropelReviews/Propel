@@ -41,7 +41,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         return user
 
     async def on_after_register(self, user: User, request: Request | None = None):
-        pass
+        # Claim any pending GitHub org identities with a matching email so the
+        # new user lands in their org's workspace with the right role.
+        await github_identity.link_email_identity(
+            self.user_db.session, user.id, user.email
+        )
 
     async def oauth_callback(self, oauth_name: str, *args, **kwargs) -> User:
         user = await super().oauth_callback(oauth_name, *args, **kwargs)

@@ -55,6 +55,12 @@ variable "deletion_protection" {
   default     = false
 }
 
+variable "enable_data_api" {
+  type        = bool
+  description = "Enable the RDS Data API (HTTP endpoint) for query access without a VPC connection (debugging)."
+  default     = false
+}
+
 variable "tags" {
   type        = map(string)
   description = "Tags applied to all resources."

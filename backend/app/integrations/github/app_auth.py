@@ -89,6 +89,36 @@ async def get_installation(installation_id: str) -> dict:
     return response.json()
 
 
+async def list_installations() -> list[dict]:
+    """List every installation of the GitHub App via the app JWT (paginated)."""
+    app_jwt = mint_app_jwt()
+    headers = {
+        "Authorization": f"Bearer {app_jwt}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    installations: list[dict] = []
+    url: str | None = f"{GITHUB_API}/app/installations?per_page=100"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while url:
+            response = await client.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(
+                    "GitHub installation listing failed",
+                    extra={
+                        "event": "github.app_auth",
+                        "http.status_code": response.status_code,
+                    },
+                )
+                raise GitHubAppAuthError(
+                    f"Installation listing failed ({response.status_code}): "
+                    f"{response.text}"
+                )
+            installations.extend(response.json())
+            url = _next_page_url(response.headers.get("link"))
+    return installations
+
+
 async def get_installation_token(installation_id: str) -> InstallationToken:
     """Exchange the app JWT for an installation access token (~1 hour TTL)."""
     app_jwt = mint_app_jwt()
@@ -163,6 +193,41 @@ async def list_installation_repositories(token: str) -> list[str]:
                     repos.append(repo["full_name"])
             url = _next_page_url(response.headers.get("link"))
     return repos
+
+
+async def list_org_members(token: str, org: str) -> list[dict]:
+    """List all org members (any role) via `GET /orgs/{org}/members`.
+
+    Returns the raw member payloads (login, id, avatar_url, ...). Emails are not
+    included — the members endpoint never exposes them; profile enrichment
+    happens later via the user-profiles ingestion job.
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    members: list[dict] = []
+    url: str | None = f"{GITHUB_API}/orgs/{org}/members?per_page=100"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while url:
+            response = await client.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(
+                    "GitHub org member listing failed",
+                    extra={
+                        "event": "github.app_auth",
+                        "github.org": org,
+                        "http.status_code": response.status_code,
+                    },
+                )
+                raise GitHubAppAuthError(
+                    f"Org member listing failed ({response.status_code}): "
+                    f"{response.text}"
+                )
+            members.extend(response.json())
+            url = _next_page_url(response.headers.get("link"))
+    return members
 
 
 async def list_org_admin_logins(token: str, org: str) -> set[str]:

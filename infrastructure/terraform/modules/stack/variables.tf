@@ -70,6 +70,12 @@ variable "db_deletion_protection" {
   description = "Enable RDS deletion protection."
 }
 
+variable "db_enable_data_api" {
+  type        = bool
+  default     = false
+  description = "Enable the RDS Data API (HTTP endpoint) for debugging access."
+}
+
 variable "app_environment" {
   type        = map(string)
   default     = {}

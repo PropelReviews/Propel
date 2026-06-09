@@ -203,3 +203,34 @@ export type Tenant = {
 export async function listTenants(token: string): Promise<Tenant[]> {
   return authedGet<Tenant[]>("/api/v1/tenants/", token);
 }
+
+/**
+ * Public GitHub App install URL for onboarding. Installing the app is all an
+ * org needs — the backend auto-provisions the workspace and imports members.
+ */
+export async function getGithubAppInstallUrl(token: string): Promise<string> {
+  const { install_url } = await authedGet<{ install_url: string }>(
+    "/api/v1/connections/github/app",
+    token,
+  );
+  return install_url;
+}
+
+export type InstallationSyncResult = {
+  created: number;
+  updated: number;
+  revoked: number;
+};
+
+/** Ask the backend to reconcile connections with GitHub installations now. */
+export async function syncGithubInstallations(
+  token: string,
+): Promise<InstallationSyncResult> {
+  const response = await fetch(`${API_BASE}/api/v1/connections/github/sync`, {
+    method: "POST",
+    headers: apiHeaders({ Authorization: `Bearer ${token}` }),
+  });
+  const body = await parseJson(response);
+  if (!response.ok) throw extractError(response.status, body);
+  return body as InstallationSyncResult;
+}

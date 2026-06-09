@@ -33,6 +33,9 @@ module "stack" {
   db_max_acu             = var.db_max_acu
   db_skip_final_snapshot = true
   db_deletion_protection = false
+  # Data API on in beta only, for ad-hoc query debugging (already enabled
+  # manually on the cluster; this keeps Terraform from turning it back off).
+  db_enable_data_api = true
 
   api_image_tag     = var.api_image_tag
   api_desired_count = var.api_desired_count
