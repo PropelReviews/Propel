@@ -314,9 +314,7 @@ async def sync_installations_from_github(session: AsyncSession) -> dict[str, int
         account = result.scalar_one_or_none()
         if account is None:
             tenant = await _tenant_for_org_login(session, login)
-            account = _provision_account_for_installation(
-                session, tenant, installation
-            )
+            account = _provision_account_for_installation(session, tenant, installation)
             new_accounts.append(account)
             created += 1
             logger.info(

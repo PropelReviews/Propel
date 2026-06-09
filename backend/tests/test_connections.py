@@ -210,9 +210,7 @@ def _mock_installations(monkeypatch, installations: list[dict]) -> None:
     async def fake_list() -> list[dict]:
         return installations
 
-    monkeypatch.setattr(
-        connection_service.app_auth, "list_installations", fake_list
-    )
+    monkeypatch.setattr(connection_service.app_auth, "list_installations", fake_list)
 
 
 async def _get_account(installation_id: str) -> ConnectedAccount:
