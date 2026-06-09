@@ -2,6 +2,9 @@
   "plugins": {
     "posthog": {
       "enabled": true
+    },
+    "dbt": {
+      "enabled": true
     }
   }
 }

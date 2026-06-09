@@ -8,6 +8,11 @@ dependencies = [
     "dagster>=1.9,<2",
     "dagster-webserver>=1.9,<2",
     "dagster-postgres>=0.25,<1",
+    # dbt analytics layer: models in transformation/dbt run as Dagster assets
+    # (dagster-dbt), executed by dbt-core against the app's Postgres.
+    "dagster-dbt>=0.25,<1",
+    "dbt-core>=1.8,<2",
+    "dbt-postgres>=1.8,<2",
     # psycopg2 is needed by scripts/prepare_dagster_db.py and Dagster's Postgres
     # storage. The remaining backend runtime deps required to import the `app`
     # package in-process (fastapi-users, sqlalchemy, httpx, posthog, otel, …) are

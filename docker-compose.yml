@@ -87,6 +87,13 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion}
       DAGSTER_HOME: /tmp/dagster
+      # dbt connection for manual `docker compose exec ingestion dbt ...` runs;
+      # Dagster-launched runs derive the same values from DATABASE_URL.
+      DBT_HOST: postgres
+      DBT_PORT: "5432"
+      DBT_USER: ${POSTGRES_USER:-propel}
+      DBT_PASSWORD: ${POSTGRES_PASSWORD:-propel}
+      DBT_DBNAME: ${POSTGRES_DB:-propel}
       # Run Dagster from its own venv; import bind-mounted `app` + orchestration.
       PATH: /opt/orchestration-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       PYTHONPATH: /app:/orchestration
@@ -98,6 +105,9 @@ services:
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
       - ${PROPEL_HOST_DIR:-.}/orchestration:/orchestration
+      # dbt project (transformation/dbt) — Dagster's analytics assets run
+      # `dbt build` against it.
+      - ${PROPEL_HOST_DIR:-.}/transformation:/transformation
       # Meltano's .meltano (plugin venvs + SQLite systemdb) on a dedicated volume,
       # NOT the bind mount: WAL/locking is reliable on the volume filesystem and it
       # isn't shared with other containers, so no "database is locked" races.

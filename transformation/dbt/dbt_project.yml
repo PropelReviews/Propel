@@ -1,0 +1,24 @@
+name: propel
+version: "1.0.0"
+profile: propel
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+
+vars:
+  # When set (by the Dagster analytics run), incremental marts only recompute
+  # this tenant's rows. Unset (manual / full-refresh) builds every tenant.
+  tenant_id: null
+
+models:
+  propel:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

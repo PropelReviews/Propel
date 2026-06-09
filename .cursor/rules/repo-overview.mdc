@@ -22,4 +22,4 @@ Detailed conventions live in project skills under `.cursor/skills/`:
 Key facts:
 - Local dev runs in docker compose (project `propel`): `postgres` (:5432), `backend` (:8000), `frontend` (:5173), `ingestion`/Dagster (:3001).
 - Multi-tenancy is enforced in application code (membership checks + `tenant_id` filters) — there is no Postgres RLS.
-- Quality gates (CI runs all of these): backend `uv run ruff check . && uv run ruff format --check . && uv run pytest`; frontend `npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run build:landing`; terraform `terraform fmt -check -recursive`.
+- Quality gates (CI runs all of these): backend `uv run ruff check . && uv run ruff format --check . && uv run pytest`; frontend `npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run build:landing`; terraform `terraform fmt -check -recursive`; dbt `sqlfluff lint models` + fixture-backed `dbt build` (see `transformation/README.md`).

@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: propel
+    description: Raw landing tables written by the ingestion pipeline (Meltano -> target-propel).
+    schema: public
+    tables:
+      - name: raw_record
+        description: >
+          Append-only full payloads for every Singer stream. PR rows
+          (resource_type = 'pull_requests') carry the complete GitHub PR object
+          including state, created_at, closed_at, and merged_at.
+        meta:
+          dagster:
+            # Link dbt lineage to the asset the ingestion ops already
+            # materialize, so the Dagster graph is connected end to end.
+            asset_key: ["github", "pull_requests"]

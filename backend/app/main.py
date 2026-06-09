@@ -8,7 +8,15 @@ from app.config import get_settings
 from app.feature_flags import init_posthog, shutdown_posthog
 from app.logging_middleware import RequestLoggingMiddleware
 from app.otel_logging import setup_logging, shutdown_logging
-from app.routers import auth, connections, ingestion, invites, members, tenants
+from app.routers import (
+    auth,
+    connections,
+    ingestion,
+    invites,
+    members,
+    metrics,
+    tenants,
+)
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
 
 settings = get_settings()
@@ -50,6 +58,7 @@ app.include_router(members.github_members_router)
 app.include_router(invites.router)
 app.include_router(connections.router)
 app.include_router(ingestion.router)
+app.include_router(metrics.router)
 
 
 @app.get("/")

@@ -112,14 +112,18 @@ async def run_all(
     *,
     account_id: uuid.UUID | None = None,
     job_name: str | None = None,
+    start_date: str | None = None,
 ) -> list[IngestionRun]:
     """Run the matching jobs for the matching accounts.
 
     Scopes to a single org when ``account_id`` is set (the per-org Dagster runs
     pass it from the run tags); with ``account_id=None`` it processes every
-    active account (manual "run everything"). Returns the ``IngestionRun`` rows
-    that actually executed (overlap-skipped runs are omitted) so callers can
-    report per-resource outcomes (e.g. Dagster asset materializations).
+    active account (manual "run everything"). ``start_date`` (ISO date)
+    overrides the stored watermark for time-based backfills — the taps re-pull
+    everything since that date and the DB-level dedupe absorbs the overlap.
+    Returns the ``IngestionRun`` rows that actually executed (overlap-skipped
+    runs are omitted) so callers can report per-resource outcomes (e.g. Dagster
+    asset materializations).
     """
     jobs = [j for j in JOBS if job_name is None or j.name == job_name]
     if not jobs:
@@ -161,7 +165,9 @@ async def run_all(
             # Each (account, job) uses its own short-lived session so a failure
             # is isolated and the run row is always finalized.
             async with async_session_maker() as session:
-                run = await run_account_job(session, account, job)
+                run = await run_account_job(
+                    session, account, job, start_date_override=start_date
+                )
             if run is not None:
                 runs.append(run)
 
@@ -252,7 +258,11 @@ async def list_active_accounts(
 
 
 async def run_account_job(
-    session: AsyncSession, account: ConnectedAccount, job: JobSpec
+    session: AsyncSession,
+    account: ConnectedAccount,
+    job: JobSpec,
+    *,
+    start_date_override: str | None = None,
 ) -> IngestionRun | None:
     if await _has_running(session, account.id, job.resource_type):
         logger.info(
@@ -283,7 +293,9 @@ async def run_account_job(
         extra=_ingestion_extra(account, job, run=run, status="running"),
     )
     try:
-        env = await _build_env(session, account, job, run)
+        env = await _build_env(
+            session, account, job, run, start_date_override=start_date_override
+        )
         if env is None:
             await _finalize(session, run, status=IngestionRunStatus.success)
             logger.info(
@@ -442,8 +454,20 @@ async def _build_env(
     account: ConnectedAccount,
     job: JobSpec,
     run: IngestionRun,
+    *,
+    start_date_override: str | None = None,
 ) -> dict[str, str] | None:
-    """Build the per-run environment, or None to skip (nothing to ingest)."""
+    """Build the per-run environment, or None to skip (nothing to ingest).
+
+    ``start_date_override`` (ISO date) replaces the watermark-derived
+    ``TAP_GITHUB_START_DATE`` for time-based backfills.
+    """
+
+    async def resolved_start_date() -> str:
+        if start_date_override:
+            return start_date_override
+        return await _start_date(session, account.id, job.resource_type)
+
     if account.auth_type != AuthType.github_app_installation.value:
         skip_extra = _ingestion_extra(
             account, job, run=run, skip_reason="unsupported_auth_type"
@@ -480,9 +504,7 @@ async def _build_env(
             )
             return None
         env["TAP_GITHUB_REPOSITORIES"] = json.dumps(repos)
-        env["TAP_GITHUB_START_DATE"] = await _start_date(
-            session, account.id, job.resource_type
-        )
+        env["TAP_GITHUB_START_DATE"] = await resolved_start_date()
 
     if job.needs_org and not account.external_account_name:
         logger.info(
@@ -498,9 +520,7 @@ async def _build_env(
 
     if job.org_mode == "array":
         env["TAP_GITHUB_ORGANIZATIONS"] = json.dumps([account.external_account_name])
-        env["TAP_GITHUB_START_DATE"] = await _start_date(
-            session, account.id, job.resource_type
-        )
+        env["TAP_GITHUB_START_DATE"] = await resolved_start_date()
     elif job.org_mode == "copilot":
         env["COPILOT_ORG"] = account.external_account_name
 
@@ -518,9 +538,7 @@ async def _build_env(
             )
             return None
         env["TAP_GITHUB_USER_USERNAMES"] = json.dumps(logins)
-        env["TAP_GITHUB_START_DATE"] = await _start_date(
-            session, account.id, job.resource_type
-        )
+        env["TAP_GITHUB_START_DATE"] = await resolved_start_date()
 
     return env
 

@@ -1,56 +1,83 @@
 # Propel Orchestration (Dagster)
 
-Dagster is the scheduler for Propel ingestion. It runs as a long-running ECS
-service (daemon + webserver) that triggers ingestion on an hourly schedule. The
-extraction pipeline itself (Meltano taps + `target-propel`) lives in
-[`../backend`](../backend) and is unchanged.
+Dagster orchestrates Propel's ingestion **and** analytics. It runs as a
+long-running ECS service (daemon + webserver). The extraction pipeline itself
+(Meltano taps + `target-propel`) lives in [`../backend`](../backend); the dbt
+models live in [`../transformation/dbt`](../transformation).
 
-`ingestion_job` is a granular DAG — one op per GitHub resource — and runs **once
-per org**: the schedule lists active installations and fans out a separate run
-for each, so a slow or failing org is isolated to its own run/UI entry.
+The pipeline is an event-driven job chain (sensors, not per-org cron):
 
 ```
-discover_orgs ─┬─> get_org_members ──> get_user_profiles ─┐
-               ├─> get_commits ───────────────────────────┤
-               ├─> get_pull_requests ─────────────────────┤
-               ├─> get_issues ────────────────────────────┤
-               └─> get_copilot_usage ─────────────────────┴─> flush_logs
+hourly ──> discovery_job ──org_fanout_sensor──> org_ingestion_job (x N orgs)
+                                                       │
+                                              analytics_sensor (per success)
+                                                       ▼
+                                  analytics_assets_job (dbt, tenant partition)
 ```
 
-- **One run per org.** `ingestion_schedule` queries active orgs each hour and
-  emits a `RunRequest` per org, tagged `propel/account_id` + `propel/org`. Each
-  op reads the tag and calls `orchestrator.run_all(account_id=..., job_name=...)`
-  scoped to that org. Launching the job manually from the Launchpad with no tag
-  processes every active org in one run.
+Per-org ingestion DAG:
+
+```
+start_org_ingestion ─┬─> get_org_members ──> get_user_profiles ─┐
+                     ├─> get_commits ───────────────────────────┤
+                     ├─> get_pull_requests ─────────────────────┤
+                     ├─> get_issues ────────────────────────────┤
+                     └─> get_copilot_usage ─────────────────────┴─> flush_logs
+```
+
+- **`discovery_job`** (hourly via `discovery_schedule`) reconciles
+  `connected_accounts` against the GitHub App's installations.
+- **One run per org.** `org_fanout_sensor` fires on discovery success and emits
+  a `RunRequest` per active org, tagged `propel/account_id` + `propel/org`.
+  Each op reads the tag and calls
+  `orchestrator.run_all(account_id=..., job_name=...)` scoped to that org, so a
+  slow or failing org is isolated to its own run/UI entry. Launching
+  `org_ingestion_job` manually with no tag processes every active org in one
+  run.
+- **Incremental + backfills.** Raw pulls are watermark-driven (per
+  account/resource, 1-day overlap, DB-level dedupe). Tag a manual launch with
+  `propel/start_date` (ISO date) to re-pull history from that date; the
+  analytics sensor recomputes the tenant's metrics automatically afterwards.
 - `get_user_profiles` runs after `get_org_members` (it targets the discovered
-  member logins); the repo-activity and Copilot ops fan out from discovery.
-  `flush_logs` fans in last to drain the OTLP batch handler before exit.
-- **Assets.** Each resource op emits an `AssetMaterialization` per
+  member logins). `flush_logs` fans in last to drain the OTLP batch handler.
+- **Analytics (dbt assets).** `analytics.py` loads `transformation/dbt` via
+  `dagster-dbt`, so every model is a software-defined asset with lineage from
+  the ingestion assets (`github/pull_requests` → `stg_github_pull_requests` →
+  `fct_pr_activity_daily`) and dbt tests as asset checks. Assets are
+  partitioned by tenant (`DynamicPartitionsDefinition("tenant")`);
+  `analytics_sensor` registers partitions and requests one tenant-scoped run
+  (`dbt build --vars '{tenant_id: ...}'`) per successful org ingestion run.
+  Runs carry `dagster/concurrency_key: dbt` and queue (limit 1, see
+  `dagster.yaml`) so delete+insert never races. Backfill any subset of tenants
+  from the UI's partition view.
+- **Ingestion assets.** Each resource op emits an `AssetMaterialization` per
   `ingestion_run` (asset keys `github/commits`, `github/issues`, …) with
-  `records_pulled` / `datapoints_written` / org metadata, so the Assets catalog
-  reflects what landed. (We use ops, not software-defined assets, because the
-  work is imperative extraction; the materialization events give the catalog +
-  lineage without modeling each resource as an SDA.)
+  `records_pulled` / `datapoints_written` / org metadata; matching `AssetSpec`s
+  make them real upstream nodes in the lineage graph.
 
 ```
 orchestration/
-  pyproject.toml                      deps: dagster + backend runtime deps
-  dagster.yaml                        prod Postgres storage (dedicated schema)
+  pyproject.toml                      deps: dagster + dagster-dbt + dbt + backend runtime deps
+  dagster.yaml                        prod Postgres storage + dbt run concurrency
   workspace.yaml                      code location -> propel_orchestration.definitions
   scripts/prepare_dagster_db.py       creates the `dagster` schema, prints DAGSTER_PG_URL
   propel_orchestration/
-    definitions.py                    Definitions(jobs, schedules)
-    jobs.py                           ingestion_job + hourly ingestion_schedule
+    definitions.py                    Definitions(assets, jobs, schedules, sensors, resources)
+    jobs.py                           discovery_job + org_ingestion_job + schedule + fan-out sensor
+    analytics.py                      dbt assets, tenant partitions, analytics sensor
     logging.py                        OTLP -> PostHog as service.name=propel-ingestion
 ```
 
 ## How it runs
 
-- The webserver and daemon load `propel_orchestration.definitions`. The op
-  imports the backend `app` package, which is made importable via `PYTHONPATH`
+- The webserver and daemon load `propel_orchestration.definitions`. The ops
+  import the backend `app` package, which is made importable via `PYTHONPATH`
   (not installed as a wheel) so the same source serves both projects.
-- `ingestion_schedule` auto-starts (`DefaultScheduleStatus.RUNNING`) and fires
-  `0 * * * *` (UTC), emitting one run per active org each tick.
+- `discovery_schedule` auto-starts (`DefaultScheduleStatus.RUNNING`) and fires
+  `0 * * * *` (UTC); both sensors also auto-start.
+- dbt connection credentials (`DBT_*`) are derived from `DATABASE_URL` at
+  module import (`analytics.py`); the dbt manifest is parsed on code-location
+  load in dev (`prepare_if_dev`) and baked at image build in prod.
 - Dagster's run/event/schedule storage shares the app's Postgres but lives in a
   dedicated `dagster` schema (see `scripts/prepare_dagster_db.py`) so its own
   `alembic_version` never collides with the app's migrations.
@@ -75,11 +102,13 @@ volume), so run history survives container resets and `docker compose down`. The
 entrypoint runs `scripts/prepare_dagster_db.py` and drops a Postgres
 `dagster.yaml` into `DAGSTER_HOME`; if the DB isn't reachable it falls back to
 ephemeral SQLite (history not persisted). To run a batch immediately without
-waiting for the schedule, trigger `ingestion_job` from the UI's Launchpad, or run
-the CLI directly:
+waiting for the schedule, trigger `discovery_job` (the sensors take it from
+there) or `org_ingestion_job` from the UI's Launchpad, or run the CLI directly:
 
 ```bash
 docker compose exec ingestion python -m app.ingestion.cli run
+# time-based backfill (re-pull history since a date; dedupe absorbs overlap)
+docker compose exec ingestion python -m app.ingestion.cli run --start-date 2026-01-01
 ```
 
 ## Production

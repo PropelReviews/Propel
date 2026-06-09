@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import logging
 import uuid
+from datetime import date
 
 from app.ingestion import orchestrator
 from app.otel_logging import setup_logging, shutdown_logging
@@ -37,6 +38,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Limit to a single Meltano job",
     )
+    run.add_argument(
+        "--start-date",
+        dest="start_date",
+        type=lambda raw: date.fromisoformat(raw).isoformat(),
+        default=None,
+        help="Backfill: override the watermark and re-pull since this ISO date",
+    )
     return parser
 
 
@@ -50,7 +58,11 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.command == "run":
             asyncio.run(
-                orchestrator.run_all(account_id=args.account_id, job_name=args.job_name)
+                orchestrator.run_all(
+                    account_id=args.account_id,
+                    job_name=args.job_name,
+                    start_date=args.start_date,
+                )
             )
     finally:
         if logging_enabled:

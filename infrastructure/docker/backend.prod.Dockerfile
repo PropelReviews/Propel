@@ -50,6 +50,15 @@ COPY backend/meltano ./meltano
 # Dagster orchestration project (definitions, schedule, storage prep).
 COPY orchestration ./orchestration
 
+# dbt project (analytics models), at the same path the dev compose mount uses.
+# Bake the parsed manifest so dagster-dbt loads the asset definitions at boot
+# without re-parsing (`prepare_if_dev` is a no-op outside `dagster dev`).
+# `dbt parse` never connects to the database, so the profile's env-var defaults
+# are fine at build time.
+COPY transformation /transformation
+RUN /opt/orchestration-venv/bin/dbt parse \
+    --project-dir /transformation/dbt --profiles-dir /transformation/dbt
+
 # Meltano is installed as an isolated uv tool (its pinned deps must not collide
 # with the app venv); the launcher lands on PATH at /usr/local/bin/meltano. Unlike
 # dev, prod has no bind mount, so install the plugins (taps + target-propel) into

@@ -1,27 +1,39 @@
-"""Dagster job + schedule that drive Propel ingestion.
+"""Dagster jobs, schedule, and fan-out sensor that drive Propel ingestion.
 
-``ingestion_job`` is a granular DAG — one op per GitHub resource — and is run
-**once per org**: the schedule lists active installations and fans out a separate
-run for each, tagged with the org's ``connected_account`` id. Each op reads that
-tag and scopes its work to the one org, so a failure or slow org is isolated to
-its own run and shows up as its own entry in the Dagster UI / PostHog (service
-``propel-ingestion``). Launching the job manually with no tag falls back to
-processing every active org in a single run.
+The pipeline is an event-driven job chain (no per-org cron):
+
+1. ``discovery_job`` — hourly (``discovery_schedule``). Reconciles
+   ``connected_accounts`` against the GitHub App's installations, so installing
+   the app is all an org needs to be ingested.
+2. ``org_ingestion_job`` — one run **per org**, launched by
+   ``org_fanout_sensor`` when a discovery run succeeds. Each run is tagged with
+   the org's ``connected_account`` id, so a failure or slow org is isolated to
+   its own run and shows up as its own entry in the Dagster UI / PostHog
+   (service ``propel-ingestion``). Launching the job manually with no tag falls
+   back to processing every active org in a single run.
+3. Analytics — ``analytics_sensor`` (see ``analytics.py``) fires a
+   tenant-partitioned dbt run whenever an ``org_ingestion_job`` run succeeds.
 
 DAG shape (per org)::
 
-    discover_orgs ─┬─> get_org_members ──> get_user_profiles ─┐
-                   ├─> get_commits ───────────────────────────┤
-                   ├─> get_pull_requests ──────────────────────┤
-                   ├─> get_issues ─────────────────────────────┤
-                   └─> get_copilot_usage ──────────────────────┴─> flush_logs
+    start_org_ingestion ─┬─> get_org_members ──> get_user_profiles ─┐
+                         ├─> get_commits ───────────────────────────┤
+                         ├─> get_pull_requests ──────────────────────┤
+                         ├─> get_issues ─────────────────────────────┤
+                         └─> get_copilot_usage ──────────────────────┴─> flush_logs
 
 ``get_user_profiles`` runs after ``get_org_members`` (it targets the member
 logins discovered by the roster sync). The repo-activity ops and Copilot only
-need the installed org, so they fan out from discovery. Each resource op emits an
-``AssetMaterialization`` per ``ingestion_run`` so the Assets catalog shows what
-landed (records pulled, datapoints written) per resource. ``flush_logs`` fans in
-last to drain the OTLP batch handler before the run worker process exits.
+need the installed org. Each resource op emits an ``AssetMaterialization`` per
+``ingestion_run`` so the Assets catalog shows what landed (records pulled,
+datapoints written) per resource. ``flush_logs`` fans in last to drain the OTLP
+batch handler before the run worker process exits.
+
+Backfills: ingestion is incremental (watermark per account/resource with a
+1-day overlap; DB-level dedupe). To re-pull history, launch
+``org_ingestion_job`` with the ``propel/start_date`` tag (ISO date) — it
+overrides the watermark and the analytics sensor recomputes the tenant's
+metrics afterwards automatically.
 """
 
 import asyncio
@@ -30,30 +42,37 @@ import logging
 import shutil
 import time
 import uuid
+from datetime import date
 
 from dagster import (
     AssetKey,
     AssetMaterialization,
+    DagsterRunStatus,
     DefaultScheduleStatus,
+    DefaultSensorStatus,
     In,
     MetadataValue,
     Nothing,
     OpExecutionContext,
     Out,
     RunRequest,
+    RunStatusSensorContext,
     ScheduleEvaluationContext,
     SkipReason,
     in_process_executor,
     job,
     op,
+    run_status_sensor,
     schedule,
 )
 
 logger = logging.getLogger("propel.ingestion.dagster")
 
-# Run tags carrying the per-org scope (set by the schedule's RunRequests).
+# Run tags carrying the per-org scope (set by the fan-out sensor's RunRequests)
+# and the optional backfill start-date override.
 _ACCOUNT_TAG = "propel/account_id"
 _ORG_TAG = "propel/org"
+_START_DATE_TAG = "propel/start_date"
 
 # Asset key per Meltano job, so the Assets catalog has one node per GitHub
 # resource (materialized per org on every run).
@@ -85,16 +104,35 @@ def _run(coro):
     return _event_loop.run_until_complete(coro)
 
 
-def _run_scope(context: OpExecutionContext) -> tuple[uuid.UUID | None, str | None]:
-    """Resolve the (account_id, org) this run is scoped to from its run tags."""
+def _run_tags(context: OpExecutionContext) -> dict[str, str]:
     tags = getattr(context, "run_tags", None)
     if tags is None:
         run = getattr(context, "run", None)
         tags = getattr(run, "tags", {}) or {}
+    return tags
+
+
+def _run_scope(context: OpExecutionContext) -> tuple[uuid.UUID | None, str | None]:
+    """Resolve the (account_id, org) this run is scoped to from its run tags."""
+    tags = _run_tags(context)
     raw = tags.get(_ACCOUNT_TAG)
     org = tags.get(_ORG_TAG) or None
     account_id = uuid.UUID(raw) if raw else None
     return account_id, org
+
+
+def _start_date_override(context: OpExecutionContext) -> str | None:
+    """Resolve the backfill start-date override from the run tags, if any."""
+    raw = _run_tags(context).get(_START_DATE_TAG)
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw).isoformat()
+    except ValueError:
+        context.log.warning(
+            f"Ignoring invalid {_START_DATE_TAG} tag {raw!r} (expected ISO date)"
+        )
+        return None
 
 
 async def _log_startup_diagnostics() -> None:
@@ -133,18 +171,12 @@ async def _log_startup_diagnostics() -> None:
         )
 
 
-async def _discover(account_id: uuid.UUID | None) -> None:
-    from app.ingestion import orchestrator
-
-    await _log_startup_diagnostics()
-    await orchestrator.discover_installed_orgs(account_id)
-
-
 def _run_resource(context: OpExecutionContext, job_name: str) -> None:
     """Run one Meltano job for this run's org(s) and materialize the results."""
     from app.ingestion import orchestrator
 
     account_id, org = _run_scope(context)
+    start_date = _start_date_override(context)
     started = time.monotonic()
     run_extra = {
         "event": "dagster.op",
@@ -152,10 +184,16 @@ def _run_resource(context: OpExecutionContext, job_name: str) -> None:
         "ingestion.job": job_name,
         "ingestion.org": org or "all",
     }
+    if start_date:
+        run_extra["ingestion.start_date_override"] = start_date
     context.log.info(f"Running {job_name} for {org or 'all active orgs'}")
     logger.info("Ingestion resource starting", extra=run_extra)
     try:
-        runs = _run(orchestrator.run_all(account_id=account_id, job_name=job_name))
+        runs = _run(
+            orchestrator.run_all(
+                account_id=account_id, job_name=job_name, start_date=start_date
+            )
+        )
     except Exception as exc:
         logger.exception(
             "Ingestion resource failed",
@@ -197,12 +235,30 @@ def _run_resource(context: OpExecutionContext, job_name: str) -> None:
 
 @op(
     out=Out(Nothing),
-    description="Discover the installed GitHub org(s) this run will ingest.",
+    description="Sync GitHub App installations into connected_accounts.",
 )
 def discover_orgs(context: OpExecutionContext) -> None:
-    account_id, org = _run_scope(context)
-    context.log.info(f"Starting ingestion run for: {org or 'all active orgs'}")
-    _run(_discover(account_id))
+    from app.ingestion import orchestrator
+
+    async def _discover() -> int:
+        await _log_startup_diagnostics()
+        return await orchestrator.discover_installed_orgs(None)
+
+    count = _run(_discover())
+    context.log.info(f"Discovered {count} active GitHub org(s)")
+
+
+@op(
+    out=Out(Nothing),
+    description="Validate this run's org scope and log startup diagnostics.",
+)
+def start_org_ingestion(context: OpExecutionContext) -> None:
+    _account_id, org = _run_scope(context)
+    start_date = _start_date_override(context)
+    scope = org or "all active orgs"
+    suffix = f" (backfill since {start_date})" if start_date else ""
+    context.log.info(f"Starting ingestion run for: {scope}{suffix}")
+    _run(_log_startup_diagnostics())
 
 
 def _resource_op(op_name: str, job_name: str, description: str):
@@ -269,37 +325,68 @@ def flush_logs(context: OpExecutionContext) -> None:
         shutdown_logging()
 
 
-@job(executor_def=in_process_executor)
-def ingestion_job() -> None:
-    discovered = discover_orgs()
-    members = get_org_members(start=discovered)
+@job(
+    executor_def=in_process_executor,
+    description="Get installed GitHub orgs (App installations -> connected_accounts).",
+)
+def discovery_job() -> None:
+    discover_orgs()
+
+
+@job(
+    executor_def=in_process_executor,
+    description=(
+        "Pull one org's raw GitHub data (scoped by the propel/account_id tag; "
+        "tag propel/start_date for a time-based backfill)."
+    ),
+)
+def org_ingestion_job() -> None:
+    started = start_org_ingestion()
+    members = get_org_members(start=started)
     profiles = get_user_profiles(start=members)
-    commits = get_commits(start=discovered)
-    pulls = get_pull_requests(start=discovered)
-    issues = get_issues(start=discovered)
-    copilot = get_copilot_usage(start=discovered)
+    commits = get_commits(start=started)
+    pulls = get_pull_requests(start=started)
+    issues = get_issues(start=started)
+    copilot = get_copilot_usage(start=started)
     flush_logs(after=[profiles, commits, pulls, issues, copilot])
 
 
-async def _list_accounts() -> list[tuple[str, str | None]]:
+async def _list_accounts(account_id: uuid.UUID | None = None):
     from app.ingestion import orchestrator
 
-    return await orchestrator.list_active_accounts()
+    return await orchestrator.list_active_accounts(account_id)
 
 
 @schedule(
-    job=ingestion_job,
+    job=discovery_job,
     cron_schedule="0 * * * *",
     execution_timezone="UTC",
     default_status=DefaultScheduleStatus.RUNNING,
 )
-def ingestion_schedule(context: ScheduleEvaluationContext):
-    """Hourly: launch one ``ingestion_job`` run per active org.
+def discovery_schedule(context: ScheduleEvaluationContext):
+    """Hourly: refresh the installed-org roster.
 
-    Each RunRequest is tagged with the org's connected_account id (and login),
-    which the ops read to scope their work. A stable ``run_key`` per (org, tick)
-    dedupes if the schedule fires twice. Auto-starts so it is live as soon as the
-    daemon boots.
+    The per-org ingestion runs are launched by ``org_fanout_sensor`` when this
+    job succeeds, so the schedule itself stays a single cheap run. Auto-starts
+    so it is live as soon as the daemon boots.
+    """
+    stamp = context.scheduled_execution_time.strftime("%Y%m%dT%H%M")
+    return RunRequest(run_key=f"discovery:{stamp}")
+
+
+@run_status_sensor(
+    run_status=DagsterRunStatus.SUCCESS,
+    monitored_jobs=[discovery_job],
+    request_job=org_ingestion_job,
+    default_status=DefaultSensorStatus.RUNNING,
+)
+def org_fanout_sensor(context: RunStatusSensorContext):
+    """Fan out one ``org_ingestion_job`` run per installed org.
+
+    Fires on every successful ``discovery_job`` run. Each RunRequest is tagged
+    with the org's connected_account id (and login), which the ops read to
+    scope their work. The ``run_key`` includes the discovery run id so a
+    sensor retry never double-launches an org.
     """
     try:
         accounts = _run(_list_accounts())
@@ -309,10 +396,10 @@ def ingestion_schedule(context: ScheduleEvaluationContext):
     if not accounts:
         return SkipReason("No active GitHub connected accounts to ingest")
 
-    stamp = context.scheduled_execution_time.strftime("%Y%m%dT%H%M")
+    discovery_run_id = context.dagster_run.run_id
     return [
         RunRequest(
-            run_key=f"{account_id}:{stamp}",
+            run_key=f"{account_id}:{discovery_run_id}",
             tags={_ACCOUNT_TAG: account_id, _ORG_TAG: org or ""},
         )
         for account_id, org in accounts
