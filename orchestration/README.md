@@ -84,7 +84,13 @@ orchestration/
 
 ## Observability
 
-All logs ship to PostHog as `service.name = propel-ingestion`. Useful events:
+Run logs (`context.log` and `propel.*` Python loggers) are emitted to **stdout**
+via `python_logs` in `dagster.yaml`, so they show up in `docker logs -f
+propel-ingestion` locally without opening the Dagster UI. Event-log storage in
+Postgres is unchanged — the UI still works.
+
+Structured logs also ship to PostHog as `service.name = propel-ingestion` when
+`POSTHOG_TOKEN` is set. Useful events:
 
 | Event | Meaning |
 | --- | --- |

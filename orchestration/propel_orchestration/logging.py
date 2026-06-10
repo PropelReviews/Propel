@@ -1,7 +1,9 @@
 """Logging setup for the Dagster ingestion service.
 
-Reuses the backend's OTLP-to-PostHog handler (``app.otel_logging``) so ingestion
-logs land in PostHog under a dedicated ``service.name`` (``propel-ingestion``),
+Stdout for run logs is configured in ``dagster.yaml`` (``python_logs`` with a
+stdout ``StreamHandler`` and ``managed_python_loggers: [propel]``). This module
+attaches the backend's OTLP-to-PostHog handler (``app.otel_logging``) so
+ingestion logs also land in PostHog under ``service.name = propel-ingestion``,
 filterable separately from the API (``propel-backend``). Safe to call repeatedly;
 a no-op once configured and when PostHog isn't set up.
 """
@@ -16,15 +18,11 @@ _configured = False
 
 
 def configure_logging() -> None:
-    """Attach stdout + OTLP handlers for the ingestion service (idempotent)."""
+    """Attach the OTLP handler for the ingestion service (idempotent)."""
     global _configured
     if _configured:
         return
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
     # Default the service name so OTLP logs are filterable as `propel-ingestion`,
     # while still allowing an explicit override from the environment.
     os.environ.setdefault("OTEL_SERVICE_NAME", _INGESTION_SERVICE_NAME)

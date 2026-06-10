@@ -28,3 +28,21 @@ run_coordinator:
 # No phone-home from a backend service.
 telemetry:
   enabled: false
+
+# Emit context.log and managed Python loggers to stdout so run logs are visible
+# outside the Dagster UI (docker logs, future ECS log drivers). Event-log storage
+# in Postgres is unchanged — the UI still works.
+python_logs:
+  python_log_level: INFO
+  managed_python_loggers:
+    - propel
+  dagster_handler_config:
+    handlers:
+      console:
+        class: logging.StreamHandler
+        level: INFO
+        stream: ext://sys.stdout
+        formatter: console
+    formatters:
+      console:
+        format: "%(asctime)s %(levelname)s %(name)s %(message)s"
