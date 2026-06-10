@@ -1,13 +1,18 @@
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import App from "@/App";
+import { AppShell } from "@/components/app-shell";
+import { RequireAuth } from "@/components/require-auth";
+import { RequirePermission } from "@/components/require-permission";
 import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { ChartDemoPage } from "@/pages/chart-demo";
 import { DataPage } from "@/pages/data";
 import { GithubCallbackPage } from "@/pages/github-callback";
+import { InviteAcceptPage } from "@/pages/invites/accept";
 import { ProfilePage } from "@/pages/profile";
+import { AccessPage } from "@/pages/settings/access";
 import { SignInPage } from "@/pages/sign-in";
 import { SignUpPage } from "@/pages/sign-up";
 
@@ -25,11 +30,50 @@ function RequireChartDemoFlag({ children }: { children: ReactNode }) {
   return children;
 }
 
+/** App pages share the header shell (nav, workspace switcher). */
+function ShellLayout() {
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  );
+}
+
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<App />} />
-      <Route path="/data" element={<DataPage />} />
+      <Route element={<ShellLayout />}>
+        <Route path="/data" element={<DataPage />} />
+        <Route
+          path="/settings/access"
+          element={
+            <RequireAuth>
+              <RequirePermission
+                anyOf={["roles:manage", "members:assign_role", "invites:read"]}
+              >
+                <AccessPage />
+              </RequirePermission>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <RequireAuthFlag>
+              <ProfilePage />
+            </RequireAuthFlag>
+          }
+        />
+      </Route>
+      <Route
+        path="/invites/:token/accept"
+        element={
+          <RequireAuth>
+            <InviteAcceptPage />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/signin"
         element={
@@ -43,14 +87,6 @@ export function AppRoutes() {
         element={
           <RequireAuthFlag>
             <SignUpPage />
-          </RequireAuthFlag>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <RequireAuthFlag>
-            <ProfilePage />
           </RequireAuthFlag>
         }
       />

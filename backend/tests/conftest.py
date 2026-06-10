@@ -64,7 +64,8 @@ async def clean_db(db_engine):
             text(
                 "TRUNCATE external_identities, ingestion_run, datapoint, "
                 "raw_record, connected_accounts, tenant_invites, "
-                "tenant_memberships, tenants, oauth_accounts, users "
+                "tenant_role_permissions, tenant_memberships, tenants, "
+                "oauth_accounts, users "
                 "RESTART IDENTITY CASCADE"
             )
         )

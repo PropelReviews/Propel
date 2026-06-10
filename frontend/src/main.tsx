@@ -5,6 +5,7 @@ import { ThemeProvider } from "./components/theme-provider";
 import "./index.css";
 import { AuthProvider } from "./providers/auth-provider";
 import { PostHogProvider } from "./providers/posthog-provider";
+import { TenantProvider } from "./providers/tenant-provider";
 import { AppRoutes } from "./routes";
 
 createRoot(document.getElementById("root")!).render(
@@ -13,7 +14,9 @@ createRoot(document.getElementById("root")!).render(
       <PostHogProvider>
         <BrowserRouter>
           <AuthProvider>
-            <AppRoutes />
+            <TenantProvider>
+              <AppRoutes />
+            </TenantProvider>
           </AuthProvider>
         </BrowserRouter>
       </PostHogProvider>
