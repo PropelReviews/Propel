@@ -26,13 +26,78 @@ fi
 # on its own volume and installs on first start. Prod bakes plugins at build time,
 # so the marker dir already exists and this is skipped.
 if { [ "$1" = "cron" ] || [ "$1" = "dagster" ] || [ "$1" = "dagster-service" ] \
-  || [ "${INGESTION_CRON_ENABLED:-0}" = "1" ]; } \
+  || [ "$1" = "dask-worker" ] || [ "${INGESTION_CRON_ENABLED:-0}" = "1" ]; } \
   && command -v meltano >/dev/null 2>&1 && [ -f /app/meltano/meltano.yml ]; then
   if [ ! -d /app/meltano/.meltano/extractors ]; then
     echo "==> Installing Meltano plugins (first run; this can take a few minutes)"
     (cd /app/meltano && meltano install) \
       || echo "WARN: 'meltano install' failed; ingestion runs will fail until it succeeds"
   fi
+fi
+
+# ECS run worker (EcsRunLauncher): the launched task's command is
+# `dagster api execute_run ...`. Same env prep as `dagster-service` (the
+# orchestration venv, import paths, Dagster's Postgres URL), but no daemon or
+# webserver — the command executes one run and exits. Must precede the dev
+# `dagster` branch below, which also matches on $1.
+if [ "$1" = "dagster" ] && [ "$2" = "api" ]; then
+  echo "==> Starting Dagster run worker"
+  : "${DAGSTER_HOME:=/tmp/dagster}"
+  export DAGSTER_HOME
+  mkdir -p "$DAGSTER_HOME"
+  cp /app/orchestration/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
+  if [ "${DAGSTER_RUN_LAUNCHER:-}" = "ecs" ]; then
+    cat /app/orchestration/run_launcher_ecs.yaml >> "$DAGSTER_HOME/dagster.yaml"
+  fi
+  export PATH="/opt/orchestration-venv/bin:$PATH"
+  export PYTHONPATH="/app:/app/orchestration${PYTHONPATH:+:$PYTHONPATH}"
+  DAGSTER_PG_URL="$(python /app/orchestration/scripts/prepare_dagster_db.py)"
+  export DAGSTER_PG_URL
+  cd /app/orchestration
+  exec "$@"
+fi
+
+# Dask scheduler: pure task coordination — no app code executes here. The
+# dashboard (8787) shows step distribution across the worker fleet.
+if [ "$1" = "dask-scheduler" ]; then
+  echo "==> Starting Dask scheduler"
+  export PATH="/opt/orchestration-venv/bin:$PATH"
+  exec dask scheduler --host 0.0.0.0 \
+    --port "${DASK_SCHEDULER_PORT:-8786}" \
+    --dashboard-address ":${DASK_DASHBOARD_PORT:-8787}"
+fi
+
+# Dask worker: executes Dagster steps submitted by the dask_executor. Needs the
+# same import paths + instance env as the Dagster service (steps rehydrate the
+# Postgres-backed instance via DAGSTER_PG_URL and shell out to Meltano).
+# --nthreads must stay 1: jobs._run shares one asyncio event loop per process,
+# so a worker process must never run two steps concurrently on threads.
+# Parallelism comes from DASK_WORKER_PROCESSES (separate worker processes).
+if [ "$1" = "dask-worker" ]; then
+  echo "==> Starting Dask worker -> ${DASK_SCHEDULER_ADDRESS:?DASK_SCHEDULER_ADDRESS must be set}"
+  : "${DAGSTER_HOME:=/tmp/dagster}"
+  export DAGSTER_HOME
+  mkdir -p "$DAGSTER_HOME"
+
+  # Orchestration project: bind mount in dev, baked path in prod.
+  ORCH_DIR=/orchestration
+  [ -d "$ORCH_DIR" ] || ORCH_DIR=/app/orchestration
+
+  export PATH="/opt/orchestration-venv/bin:$PATH"
+  export PYTHONPATH="/app:$ORCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
+  cp "$ORCH_DIR/dagster.yaml" "$DAGSTER_HOME/dagster.yaml"
+
+  if DAGSTER_PG_URL="$(python "$ORCH_DIR/scripts/prepare_dagster_db.py")" \
+    && [ -n "$DAGSTER_PG_URL" ]; then
+    export DAGSTER_PG_URL
+  else
+    echo "WARN: Dagster DB prep failed; steps will fail to load the Dagster instance"
+  fi
+
+  exec dask worker "$DASK_SCHEDULER_ADDRESS" \
+    --nthreads 1 \
+    --nworkers "${DASK_WORKER_PROCESSES:-1}" \
+    --memory-limit "${DASK_WORKER_MEMORY_LIMIT:-auto}"
 fi
 
 # Local dev runs the combined `dagster dev` (webserver + daemon) directly as the
@@ -74,6 +139,13 @@ if [ "$1" = "dagster-service" ]; then
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"
   cp /app/orchestration/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
+  # On ECS, launch each run as its own Fargate task (the coordinator task only
+  # hosts the daemon + webserver). Opt-in via env so local dev keeps the
+  # default subprocess launcher.
+  if [ "${DAGSTER_RUN_LAUNCHER:-}" = "ecs" ]; then
+    echo "==> Run launcher: EcsRunLauncher (one Fargate task per run)"
+    cat /app/orchestration/run_launcher_ecs.yaml >> "$DAGSTER_HOME/dagster.yaml"
+  fi
 
   # Run Dagster from its own venv (keeps the API venv pristine); import the
   # backend `app` and `propel_orchestration` packages from source. `meltano`

@@ -11,7 +11,7 @@ for the API that is shipped to AWS.
 | `dev.Dockerfile` | Local dev container (editor) | `docker compose` (service `dev`; includes uv) | No |
 | `backend.Dockerfile` | Local `backend` service | `docker compose`, source bind-mounted, `uvicorn --reload` (deps via uv) | No |
 | `frontend.Dockerfile` | Local `frontend` service | `docker compose`, source bind-mounted, `vite dev` | No |
-| `postgres:16` | Local `postgres` service | Pulled image | No (RDS Aurora in AWS) |
+| `postgres:18.3` | Local `postgres` service | Pulled image | No (RDS Aurora in AWS) |
 | `backend.prod.Dockerfile` | **ECS Fargate** | `docker build` (context `backend/`) -> ECR | **Yes** |
 | Frontend (built `dist/`) | **S3 + CloudFront** | `vite build` -> `aws s3 sync` | **Yes (not a container)** |
 
@@ -29,7 +29,7 @@ docker compose up
 
 | Service  | Port | Notes |
 |----------|------|-------|
-| postgres | 5432 | Postgres 16, named volume `pgdata` |
+| postgres | 5432 | Postgres 18.3, named volume `pgdata` |
 | backend  | 8000 | FastAPI with `uvicorn --reload`, `./backend` bind-mounted |
 | frontend | 5173 | Vite dev server (HMR) for the app, `./frontend` bind-mounted |
 | frontend-landing | 5174 | Vite dev server (HMR) for the marketing landing site (apex/www in prod), `./frontend` bind-mounted |

@@ -65,7 +65,7 @@ cd transformation/dbt && uvx --from "sqlfluff>=3,<4" sqlfluff lint models
 - Each tap-github child sets exactly one of `repositories` / `organizations` / `user_usernames`.
 - `github_org_sync` must run before `github_user_profiles_sync` (member logins read from `raw_record`); profiles sync triggers identity linking (`external_identities`, memberships).
 - Overlap guard: concurrent run for same (account, resource) is skipped; stale `running` runs (>2h) auto-marked error.
-- Copilot: 404 (no Copilot Business) → zero records, not a failure; GitHub caps backfill at ~28 days.
+- Copilot: the orchestrator probes `/orgs/{org}/copilot/metrics` first and skips `copilot_sync` when unavailable (result cached 24h on `connected_accounts.metadata`); the tap also tolerates 404/403/422 as zero records, not a failure. GitHub caps backfill at ~28 days.
 - Ingestion service runs with `SKIP_MIGRATIONS=1` — only the API container migrates.
 - `.meltano` lives on a dedicated Docker volume (`meltano-ingestion`) to avoid SQLite lock races.
 - `backend/cron/` is legacy; Dagster is the scheduler.

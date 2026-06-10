@@ -66,6 +66,8 @@ from dagster import (
     schedule,
 )
 
+from propel_orchestration.dask_resource import build_dask_executor
+
 logger = logging.getLogger("propel.ingestion.dagster")
 
 # Run tags carrying the per-org scope (set by the fan-out sensor's RunRequests)
@@ -91,11 +93,12 @@ _event_loop: asyncio.AbstractEventLoop | None = None
 def _run(coro):
     """Run a coroutine on a single process-wide event loop.
 
-    Every op runs in the same worker process (``in_process_executor``). The
-    backend's async SQLAlchemy engine binds its connection pool to the first
-    running loop, so all ops must share one loop — ``asyncio.run()`` (a fresh
-    loop per op) reuses pooled connections across loops and raises
-    "got Future attached to a different loop".
+    The backend's async SQLAlchemy engine binds its connection pool to the
+    first running loop, so every op executing in a given process must share
+    one loop — ``asyncio.run()`` (a fresh loop per op) reuses pooled
+    connections across loops and raises "got Future attached to a different
+    loop". This holds for ``in_process_executor`` (all ops in one process) and
+    for Dask workers (each long-lived worker process may run many steps).
     """
     global _event_loop
     if _event_loop is None or _event_loop.is_closed():
@@ -333,8 +336,12 @@ def discovery_job() -> None:
     discover_orgs()
 
 
+# Steps execute on the shared Dask worker fleet (DASK_SCHEDULER_ADDRESS), so
+# concurrent per-org runs share worker capacity instead of stacking Meltano
+# subprocesses on the daemon's task. Falls back to a per-run LocalCluster when
+# no scheduler is configured (bare `dagster dev`).
 @job(
-    executor_def=in_process_executor,
+    executor_def=build_dask_executor(),
     description=(
         "Pull one org's raw GitHub data (scoped by the propel/account_id tag; "
         "tag propel/start_date for a time-based backfill)."

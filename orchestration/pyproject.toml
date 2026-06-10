@@ -11,6 +11,12 @@ dependencies = [
     # dbt analytics layer: models in transformation/dbt run as Dagster assets
     # (dagster-dbt), executed by dbt-core against the app's Postgres.
     "dagster-dbt>=0.25,<1",
+    # Distributed execution: org_ingestion_job steps run on a Dask cluster
+    # (dask_executor); dagster-aws provides the EcsRunLauncher so each run gets
+    # its own Fargate task instead of executing on the daemon's task.
+    "dagster-dask>=0.25,<1",
+    "dagster-aws>=0.25,<1",
+    "distributed>=2024.1",
     "dbt-core>=1.8,<2",
     "dbt-postgres>=1.8,<2",
     # psycopg2 is needed by scripts/prepare_dagster_db.py and Dagster's Postgres

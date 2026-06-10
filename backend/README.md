@@ -258,7 +258,7 @@ uv run ruff format --check .   # use `ruff format .` to auto-fix
 The `target-propel` ingestion tests (writers + end-to-end Singer stream) are a
 separate suite — see [Testing ingestion](#testing-ingestion) below.
 
-CI runs pytest against a Postgres 16 service container (jobs `backend` and
+CI runs pytest against a Postgres 18.3 service container (jobs `backend` and
 `ingestion-integration`).
 
 ### Ingestion (V1 — landing only)

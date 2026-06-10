@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18.3
         env:
           POSTGRES_USER: propel
           POSTGRES_PASSWORD: propel
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18.3
         env:
           POSTGRES_USER: propel
           POSTGRES_PASSWORD: propel
@@ -139,7 +139,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18.3
         env:
           POSTGRES_USER: propel
           POSTGRES_PASSWORD: propel
