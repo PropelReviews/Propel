@@ -2,10 +2,14 @@ import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
+import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { appUrl, githubUrl } from "./links";
 import { GithubIcon } from "./github-icon";
+import { WaitlistForm } from "./waitlist-form";
 
 export function HeroSection() {
+  const authEnabled = useAuthFlag();
+
   return (
     <Section
       bordered={false}
@@ -35,12 +39,16 @@ export function HeroSection() {
               Read the code
             </a>
           </Button>
-          <Button size="lg" asChild>
-            <a href={appUrl}>
-              Try Propel Cloud
-              <ArrowRight className="size-4" />
-            </a>
-          </Button>
+          {authEnabled ? (
+            <Button size="lg" asChild>
+              <a href={appUrl}>
+                Try Propel Cloud
+                <ArrowRight className="size-4" />
+              </a>
+            </Button>
+          ) : (
+            <WaitlistForm variant="inline" />
+          )}
         </div>
       </div>
     </Section>

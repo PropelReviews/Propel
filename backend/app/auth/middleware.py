@@ -12,6 +12,7 @@ from app.feature_flags import registration_enabled
 
 REGISTER_PATH = "/api/v1/auth/register"
 LOGIN_PATH = "/api/v1/auth/login"
+WAITLIST_PATH = "/api/v1/waitlist"
 
 
 class SlidingWindowRateLimiter:
@@ -68,7 +69,11 @@ class AuthSecurityMiddleware(BaseHTTPMiddleware):
                 content={"detail": "REGISTRATION_DISABLED"},
             )
 
-        if request.method == "POST" and path in {REGISTER_PATH, LOGIN_PATH}:
+        if request.method == "POST" and path in {
+            REGISTER_PATH,
+            LOGIN_PATH,
+            WAITLIST_PATH,
+        }:
             client_ip = get_client_ip(request)
             if not auth_rate_limiter.is_allowed(
                 f"{path}:{client_ip}",

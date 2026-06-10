@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { cn } from "@/lib/utils";
 import { appUrl, githubUrl } from "./links";
 import { GithubIcon } from "./github-icon";
@@ -14,6 +15,8 @@ const navLinks = [
 ];
 
 export function MarketingLayout({ children }: { children: ReactNode }) {
+  const authEnabled = useAuthFlag();
+
   return (
     <div className="bg-background text-foreground flex min-h-svh flex-col">
       <header className="border-border/60 bg-background/80 sticky top-0 z-50 border-b backdrop-blur">
@@ -44,9 +47,11 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
                 GitHub
               </a>
             </Button>
-            <Button size="sm" asChild>
-              <a href={appUrl}>Open app</a>
-            </Button>
+            {authEnabled && (
+              <Button size="sm" asChild>
+                <a href={appUrl}>Open app</a>
+              </Button>
+            )}
           </div>
         </div>
       </header>

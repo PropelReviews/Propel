@@ -52,6 +52,15 @@ def init_posthog() -> None:
     logger.info("PostHog feature flags enabled")
 
 
+def get_client():
+    """The shared PostHog client, or ``None`` when PostHog isn't configured.
+
+    Exposed so other modules (e.g. ``posthog_events``) can reuse the same
+    client for server-side event capture.
+    """
+    return _client
+
+
 def shutdown_posthog() -> None:
     """Flush queued events and stop the background poller."""
     global _client

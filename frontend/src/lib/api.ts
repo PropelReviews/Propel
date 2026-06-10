@@ -63,6 +63,7 @@ const FRIENDLY_MESSAGES: Record<string, string> = {
   REGISTER_INVALID_PASSWORD: "Password does not meet the requirements.",
   REGISTRATION_DISABLED: "Sign up is not available right now.",
   TOO_MANY_REQUESTS: "Too many attempts. Please wait a moment and try again.",
+  WAITLIST_EMAIL_ALREADY_EXISTS: "You're already on the waitlist.",
 };
 
 /**
@@ -177,6 +178,25 @@ export async function login(input: {
   const body = await parseJson(response);
   if (!response.ok) throw extractError(response.status, body);
   return body as LoginResult;
+}
+
+export type WaitlistEntry = {
+  id: string;
+  email: string;
+  created_at: string;
+};
+
+/** Public landing-page waitlist signup (no auth). */
+export async function joinWaitlist(input: { email: string }): Promise<WaitlistEntry> {
+  const response = await fetch(`${API_BASE}/api/v1/waitlist`, {
+    method: "POST",
+    headers: apiHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ email: input.email }),
+  });
+
+  const body = await parseJson(response);
+  if (!response.ok) throw extractError(response.status, body);
+  return body as WaitlistEntry;
 }
 
 export async function getMe(token: string): Promise<AuthUser> {

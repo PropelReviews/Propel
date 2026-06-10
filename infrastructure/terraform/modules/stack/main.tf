@@ -28,10 +28,13 @@ locals {
 
   # Browser calls from the deployed SPA (app.<zone>) are cross-origin relative to
   # api.<zone>. Starlette returns 400 on OPTIONS preflight when the Origin is not
-  # listed here, so always inject the app origin. Extra origins can still be
-  # supplied via GitHub Actions variables (app_environment.CORS_ALLOWED_ORIGINS).
+  # listed here, so always inject the app origin. The landing site (apex/www)
+  # also calls the API (waitlist signup), so its origins are injected too. Extra
+  # origins can still be supplied via GitHub Actions variables
+  # (app_environment.CORS_ALLOWED_ORIGINS).
   cors_allowed_origins = join(",", distinct(concat(
     ["https://${var.app_fqdn}"],
+    [for fqdn in var.landing_fqdns : "https://${fqdn}"],
     [
       for origin in split(",", lookup(var.app_environment, "CORS_ALLOWED_ORIGINS", "")) :
       trimspace(origin) if trimspace(origin) != ""

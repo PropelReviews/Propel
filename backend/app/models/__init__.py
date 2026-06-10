@@ -8,6 +8,7 @@ from app.models.raw_record import RawRecord
 from app.models.role_permission import TenantRolePermission
 from app.models.tenant import Tenant
 from app.models.user import OAuthAccount, User
+from app.models.waitlist import WaitlistSubscriber
 
 __all__ = [
     "ConnectedAccount",
@@ -21,4 +22,5 @@ __all__ = [
     "TenantMembership",
     "TenantRolePermission",
     "User",
+    "WaitlistSubscriber",
 ]

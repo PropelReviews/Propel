@@ -12,7 +12,9 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { FeatureIcon } from "@/components/ui/feature-icon";
 import { Section } from "@/components/ui/section";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { appUrl, githubUrl } from "./links";
+import { WaitlistForm } from "./waitlist-form";
 
 const selfHostedSnippet = `git clone https://github.com/PropelReviews/Propel
 cd Propel
@@ -26,6 +28,8 @@ const selfHostedHighlights = [
 ];
 
 export function DeploymentSection() {
+  const authEnabled = useAuthFlag();
+
   return (
     <Section id="deploy">
       <SectionHeading
@@ -49,12 +53,16 @@ export function DeploymentSection() {
             </p>
           </CardContent>
           <CardFooter>
-            <Button asChild>
-              <a href={appUrl}>
-                Try Propel Cloud
-                <ArrowRight className="size-4" />
-              </a>
-            </Button>
+            {authEnabled ? (
+              <Button asChild>
+                <a href={appUrl}>
+                  Try Propel Cloud
+                  <ArrowRight className="size-4" />
+                </a>
+              </Button>
+            ) : (
+              <WaitlistForm variant="card" />
+            )}
           </CardFooter>
         </Card>
 
