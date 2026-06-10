@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_admin
+from app.auth.dependencies import require_permission
 from app.auth.manager import current_active_user
 from app.config import get_settings
 from app.db.session import get_async_session
@@ -30,7 +30,7 @@ settings = get_settings()
     response_model=list[ConnectionRead],
 )
 async def list_connections(
-    ctx=Depends(require_admin),
+    ctx=Depends(require_permission("connections:manage")),
     session: AsyncSession = Depends(get_async_session),
 ):
     accounts = await connection_service.list_connections(session, ctx.tenant.id)
@@ -42,7 +42,7 @@ async def list_connections(
     response_model=GitHubInstallURL,
 )
 async def github_install_url(
-    ctx=Depends(require_admin),
+    ctx=Depends(require_permission("connections:manage")),
     user: User = Depends(current_active_user),
 ):
     url = connection_service.build_github_install_url(ctx.tenant.id, user.id)
@@ -56,7 +56,7 @@ async def github_install_url(
 async def update_connection(
     connection_id: uuid.UUID,
     payload: ConnectionStatusUpdate,
-    ctx=Depends(require_admin),
+    ctx=Depends(require_permission("connections:manage")),
     session: AsyncSession = Depends(get_async_session),
 ):
     account = await connection_service.update_connection_status(

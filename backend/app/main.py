@@ -15,6 +15,7 @@ from app.routers import (
     invites,
     members,
     metrics,
+    roles,
     tenants,
 )
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
@@ -56,6 +57,7 @@ app.include_router(tenants.router)
 app.include_router(members.router)
 app.include_router(members.github_members_router)
 app.include_router(invites.router)
+app.include_router(roles.router)
 app.include_router(connections.router)
 app.include_router(ingestion.router)
 app.include_router(metrics.router)

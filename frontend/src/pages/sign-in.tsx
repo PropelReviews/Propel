@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { SignInForm } from "@/components/auth/sign-in-form";
 import {
@@ -14,11 +14,14 @@ import { useAuth } from "@/providers/auth-provider";
 
 export function SignInPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { status } = useAuth();
+  // Where to land after sign-in (e.g. an invite accept link set by RequireAuth).
+  const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   useEffect(() => {
-    if (status === "authenticated") navigate("/", { replace: true });
-  }, [status, navigate]);
+    if (status === "authenticated") navigate(from, { replace: true });
+  }, [status, navigate, from]);
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center p-8">
@@ -28,7 +31,7 @@ export function SignInPage() {
           <CardDescription>Sign in to your Propel account.</CardDescription>
         </CardHeader>
         <CardContent>
-          <SignInForm onSuccess={() => navigate("/", { replace: true })} />
+          <SignInForm onSuccess={() => navigate(from, { replace: true })} />
         </CardContent>
         <CardFooter className="text-muted-foreground justify-center text-sm">
           <span>

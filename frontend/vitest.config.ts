@@ -18,6 +18,25 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Pre-bundle everything the browser tests import so the dep optimizer
+  // commits once at startup. Late discovery would re-optimize mid-run, which
+  // both duplicates React (broken hooks) and fails on filesystems where a
+  // directory rename can't replace files Chromium holds open (9p/drvfs).
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom/client",
+      "react-router-dom",
+      "radix-ui",
+      "posthog-js",
+      "posthog-js/react",
+      "recharts",
+      "lucide-react",
+      "class-variance-authority",
+      "clsx",
+      "tailwind-merge",
+    ],
+  },
   test: {
     projects: [
       {

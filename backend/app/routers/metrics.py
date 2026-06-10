@@ -1,7 +1,7 @@
 """Read-only analytics metrics endpoints (dbt marts, the SPA dashboard charts).
 
-Tenant-scoped and available to any member (require_member), since these are
-views, not control surfaces.
+Tenant-scoped, gated by the `metrics:read` permission (granted to every
+role by default), since these are views, not control surfaces.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -10,7 +10,7 @@ from datetime import date as date_type
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_member
+from app.auth.dependencies import require_permission
 from app.db.session import get_async_session
 from app.schemas.metrics import Granularity, PullRequestActivityResponse
 from app.services import metrics as metrics_service
@@ -28,7 +28,7 @@ async def get_pull_request_activity(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
-    ctx=Depends(require_member),
+    ctx=Depends(require_permission("metrics:read")),
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_end = end or datetime.now(UTC).date()

@@ -22,7 +22,9 @@ def _hash_token(token: str) -> str:
 
 
 def _build_invite_url(token: str) -> str:
-    return f"{settings.oauth_callback_base_url}/api/v1/invites/{token}/accept"
+    # Points at the SPA accept page, which signs the user in if needed and
+    # then POSTs /api/v1/invites/{token}/accept.
+    return f"{settings.frontend_base_url}/invites/{token}/accept"
 
 
 async def create_invite(

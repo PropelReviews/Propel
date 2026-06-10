@@ -13,10 +13,11 @@ import {
   ApiError,
   getGithubAppInstallUrl,
   getGithubLinkUrl,
-  listTenants,
   syncGithubInstallations,
 } from "@/lib/api";
+import { listTenants } from "@/lib/tenants";
 import { useAuth } from "@/providers/auth-provider";
+import { useTenant } from "@/providers/tenant-provider";
 
 const COMING_SOON_TOOLS = [
   { name: "Linear", description: "Issues, cycles and project velocity." },
@@ -39,8 +40,12 @@ type CheckState =
  */
 export function ConnectTools({ onConnected }: { onConnected: () => void }) {
   const { token, user } = useAuth();
+  const { tenant, permissions } = useTenant();
   const [check, setCheck] = useState<CheckState>({ status: "idle" });
   const githubLinked = user?.github?.connected ?? false;
+  // Pre-tenant onboarding is open to anyone (installing the app provisions
+  // the workspace); inside an existing workspace, installs are admin-only.
+  const canInstall = !tenant || permissions.includes("connections:manage");
 
   async function openInstallPage() {
     if (!token) return;
@@ -116,7 +121,9 @@ export function ConnectTools({ onConnected }: { onConnected: () => void }) {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Button onClick={openInstallPage}>Install GitHub App</Button>
+              {canInstall && (
+                <Button onClick={openInstallPage}>Install GitHub App</Button>
+              )}
               <Button
                 variant="outline"
                 onClick={checkConnection}

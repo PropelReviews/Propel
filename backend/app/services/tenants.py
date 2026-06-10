@@ -11,6 +11,8 @@ from app.models.membership import TenantMembership
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.tenant import TenantCreate, TenantUpdate
+from app.services import role_permissions as role_permission_service
+from app.services.role_permissions import default_permission_rows
 
 
 async def create_tenant(
@@ -21,6 +23,8 @@ async def create_tenant(
     session.add(tenant)
     session.add(membership)
     try:
+        await session.flush()
+        session.add_all(default_permission_rows(tenant.id))
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -42,6 +46,32 @@ async def list_user_tenants(session: AsyncSession, user_id: uuid.UUID) -> list[T
         .order_by(Tenant.created_at.desc())
     )
     return list(result.scalars().unique().all())
+
+
+async def list_user_tenants_with_membership(
+    session: AsyncSession, user_id: uuid.UUID
+) -> list[tuple[Tenant, Role, set[str]]]:
+    """Tenants the user belongs to, with their role + effective permissions."""
+    result = await session.execute(
+        select(Tenant, TenantMembership.role)
+        .join(TenantMembership)
+        .where(
+            TenantMembership.user_id == user_id,
+            Tenant.deleted_at.is_(None),
+        )
+        .order_by(Tenant.created_at.desc())
+    )
+    pairs = [(tenant, role) for tenant, role in result.unique().all()]
+    return [
+        (
+            tenant,
+            role,
+            await role_permission_service.get_effective_permissions(
+                session, tenant.id, role
+            ),
+        )
+        for tenant, role in pairs
+    ]
 
 
 async def update_tenant(

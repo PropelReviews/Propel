@@ -3,7 +3,11 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import check_can_invite, require_invite_manager
+from app.auth.dependencies import (
+    check_can_invite,
+    require_any_permission,
+    require_permission,
+)
 from app.auth.manager import current_active_user
 from app.db.session import get_async_session
 from app.models.user import User
@@ -20,11 +24,17 @@ router = APIRouter(prefix="/api/v1", tags=["invites"])
 )
 async def create_invite(
     payload: InviteCreate,
-    ctx=Depends(require_invite_manager),
+    ctx=Depends(
+        require_any_permission(
+            "invites:role:admin",
+            "invites:role:manager",
+            "invites:role:individual",
+        )
+    ),
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ):
-    check_can_invite(ctx.membership.role, payload.role)
+    check_can_invite(ctx, payload.role)
     return await invite_service.create_invite(session, ctx.tenant.id, user, payload)
 
 
@@ -33,7 +43,7 @@ async def create_invite(
     response_model=list[InviteRead],
 )
 async def list_invites(
-    ctx=Depends(require_invite_manager),
+    ctx=Depends(require_permission("invites:read")),
     session: AsyncSession = Depends(get_async_session),
 ):
     return await invite_service.list_pending_invites(session, ctx.tenant.id)
@@ -45,7 +55,7 @@ async def list_invites(
 )
 async def revoke_invite(
     invite_id: uuid.UUID,
-    ctx=Depends(require_invite_manager),
+    ctx=Depends(require_permission("invites:revoke")),
     session: AsyncSession = Depends(get_async_session),
 ):
     await invite_service.revoke_invite(session, ctx.tenant.id, invite_id)

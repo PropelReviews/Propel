@@ -113,6 +113,29 @@ export async function authedGet<T>(path: string, token: string): Promise<T> {
   return body as T;
 }
 
+/**
+ * Authenticated request with a JSON body (POST/PATCH/PUT/DELETE). Returns
+ * parsed JSON (null for 204) or throws `ApiError`.
+ */
+export async function authedRequest<T>(
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  path: string,
+  token: string,
+  payload?: unknown,
+): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: apiHeaders({
+      Authorization: `Bearer ${token}`,
+      ...(payload !== undefined ? { "Content-Type": "application/json" } : {}),
+    }),
+    body: payload !== undefined ? JSON.stringify(payload) : undefined,
+  });
+  const body = await parseJson(response);
+  if (!response.ok) throw extractError(response.status, body);
+  return body as T;
+}
+
 export async function register(input: {
   email: string;
   password: string;
@@ -191,17 +214,6 @@ export async function getGithubLoginUrl(): Promise<string> {
   const body = await parseJson(response);
   if (!response.ok) throw extractError(response.status, body);
   return (body as { authorization_url: string }).authorization_url;
-}
-
-export type Tenant = {
-  id: string;
-  name: string;
-  slug: string;
-  created_at: string;
-};
-
-export async function listTenants(token: string): Promise<Tenant[]> {
-  return authedGet<Tenant[]>("/api/v1/tenants/", token);
 }
 
 /**

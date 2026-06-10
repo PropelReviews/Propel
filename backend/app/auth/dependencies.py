@@ -1,29 +1,25 @@
 import uuid
-from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.manager import current_active_user
-from app.auth.permissions import (
-    can_invite_role,
-    can_list_members,
-    can_manage_invites,
-    can_update_tenant,
-)
+from app.auth.permissions import INVITE_ROLE_PERMISSIONS
 from app.db.session import get_async_session
 from app.models.enums import Role
 from app.models.membership import TenantMembership
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.services.role_permissions import get_effective_permissions
 
 
 @dataclass
 class TenantContext:
     tenant: Tenant
     membership: TenantMembership
+    permissions: set[str] = field(default_factory=set)
 
 
 async def get_membership(
@@ -57,28 +53,40 @@ async def get_tenant_context(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found"
         )
-    return TenantContext(tenant=tenant, membership=membership)
+    permissions = await get_effective_permissions(session, tenant.id, membership.role)
+    return TenantContext(tenant=tenant, membership=membership, permissions=permissions)
 
 
-def _require(
-    check: Callable[[Role], bool],
-    detail: str = "Forbidden",
-):
+def require_permission(*keys: str, detail: str = "Forbidden"):
+    """Dependency factory: caller's role must hold every listed permission."""
+
     def dependency(ctx: TenantContext = Depends(get_tenant_context)) -> TenantContext:
-        if not check(ctx.membership.role):
+        if not set(keys) <= ctx.permissions:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
         return ctx
 
     return dependency
 
 
-require_member = _require(can_list_members)
-require_admin = _require(can_update_tenant, "Admin required")
-require_invite_manager = _require(can_manage_invites)
+def require_any_permission(*keys: str, detail: str = "Forbidden"):
+    """Dependency factory: caller's role must hold at least one permission."""
+
+    def dependency(ctx: TenantContext = Depends(get_tenant_context)) -> TenantContext:
+        if not set(keys) & ctx.permissions:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+        return ctx
+
+    return dependency
 
 
-def check_can_invite(inviter_role: Role, invitee_role: Role) -> None:
-    if not can_invite_role(inviter_role, invitee_role):
+# Common deps. `require_member` covers read access for any role with
+# workspace visibility; `require_admin` remains the gate for tenant updates.
+require_member = require_permission("tenant:read")
+require_admin = require_permission("tenant:update", detail="Admin required")
+
+
+def check_can_invite(ctx: TenantContext, invitee_role: Role) -> None:
+    if INVITE_ROLE_PERMISSIONS[invitee_role] not in ctx.permissions:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Cannot invite role '{invitee_role.value}'",

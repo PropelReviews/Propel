@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, listTenants } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import {
   getIngestionStats,
   listIngestionRuns,
@@ -22,6 +22,7 @@ import {
   type IngestionStats,
 } from "@/lib/ingestion";
 import { useAuth } from "@/providers/auth-provider";
+import { useTenant } from "@/providers/tenant-provider";
 
 type LoadState =
   | { status: "loading" }
@@ -31,7 +32,6 @@ type LoadState =
       runs: IngestionRun[];
       stats: IngestionStats;
     }
-  | { status: "empty" } // authenticated but no tenant
   | { status: "error"; message: string };
 
 const STATUS_VARIANT: Record<
@@ -66,23 +66,17 @@ function formatRunDuration(run: IngestionRun): string {
 
 export function DataPage() {
   const { token, status: authStatus } = useAuth();
+  const { tenant, status: tenantStatus, refresh } = useTenant();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (authStatus !== "authenticated" || !token) return;
+    if (authStatus !== "authenticated" || !token || !tenant) return;
 
     let cancelled = false;
     (async () => {
       setState({ status: "loading" });
       try {
-        const tenants = await listTenants(token);
-        if (cancelled) return;
-        const tenant = tenants[0];
-        if (!tenant) {
-          setState({ status: "empty" });
-          return;
-        }
         const [runs, stats] = await Promise.all([
           listIngestionRuns(token, tenant.id),
           getIngestionStats(token, tenant.id),
@@ -100,7 +94,7 @@ export function DataPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, authStatus, reloadKey]);
+  }, [token, authStatus, tenant, tenantStatus, reloadKey]);
 
   return (
     <main className="bg-background mx-auto min-h-svh max-w-6xl px-6 py-12">
@@ -126,10 +120,24 @@ export function DataPage() {
             </CardDescription>
           </CardHeader>
         </Card>
+      ) : tenantStatus === "idle" || tenantStatus === "loading" ? (
+        <LoadingState />
+      ) : tenantStatus === "error" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Couldn’t load workspaces</CardTitle>
+            <CardDescription>Please try again in a moment.</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : !tenant ? (
+        <ConnectTools
+          onConnected={() => {
+            void refresh();
+            setReloadKey((key) => key + 1);
+          }}
+        />
       ) : state.status === "loading" ? (
         <LoadingState />
-      ) : state.status === "empty" ? (
-        <ConnectTools onConnected={() => setReloadKey((key) => key + 1)} />
       ) : state.status === "error" ? (
         <Card>
           <CardHeader>

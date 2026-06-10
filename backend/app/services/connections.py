@@ -29,6 +29,7 @@ from app.models.membership import TenantMembership
 from app.models.tenant import Tenant
 from app.schemas.connection import ConnectionStatusUpdate
 from app.services import github_identity
+from app.services import role_permissions as role_permission_service
 
 logger = logging.getLogger("propel.connections")
 
@@ -249,6 +250,7 @@ async def _tenant_for_org_login(session: AsyncSession, login: str) -> Tenant:
     tenant = Tenant(name=login, slug=slug)
     session.add(tenant)
     await session.flush()
+    session.add_all(role_permission_service.default_permission_rows(tenant.id))
     logger.info(
         "Auto-provisioned tenant for GitHub org",
         extra={
