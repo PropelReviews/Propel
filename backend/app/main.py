@@ -17,6 +17,7 @@ from app.routers import (
     metrics,
     roles,
     tenants,
+    waitlist,
 )
 from app.tracing import get_tracer, setup_tracing, shutdown_tracing
 
@@ -61,6 +62,7 @@ app.include_router(roles.router)
 app.include_router(connections.router)
 app.include_router(ingestion.router)
 app.include_router(metrics.router)
+app.include_router(waitlist.router)
 
 
 @app.get("/")

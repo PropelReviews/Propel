@@ -84,8 +84,11 @@ class Settings(BaseSettings):
     invite_token_lifetime_hours: int = 72
 
     # Comma-separated list of origins allowed to call the API from a browser.
-    # The SPA dev server runs on :5173; add deployed origins per environment.
-    cors_allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    # The SPA dev server runs on :5173, the landing dev server (waitlist form)
+    # on :5174; add deployed origins per environment.
+    cors_allowed_origins: str = (
+        "http://localhost:5173,http://localhost:5174,http://localhost:3000"
+    )
 
     @property
     def cors_origins_list(self) -> list[str]:

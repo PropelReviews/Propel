@@ -53,6 +53,12 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_APP_URL": JSON.stringify(
         env.VITE_APP_URL ?? "https://app.propel.ninja",
       ),
+      // Backend API base URL for the waitlist signup. The deploy script sets
+      // this per environment (e.g. https://api.beta.propel.ninja); defaults to
+      // the local dev API.
+      "import.meta.env.VITE_API_URL": JSON.stringify(
+        env.VITE_API_URL ?? "http://localhost:8000",
+      ),
       // Public GitHub repository used by the self-hosted CTAs.
       "import.meta.env.VITE_GITHUB_URL": JSON.stringify(
         env.VITE_GITHUB_URL ?? "https://github.com/PropelReviews/Propel",

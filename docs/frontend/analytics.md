@@ -75,6 +75,8 @@ sparingly, when autocapture cannot express the intent.
 | `sign_in_submitted` | `auth-provider.tsx` | Fired when a sign-in request starts. |
 | `sign_in_succeeded` | `auth-provider.tsx` | Session established. |
 | `sign_in_failed` | `auth-provider.tsx` | Carries `reason` (backend error code or `unknown`). |
+| `landing_viewed` | [`LandingPage.tsx`](../../frontend/src/pages/landing/LandingPage.tsx) | Fired on landing page mount. |
+| `waitlist_joined` | Backend: [`app/services/waitlist.py`](../../backend/app/services/waitlist.py) | **Server-side** event captured after a waitlist email is persisted. Carries `email`. Drives the PostHog workflow that emails new signups to the team. Deliberately not fired from the frontend so ad-blockers can't skip it and the workflow can't double-fire. |
 
 To add one: `posthog?.capture("event_name", { /* props */ })`.
 
@@ -94,7 +96,7 @@ stable. Feature flags and distinct IDs are also bootstrapped from
 
 | Flag | Controls |
 |---|---|
-| `signup-signin` | Whether the sign up / sign in surface (landing links + `/signin`, `/signup` routes) is shown. Read via [`use-auth-flag.ts`](../../frontend/src/hooks/use-auth-flag.ts). When PostHog is disabled (no key), it falls back to `VITE_AUTH_ENABLED === "true"` (default off). |
+| `signup-signin` | Whether the sign up / sign in surface (`/signin`, `/signup` routes and homepage auth CTAs) is shown. On the landing site it gates the cloud CTAs: when **on**, "Open app" / "Try Propel Cloud" links render; when **off**, they are replaced by the email waitlist form ([`waitlist-form.tsx`](../../frontend/src/components/landing/waitlist-form.tsx)). Read via [`use-auth-flag.ts`](../../frontend/src/hooks/use-auth-flag.ts). When PostHog is disabled (no key), it falls back to `VITE_AUTH_ENABLED === "true"` (default off). |
 
 ## Error tracking
 
@@ -130,8 +132,6 @@ replay must also be enabled in your PostHog project settings.
 
 ## Limitations & future work
 
-- **`dist-landing` artifact:** the ~15-element landing page in
-  `frontend/dist-landing/` is a prebuilt artifact with no React source in
-  `src/`. Autocapture still records its clicks at runtime (when a key is set),
-  but it cannot receive the `data-ph-capture-attribute-*` enrichment until its
-  source is added.
+- None currently. (The landing page is real React source under
+  `frontend/src/pages/landing/` — built to `dist-landing/` — so its buttons
+  carry the full `data-ph-capture-attribute-*` enrichment.)

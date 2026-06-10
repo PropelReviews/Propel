@@ -25,9 +25,12 @@ FRONTEND_DIR="$REPO_ROOT/frontend"
 BUCKET="$(terraform -chdir="$TF_DIR" output -raw landing_bucket)"
 DIST_ID="$(terraform -chdir="$TF_DIR" output -raw landing_cloudfront_distribution_id)"
 APP_URL="$(terraform -chdir="$TF_DIR" output -raw frontend_url)"
+API_URL="$(terraform -chdir="$TF_DIR" output -raw api_url)"
 
 # CTAs point at the app frontend for this environment (e.g. app.beta.propel.ninja).
 export VITE_APP_URL="$APP_URL"
+# The waitlist form posts to the API for this environment (e.g. api.beta.propel.ninja).
+export VITE_API_URL="$API_URL"
 export VITE_GITHUB_URL="${VITE_GITHUB_URL:-https://github.com/PropelReviews/Propel}"
 export VITE_POSTHOG_KEY="${VITE_POSTHOG_KEY:-${POSTHOG_TOKEN:-}}"
 export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://us.i.posthog.com}}"
