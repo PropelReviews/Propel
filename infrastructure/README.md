@@ -29,7 +29,7 @@ The root `docker-compose.yml` orchestrates the full local stack:
 
 | Service  | Port | Description              |
 |----------|------|--------------------------|
-| postgres | 5432 | Postgres 16 database     |
+| postgres | 5432 | Postgres 18.3 database     |
 | backend  | 8000 | FastAPI + Meltano        |
 | frontend | 5173 | Vite + React dashboard   |
 

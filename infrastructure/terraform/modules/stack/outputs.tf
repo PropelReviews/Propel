@@ -42,6 +42,10 @@ output "ingestion_service_name" {
   value = module.api.ingestion_service_name
 }
 
+output "dask_worker_service_name" {
+  value = module.api.dask_worker_service_name
+}
+
 output "dagster_url" {
   value = var.ingestion_enabled && var.dagster_fqdn != "" ? "https://${var.dagster_fqdn}" : null
 }

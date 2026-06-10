@@ -42,6 +42,10 @@ output "ingestion_service_name" {
   value = module.stack.ingestion_service_name
 }
 
+output "dask_worker_service_name" {
+  value = module.stack.dask_worker_service_name
+}
+
 output "dagster_url" {
   value = module.stack.dagster_url
 }

@@ -1,5 +1,9 @@
 # Code location for the Dagster webserver and daemon. The `propel_orchestration`
 # package is importable via PYTHONPATH (set by entrypoint.sh / docker-compose),
 # and it imports the backend `app` package the same way.
+#
+# ECS production uses workspace.ecs.yaml (gRPC code server) instead — see
+# entrypoint.sh `dagster-service`. Set DAGSTER_CURRENT_IMAGE on the coordinator
+# task so EcsRunLauncher knows which image to use for run workers.
 load_from:
   - python_module: propel_orchestration.definitions

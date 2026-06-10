@@ -1,0 +1,24 @@
+# EcsRunLauncher: appended to dagster.yaml by entrypoint.sh when
+# DAGSTER_RUN_LAUNCHER=ecs (set on the ECS ingestion task definition; never in
+# local dev, which keeps the DefaultRunLauncher subprocess model).
+#
+# Each dequeued run gets its own Fargate task instead of a subprocess on the
+# (small) coordinator task. The launcher derives cluster, subnets, security
+# groups, image, environment, and secrets from the currently running task and
+# registers a per-deploy task definition whose single container is named
+# `run` with command `dagster api execute_run ...` (handled by entrypoint.sh).
+#
+# The run worker itself is light for org ingestion (steps execute on the Dask
+# fleet via dask_executor) but hosts dbt builds for analytics runs, so it gets
+# the footprint the old all-in-one ingestion task had. Override per-run with
+# the ecs/cpu and ecs/memory run tags if a job needs more.
+run_launcher:
+  module: dagster_aws.ecs
+  class: EcsRunLauncher
+  config:
+    # Don't scan Secrets Manager for tagged secrets (would need ListSecrets);
+    # the run task inherits the coordinator container's explicit secrets.
+    secrets_tag: null
+    run_resources:
+      cpu: "512"
+      memory: "1024"

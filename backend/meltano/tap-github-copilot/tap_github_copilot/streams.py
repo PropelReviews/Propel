@@ -36,12 +36,22 @@ _SCHEMA: dict[str, Any] = {
 }
 
 
+# Expected "Copilot not available" responses: 404 (no Copilot Business or
+# missing App permission), 403 (forbidden), 422 (metrics API policy disabled).
+_NO_COPILOT_STATUSES = frozenset(
+    {HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN, HTTPStatus.UNPROCESSABLE_ENTITY}
+)
+
+
 class CopilotUsageStream(RESTStream):
     name = "copilot_usage"
     url_base = "https://api.github.com"
     primary_keys = ("date",)  # noqa: RUF012 — singer-sdk expects a sequence
     records_jsonpath = "$[*]"
     schema = _SCHEMA
+    # Bound each request so a stalled connection can't hang the Meltano run
+    # (singer-sdk's default is 300s).
+    timeout = 30
 
     @property
     def path(self) -> str:
@@ -61,17 +71,19 @@ class CopilotUsageStream(RESTStream):
         return headers
 
     def validate_response(self, response: requests.Response) -> None:
-        # GitHub returns 404 when the org has no Copilot Business/Enterprise (or
-        # the App lacks the "GitHub Copilot Business" org-read permission). That's
-        # an expected "no data" state for many orgs, not a fatal error — let the
-        # run finish cleanly with zero records instead of failing every hour.
-        if response.status_code == HTTPStatus.NOT_FOUND:
+        # GitHub signals "no Copilot for this org" with 404 (no Copilot
+        # Business/Enterprise or missing App permission), 403 (forbidden), or
+        # 422 (metrics API policy disabled). Those are expected "no data"
+        # states for many orgs, not fatal errors — let the run finish cleanly
+        # with zero records instead of failing every hour.
+        if response.status_code in _NO_COPILOT_STATUSES:
             return
         super().validate_response(response)
 
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
-        # Only the 200 body is a metrics array; on the tolerated 404 the body is
-        # an error object, so emit nothing rather than parsing it as records.
+        # Only the 200 body is a metrics array; on the tolerated no-Copilot
+        # statuses the body is an error object, so emit nothing rather than
+        # parsing it as records.
         if response.status_code != HTTPStatus.OK:
             return
         yield from super().parse_response(response)

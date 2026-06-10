@@ -28,23 +28,48 @@ resource "aws_ecs_task_definition" "ingestion" {
     # daemon owns the hourly schedule; SKIP_MIGRATIONS keeps the app schema owned
     # by the API deploy (Dagster manages its own tables in a separate schema).
     command = ["dagster-service"]
-    environment = [for k, v in merge(var.app_environment, {
-      SKIP_MIGRATIONS   = "1"
-      OTEL_SERVICE_NAME = "propel-ingestion"
-      DAGSTER_HOME      = "/tmp/dagster"
-      DAGSTER_PORT      = tostring(var.dagster_port)
-    }) : { name = k, value = v }]
+    environment = [for k, v in merge(
+      var.app_environment,
+      {
+        SKIP_MIGRATIONS   = "1"
+        OTEL_SERVICE_NAME = "propel-ingestion"
+        DAGSTER_HOME      = "/tmp/dagster"
+        DAGSTER_PORT      = tostring(var.dagster_port)
+        # EcsRunLauncher reads this from the code location metadata when
+        # dequeuing runs (required since Dagster 1.9.x). Must match the image
+        # this task is running.
+        DAGSTER_CURRENT_IMAGE = "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
+      },
+      # Dask: embedded scheduler on this task (entrypoint starts it next to
+      # the daemon), runs as their own Fargate tasks (EcsRunLauncher), worker
+      # fleet autoscaled by the coordinator (worker_scaling.py).
+      local.dask_enabled ? {
+        DASK_SCHEDULER_EMBEDDED = "1"
+        DASK_SCHEDULER_ADDRESS  = local.dask_scheduler_address
+        DAGSTER_RUN_LAUNCHER    = "ecs"
+        DASK_WORKER_ECS_CLUSTER = aws_ecs_cluster.this.name
+        DASK_WORKER_ECS_SERVICE = local.dask_worker_service
+        DASK_WORKER_MAX         = tostring(var.dask_worker_max_count)
+      } : {},
+    ) : { name = k, value = v }]
     secrets = local.container_secrets
 
-    portMappings = [{
-      containerPort = var.dagster_port
-      protocol      = "tcp"
-    }]
+    portMappings = concat(
+      [{
+        containerPort = var.dagster_port
+        protocol      = "tcp"
+      }],
+      # Dask scheduler RPC + dashboard (reachable only inside the ECS SG).
+      local.dask_enabled ? [
+        { containerPort = 8786, protocol = "tcp" },
+        { containerPort = 8787, protocol = "tcp" },
+      ] : [],
+    )
 
     # Liveness: the daemon must be running for schedules to fire. Generous
     # startPeriod covers Meltano/Dagster warmup on a cold task.
     healthCheck = {
-      command     = ["CMD-SHELL", "pgrep -f dagster-daemon > /dev/null || exit 1"]
+      command     = ["CMD-SHELL", "pgrep -f dagster-daemon > /dev/null && pgrep -f 'dagster api grpc' > /dev/null || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
@@ -170,6 +195,15 @@ resource "aws_ecs_service" "ingestion" {
     target_group_arn = aws_lb_target_group.ingestion[0].arn
     container_name   = "ingestion"
     container_port   = var.dagster_port
+  }
+
+  # Register the task IP as dask-scheduler.<name_prefix>.local so workers and
+  # run tasks can reach the embedded Dask scheduler.
+  dynamic "service_registries" {
+    for_each = local.dask_enabled ? [1] : []
+    content {
+      registry_arn = aws_service_discovery_service.dask_scheduler[0].arn
+    }
   }
 
   depends_on = [aws_lb_listener.https]

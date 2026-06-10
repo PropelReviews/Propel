@@ -98,6 +98,9 @@ module "api" {
   dagster_fqdn          = var.dagster_fqdn
   dagster_allowed_cidrs = var.dagster_allowed_cidrs
 
+  dask_enabled          = var.dask_enabled
+  dask_worker_max_count = var.dask_worker_max_count
+
   tags = var.tags
 }
 

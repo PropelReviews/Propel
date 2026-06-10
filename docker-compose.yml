@@ -23,7 +23,7 @@ services:
         condition: service_healthy
 
   postgres:
-    image: postgres:16
+    image: postgres:18.3
     container_name: propel-postgres
     restart: unless-stopped
     environment:
@@ -87,6 +87,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion}
       DAGSTER_HOME: /tmp/dagster
+      # Embedded Dask scheduler (same container as the Dagster daemon, like
+      # prod); org_ingestion_job steps execute on it via dask_executor.
+      # Dashboard at http://localhost:8787.
+      DASK_SCHEDULER_EMBEDDED: "1"
+      DASK_SCHEDULER_ADDRESS: tcp://ingestion:8786
       # dbt connection for manual `docker compose exec ingestion dbt ...` runs;
       # Dagster-launched runs derive the same values from DATABASE_URL.
       DBT_HOST: postgres
@@ -102,6 +107,8 @@ services:
       SKIP_MIGRATIONS: "1"
     ports:
       - "${DAGSTER_PORT:-3001}:3001"
+      # Embedded Dask scheduler dashboard.
+      - "${DASK_DASHBOARD_PORT:-8787}:8787"
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
       - ${PROPEL_HOST_DIR:-.}/orchestration:/orchestration
@@ -113,6 +120,42 @@ services:
       # isn't shared with other containers, so no "database is locked" races.
       - meltano-ingestion:/app/meltano/.meltano
     command: ["dagster", "dev", "-h", "0.0.0.0", "-p", "3001", "-w", "/orchestration/workspace.yaml"]
+
+  # Dask worker: executes the Dagster steps (Meltano runs) that the
+  # dask_executor submits. Same image + mounts as `ingestion` so steps can
+  # import `app`, reach Postgres, and shell out to Meltano. One container with
+  # DASK_WORKER_PROCESSES single-threaded worker processes; its own .meltano
+  # volume so Meltano's SQLite systemdb is never shared across containers.
+  dask-worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    container_name: propel-dask-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ingestion:
+        condition: service_started
+    env_file:
+      - .env
+      # GitHub App creds for ingestion runs (see backend service above).
+      - path: .env.ingestion.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME_INGESTION:-propel-ingestion}
+      # Scheduler is embedded in the ingestion container.
+      DASK_SCHEDULER_ADDRESS: tcp://ingestion:8786
+      DASK_WORKER_PROCESSES: "2"
+      SKIP_UV_SYNC: "1"
+      SKIP_MIGRATIONS: "1"
+    volumes:
+      - ${PROPEL_HOST_DIR:-.}/backend:/app
+      - ${PROPEL_HOST_DIR:-.}/orchestration:/orchestration
+      - ${PROPEL_HOST_DIR:-.}/transformation:/transformation
+      - meltano-dask-worker:/app/meltano/.meltano
+    command: ["dask-worker"]
 
   frontend:
     build:
@@ -171,3 +214,4 @@ services:
 volumes:
   pgdata:
   meltano-ingestion:
+  meltano-dask-worker:

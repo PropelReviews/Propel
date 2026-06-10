@@ -56,15 +56,21 @@ from dagster import (
     OpExecutionContext,
     Out,
     RunRequest,
+    RunsFilter,
     RunStatusSensorContext,
     ScheduleEvaluationContext,
+    SensorEvaluationContext,
     SkipReason,
     in_process_executor,
     job,
     op,
     run_status_sensor,
     schedule,
+    sensor,
 )
+
+from propel_orchestration import worker_scaling
+from propel_orchestration.dask_resource import build_dask_executor
 
 logger = logging.getLogger("propel.ingestion.dagster")
 
@@ -91,11 +97,12 @@ _event_loop: asyncio.AbstractEventLoop | None = None
 def _run(coro):
     """Run a coroutine on a single process-wide event loop.
 
-    Every op runs in the same worker process (``in_process_executor``). The
-    backend's async SQLAlchemy engine binds its connection pool to the first
-    running loop, so all ops must share one loop — ``asyncio.run()`` (a fresh
-    loop per op) reuses pooled connections across loops and raises
-    "got Future attached to a different loop".
+    The backend's async SQLAlchemy engine binds its connection pool to the
+    first running loop, so every op executing in a given process must share
+    one loop — ``asyncio.run()`` (a fresh loop per op) reuses pooled
+    connections across loops and raises "got Future attached to a different
+    loop". This holds for ``in_process_executor`` (all ops in one process) and
+    for Dask workers (each long-lived worker process may run many steps).
     """
     global _event_loop
     if _event_loop is None or _event_loop.is_closed():
@@ -333,8 +340,12 @@ def discovery_job() -> None:
     discover_orgs()
 
 
+# Steps execute on the shared Dask worker fleet (DASK_SCHEDULER_ADDRESS), so
+# concurrent per-org runs share worker capacity instead of stacking Meltano
+# subprocesses on the daemon's task. Falls back to a per-run LocalCluster when
+# no scheduler is configured (bare `dagster dev`).
 @job(
-    executor_def=in_process_executor,
+    executor_def=build_dask_executor(),
     description=(
         "Pull one org's raw GitHub data (scoped by the propel/account_id tag; "
         "tag propel/start_date for a time-based backfill)."
@@ -396,6 +407,10 @@ def org_fanout_sensor(context: RunStatusSensorContext):
     if not accounts:
         return SkipReason("No active GitHub connected accounts to ingest")
 
+    # Boot the Dask worker fleet now so workers register while the runs queue
+    # (Fargate cold start ~1-2 min; Dask holds steps until workers join).
+    worker_scaling.scale_up_for_runs(len(accounts))
+
     discovery_run_id = context.dagster_run.run_id
     return [
         RunRequest(
@@ -404,3 +419,39 @@ def org_fanout_sensor(context: RunStatusSensorContext):
         )
         for account_id, org in accounts
     ]
+
+
+# Runs that need Dask workers: anything queued or in progress for the
+# ingestion job. CANCELING still holds workers (steps may be mid-flight).
+_ACTIVE_RUN_STATUSES = [
+    DagsterRunStatus.QUEUED,
+    DagsterRunStatus.NOT_STARTED,
+    DagsterRunStatus.STARTING,
+    DagsterRunStatus.STARTED,
+    DagsterRunStatus.CANCELING,
+]
+
+
+@sensor(
+    job=org_ingestion_job,
+    minimum_interval_seconds=60,
+    default_status=DefaultSensorStatus.RUNNING,
+    description=(
+        "Reconcile the Dask worker ECS service against active ingestion runs: "
+        "scale up for queued/running org runs (incl. manual launches), scale "
+        "to zero when idle. Requests no runs itself."
+    ),
+)
+def dask_worker_scaling_sensor(context: SensorEvaluationContext):
+    """Keep the worker fleet sized to the actual run queue (0 when idle)."""
+    if not worker_scaling.scaling_enabled():
+        return SkipReason("Dask worker autoscaling disabled (no ECS service env)")
+
+    active = context.instance.get_runs_count(
+        RunsFilter(job_name="org_ingestion_job", statuses=_ACTIVE_RUN_STATUSES)
+    )
+    try:
+        summary = worker_scaling.reconcile(active)
+    except Exception as exc:  # noqa: BLE001 — surface as a skip, not a crash
+        return SkipReason(f"Dask worker fleet reconcile failed: {exc}")
+    return SkipReason(f"Dask worker fleet: {summary}")

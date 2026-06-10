@@ -26,13 +26,68 @@ fi
 # on its own volume and installs on first start. Prod bakes plugins at build time,
 # so the marker dir already exists and this is skipped.
 if { [ "$1" = "cron" ] || [ "$1" = "dagster" ] || [ "$1" = "dagster-service" ] \
-  || [ "${INGESTION_CRON_ENABLED:-0}" = "1" ]; } \
+  || [ "$1" = "dask-worker" ] || [ "${INGESTION_CRON_ENABLED:-0}" = "1" ]; } \
   && command -v meltano >/dev/null 2>&1 && [ -f /app/meltano/meltano.yml ]; then
   if [ ! -d /app/meltano/.meltano/extractors ]; then
     echo "==> Installing Meltano plugins (first run; this can take a few minutes)"
     (cd /app/meltano && meltano install) \
       || echo "WARN: 'meltano install' failed; ingestion runs will fail until it succeeds"
   fi
+fi
+
+# ECS run worker (EcsRunLauncher): the launched task's command is
+# `dagster api execute_run ...`. Same env prep as `dagster-service` (the
+# orchestration venv, import paths, Dagster's Postgres URL), but no daemon or
+# webserver — the command executes one run and exits. Must precede the dev
+# `dagster` branch below, which also matches on $1.
+if [ "$1" = "dagster" ] && [ "$2" = "api" ]; then
+  echo "==> Starting Dagster run worker"
+  : "${DAGSTER_HOME:=/tmp/dagster}"
+  export DAGSTER_HOME
+  mkdir -p "$DAGSTER_HOME"
+  cp /app/orchestration/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
+  if [ "${DAGSTER_RUN_LAUNCHER:-}" = "ecs" ]; then
+    cat /app/orchestration/run_launcher_ecs.yaml >> "$DAGSTER_HOME/dagster.yaml"
+  fi
+  export PATH="/opt/orchestration-venv/bin:$PATH"
+  export PYTHONPATH="/app:/app/orchestration${PYTHONPATH:+:$PYTHONPATH}"
+  DAGSTER_PG_URL="$(python /app/orchestration/scripts/prepare_dagster_db.py)"
+  export DAGSTER_PG_URL
+  cd /app/orchestration
+  exec "$@"
+fi
+
+# Dask worker: executes Dagster steps submitted by the dask_executor. Needs the
+# same import paths + instance env as the Dagster service (steps rehydrate the
+# Postgres-backed instance via DAGSTER_PG_URL and shell out to Meltano).
+# --nthreads must stay 1: jobs._run shares one asyncio event loop per process,
+# so a worker process must never run two steps concurrently on threads.
+# Parallelism comes from DASK_WORKER_PROCESSES (separate worker processes).
+if [ "$1" = "dask-worker" ]; then
+  echo "==> Starting Dask worker -> ${DASK_SCHEDULER_ADDRESS:?DASK_SCHEDULER_ADDRESS must be set}"
+  : "${DAGSTER_HOME:=/tmp/dagster}"
+  export DAGSTER_HOME
+  mkdir -p "$DAGSTER_HOME"
+
+  # Orchestration project: bind mount in dev, baked path in prod.
+  ORCH_DIR=/orchestration
+  [ -d "$ORCH_DIR" ] || ORCH_DIR=/app/orchestration
+
+  export PATH="/opt/orchestration-venv/bin:$PATH"
+  export PYTHONPATH="/app:$ORCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
+  cp "$ORCH_DIR/dagster.yaml" "$DAGSTER_HOME/dagster.yaml"
+
+  if DAGSTER_PG_URL="$(python "$ORCH_DIR/scripts/prepare_dagster_db.py")" \
+    && [ -n "$DAGSTER_PG_URL" ]; then
+    export DAGSTER_PG_URL
+  else
+    echo "WARN: Dagster DB prep failed; steps will fail to load the Dagster instance"
+  fi
+
+  exec dask worker "$DASK_SCHEDULER_ADDRESS" \
+    --nthreads 1 \
+    --nworkers "${DASK_WORKER_PROCESSES:-1}" \
+    --memory-limit "${DASK_WORKER_MEMORY_LIMIT:-auto}"
 fi
 
 # Local dev runs the combined `dagster dev` (webserver + daemon) directly as the
@@ -61,6 +116,15 @@ if [ "$1" = "dagster" ]; then
   else
     echo "WARN: Dagster DB prep failed; using ephemeral SQLite in $DAGSTER_HOME (run history will NOT persist)"
   fi
+
+  # Embedded Dask scheduler — same opt-in as prod's dagster-service mode, so
+  # the dev stack needs no dedicated scheduler container either.
+  if [ "${DASK_SCHEDULER_EMBEDDED:-0}" = "1" ]; then
+    echo "==> Starting embedded Dask scheduler (:${DASK_SCHEDULER_PORT:-8786})"
+    dask scheduler --host 0.0.0.0 \
+      --port "${DASK_SCHEDULER_PORT:-8786}" \
+      --dashboard-address ":${DASK_DASHBOARD_PORT:-8787}" &
+  fi
 fi
 
 # Dagster ingestion service (V2 scheduler): a long-running daemon (owns the
@@ -74,6 +138,13 @@ if [ "$1" = "dagster-service" ]; then
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"
   cp /app/orchestration/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
+  # On ECS, launch each run as its own Fargate task (the coordinator task only
+  # hosts the daemon + webserver). Opt-in via env so local dev keeps the
+  # default subprocess launcher.
+  if [ "${DAGSTER_RUN_LAUNCHER:-}" = "ecs" ]; then
+    echo "==> Run launcher: EcsRunLauncher (one Fargate task per run)"
+    cat /app/orchestration/run_launcher_ecs.yaml >> "$DAGSTER_HOME/dagster.yaml"
+  fi
 
   # Run Dagster from its own venv (keeps the API venv pristine); import the
   # backend `app` and `propel_orchestration` packages from source. `meltano`
@@ -89,10 +160,35 @@ if [ "$1" = "dagster-service" ]; then
   echo "==> Migrating Dagster instance storage"
   dagster instance migrate || echo "WARN: 'dagster instance migrate' failed"
 
+  # Long-lived gRPC code server (see workspace.ecs.yaml). Must stay up for the
+  # webserver/daemon to load definitions and for EcsRunLauncher to attach
+  # container_image metadata from DAGSTER_CURRENT_IMAGE.
+  echo "==> Starting Dagster gRPC code server (:4000)"
+  dagster api grpc -h 0.0.0.0 -p 4000 -m propel_orchestration.definitions &
+  GRPC_PID=$!
+  # Give the server a moment to bind before the webserver's first reload.
+  sleep 2
+  if ! kill -0 "$GRPC_PID" 2>/dev/null; then
+    echo "ERROR: Dagster gRPC code server failed to start"
+    exit 1
+  fi
+
+  # Embedded Dask scheduler (opt-in): runs alongside the daemon instead of as a
+  # dedicated ECS service. It is pure coordination (tiny footprint) and must be
+  # version-locked to the workers/clients anyway, so it shares the coordinator
+  # task and its deploy lifecycle. A redeploy drops in-flight Dask steps; the
+  # hourly watermarked + deduped ingestion self-heals on the next run.
+  if [ "${DASK_SCHEDULER_EMBEDDED:-0}" = "1" ]; then
+    echo "==> Starting embedded Dask scheduler (:${DASK_SCHEDULER_PORT:-8786})"
+    dask scheduler --host 0.0.0.0 \
+      --port "${DASK_SCHEDULER_PORT:-8786}" \
+      --dashboard-address ":${DASK_DASHBOARD_PORT:-8787}" &
+  fi
+
   # Daemon in the background, webserver in the foreground (PID 1). The container
   # health check watches the daemon; the ALB health check watches the webserver.
-  dagster-daemon run &
-  exec dagster-webserver -h 0.0.0.0 -p "${DAGSTER_PORT:-3000}" -w /app/orchestration/workspace.yaml
+  dagster-daemon run -w /app/orchestration/workspace.ecs.yaml &
+  exec dagster-webserver -h 0.0.0.0 -p "${DAGSTER_PORT:-3000}" -w /app/orchestration/workspace.ecs.yaml
 fi
 
 # On-server cron (V1 ingestion scheduler). cron jobs start with an empty

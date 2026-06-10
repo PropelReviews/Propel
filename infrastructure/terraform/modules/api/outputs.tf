@@ -14,6 +14,10 @@ output "ingestion_service_name" {
   value = var.ingestion_enabled ? aws_ecs_service.ingestion[0].name : null
 }
 
+output "dask_worker_service_name" {
+  value = local.dask_enabled ? aws_ecs_service.dask_workers[0].name : null
+}
+
 output "alb_dns_name" {
   value = aws_lb.this.dns_name
 }

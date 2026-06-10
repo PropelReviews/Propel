@@ -1,0 +1,12 @@
+# ECS production workspace: the coordinator runs a long-lived gRPC code server
+# (started by entrypoint.sh before the webserver/daemon) instead of letting the
+# webserver spawn a short-lived subprocess. That subprocess pattern is fragile
+# on Fargate — if it exits, the UI shows "Could not reach user code server"
+# (unix socket missing) even though /server_info still returns 200.
+#
+# Local dev keeps using workspace.yaml (python_module + `dagster dev`).
+load_from:
+  - grpc_server:
+      host: localhost
+      port: 4000
+      location_name: propel_orchestration

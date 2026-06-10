@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.session import async_session_maker
 from app.ingestion import meltano_runner
-from app.integrations.github import app_auth
+from app.integrations.github import app_auth, copilot
 from app.models.connected_account import ConnectedAccount
 from app.models.enums import (
     AuthType,
@@ -49,6 +49,12 @@ _WATERMARK_OVERLAP = timedelta(days=1)
 # overlap guard forever; we mark it `error` at the start of every batch so the
 # next run can proceed.
 _STALE_RUN_MAX_AGE = timedelta(hours=2)
+
+# Copilot availability is probed at most once per TTL per account; the result is
+# cached on connected_accounts.metadata so orgs without Copilot skip the sync
+# without an extra GitHub call every hour.
+_COPILOT_CHECK_TTL = timedelta(hours=24)
+_COPILOT_META_KEY = "copilot_metrics"
 
 
 @dataclass(frozen=True)
@@ -522,6 +528,17 @@ async def _build_env(
         env["TAP_GITHUB_ORGANIZATIONS"] = json.dumps([account.external_account_name])
         env["TAP_GITHUB_START_DATE"] = await resolved_start_date()
     elif job.org_mode == "copilot":
+        if not await _copilot_available(session, account, token.token):
+            logger.info(
+                "Skipping extraction run: Copilot metrics not available for org",
+                extra=_ingestion_extra(
+                    account,
+                    job,
+                    run=run,
+                    skip_reason="copilot_not_available",
+                ),
+            )
+            return None
         env["COPILOT_ORG"] = account.external_account_name
 
     if job.needs_member_logins:
@@ -541,6 +558,39 @@ async def _build_env(
         env["TAP_GITHUB_START_DATE"] = await resolved_start_date()
 
     return env
+
+
+async def _copilot_available(
+    session: AsyncSession, account: ConnectedAccount, token: str
+) -> bool:
+    """Whether the org exposes Copilot metrics, cached on the account metadata.
+
+    A fresh cached answer (within ``_COPILOT_CHECK_TTL``) is used as-is; missing
+    or stale entries trigger a re-probe whose result is persisted, so orgs that
+    enable Copilot later are picked up within a day.
+    """
+    db_account = await session.get(ConnectedAccount, account.id) or account
+    cached = (db_account.meta or {}).get(_COPILOT_META_KEY) or {}
+    checked_at_raw = cached.get("checked_at")
+    if isinstance(cached.get("available"), bool) and checked_at_raw:
+        with contextlib.suppress(ValueError, TypeError):
+            checked_at = datetime.fromisoformat(checked_at_raw)
+            if datetime.now(UTC) - checked_at < _COPILOT_CHECK_TTL:
+                return cached["available"]
+
+    available = await copilot.copilot_metrics_available(
+        token, account.external_account_name or ""
+    )
+    # Reassign (not mutate) the JSONB dict so SQLAlchemy detects the change.
+    db_account.meta = {
+        **(db_account.meta or {}),
+        _COPILOT_META_KEY: {
+            "available": available,
+            "checked_at": datetime.now(UTC).isoformat(),
+        },
+    }
+    await session.commit()
+    return available
 
 
 async def _member_logins(session: AsyncSession, account: ConnectedAccount) -> list[str]:

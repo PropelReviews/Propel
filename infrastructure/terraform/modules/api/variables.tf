@@ -134,3 +134,33 @@ variable "dagster_allowed_cidrs" {
   description = "Source IP CIDRs allowed to reach the Dagster UI (e.g. office/VPN). Empty = open to anyone (Dagster OSS has no auth)."
   default     = []
 }
+
+variable "dask_enabled" {
+  type        = bool
+  description = "Provision the Dask worker fleet (scale-to-zero) + embedded scheduler for distributed ingestion. Only effective when ingestion_enabled."
+  default     = true
+}
+
+variable "dask_worker_cpu" {
+  type        = number
+  description = "Fargate CPU units per Dask worker task."
+  default     = 1024
+}
+
+variable "dask_worker_memory" {
+  type        = number
+  description = "Fargate memory (MiB) per Dask worker task (Meltano needs headroom)."
+  default     = 2048
+}
+
+variable "dask_worker_max_count" {
+  type        = number
+  description = "Ceiling for the Dagster-driven worker autoscaler (scales 0..max with queued ingestion runs)."
+  default     = 4
+}
+
+variable "dask_worker_processes" {
+  type        = number
+  description = "Single-threaded Dask worker processes per worker task (parallel step slots)."
+  default     = 2
+}

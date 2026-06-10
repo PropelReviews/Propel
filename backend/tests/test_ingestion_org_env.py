@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -107,3 +107,90 @@ async def test_profiles_job_skips_when_no_members(clean_db):
         env = await orchestrator._build_env(session, account, job, run)
 
     assert env is None
+
+
+def _patch_copilot_probe(monkeypatch, available: bool):
+    calls: list[tuple[str, str]] = []
+
+    async def _probe(token, org):
+        calls.append((token, org))
+        return available
+
+    monkeypatch.setattr(orchestrator.copilot, "copilot_metrics_available", _probe)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_copilot_job_skips_when_org_has_no_copilot(clean_db, monkeypatch):
+    calls = _patch_copilot_probe(monkeypatch, available=False)
+    async with async_session_maker() as session:
+        account = await _seed(session)
+        job = _job("copilot_sync")
+        run = await _run_for(session, account, job)
+
+        env = await orchestrator._build_env(session, account, job, run)
+
+        assert env is None
+        assert calls == [("tok", _ORG)]
+        # The probe result is cached on the account metadata.
+        await session.refresh(account)
+        cached = account.meta["copilot_metrics"]
+        assert cached["available"] is False
+        assert cached["checked_at"]
+
+
+@pytest.mark.asyncio
+async def test_copilot_job_runs_when_org_has_copilot(clean_db, monkeypatch):
+    _patch_copilot_probe(monkeypatch, available=True)
+    async with async_session_maker() as session:
+        account = await _seed(session)
+        job = _job("copilot_sync")
+        run = await _run_for(session, account, job)
+
+        env = await orchestrator._build_env(session, account, job, run)
+
+        assert env["COPILOT_ORG"] == _ORG
+        await session.refresh(account)
+        assert account.meta["copilot_metrics"]["available"] is True
+
+
+@pytest.mark.asyncio
+async def test_copilot_fresh_cache_skips_probe(clean_db, monkeypatch):
+    calls = _patch_copilot_probe(monkeypatch, available=True)
+    async with async_session_maker() as session:
+        account = await _seed(session)
+        account.meta = {
+            "copilot_metrics": {
+                "available": False,
+                "checked_at": datetime.now(UTC).isoformat(),
+            }
+        }
+        job = _job("copilot_sync")
+        run = await _run_for(session, account, job)
+
+        env = await orchestrator._build_env(session, account, job, run)
+
+    assert env is None
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_copilot_stale_cache_reprobes(clean_db, monkeypatch):
+    calls = _patch_copilot_probe(monkeypatch, available=True)
+    async with async_session_maker() as session:
+        account = await _seed(session)
+        account.meta = {
+            "copilot_metrics": {
+                "available": False,
+                "checked_at": (datetime.now(UTC) - timedelta(days=2)).isoformat(),
+            }
+        }
+        job = _job("copilot_sync")
+        run = await _run_for(session, account, job)
+
+        env = await orchestrator._build_env(session, account, job, run)
+
+        assert env["COPILOT_ORG"] == _ORG
+        assert calls == [("tok", _ORG)]
+        await session.refresh(account)
+        assert account.meta["copilot_metrics"]["available"] is True

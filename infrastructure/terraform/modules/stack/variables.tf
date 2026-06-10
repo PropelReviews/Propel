@@ -119,6 +119,18 @@ variable "dagster_allowed_cidrs" {
   description = "Source IP CIDRs allowed to reach the Dagster UI. Empty = open (no auth)."
 }
 
+variable "dask_enabled" {
+  type        = bool
+  default     = true
+  description = "Provision the scale-to-zero Dask worker fleet for distributed ingestion (requires ingestion_enabled)."
+}
+
+variable "dask_worker_max_count" {
+  type        = number
+  default     = 4
+  description = "Ceiling for the Dagster-driven Dask worker autoscaler."
+}
+
 variable "tags" {
   type        = map(string)
   default     = {}

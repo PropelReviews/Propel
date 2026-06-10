@@ -61,4 +61,17 @@ if [ -n "${INGESTION_SERVICE:-}" ] && [ "$INGESTION_SERVICE" != "null" ]; then
     --region "$REGION" >/dev/null
 fi
 
+# Dask workers run the same image. Usually scaled to 0 (the Dagster coordinator
+# owns desired_count), in which case force-new-deployment is a no-op and the
+# next scale-up boots tasks on the new image; if workers are mid-run they roll.
+DASK_WORKER_SERVICE="$(terraform -chdir="$TF_DIR" output -raw dask_worker_service_name 2>/dev/null || true)"
+if [ -n "${DASK_WORKER_SERVICE:-}" ] && [ "$DASK_WORKER_SERVICE" != "null" ]; then
+  echo "==> Forcing new ECS deployment ($CLUSTER/$DASK_WORKER_SERVICE)"
+  aws ecs update-service \
+    --cluster "$CLUSTER" \
+    --service "$DASK_WORKER_SERVICE" \
+    --force-new-deployment \
+    --region "$REGION" >/dev/null
+fi
+
 echo "Done. Deployed $ECR_URL:$TAG to $ENV."
