@@ -9,6 +9,10 @@
 #     "GITHUB_APP_PRIVATE_KEY": "-----BEGIN RSA PRIVATE KEY-----\n...",
 #     "GITHUB_APP_WEBHOOK_SECRET": "...",
 #     "GITHUB_APP_SLUG": "propel-dev",
+#     "GITHUB_APP_CLIENT_ID": "Iv1...",
+#     "GITHUB_APP_CLIENT_SECRET": "...",
+#     "OAUTH_LINEAR_CLIENT_ID": "...",
+#     "OAUTH_LINEAR_CLIENT_SECRET": "...",
 #     "TOKEN_ENCRYPTION_KEY": "..."
 #   }
 #
@@ -44,6 +48,8 @@ keys=(
   GITHUB_APP_SLUG
   GITHUB_APP_CLIENT_ID
   GITHUB_APP_CLIENT_SECRET
+  OAUTH_LINEAR_CLIENT_ID
+  OAUTH_LINEAR_CLIENT_SECRET
   TOKEN_ENCRYPTION_KEY
 )
 
@@ -100,6 +106,8 @@ cmd_push() {
     --arg GITHUB_APP_SLUG "${GITHUB_APP_SLUG:-}" \
     --arg GITHUB_APP_CLIENT_ID "${GITHUB_APP_CLIENT_ID:-}" \
     --arg GITHUB_APP_CLIENT_SECRET "${GITHUB_APP_CLIENT_SECRET:-}" \
+    --arg OAUTH_LINEAR_CLIENT_ID "${OAUTH_LINEAR_CLIENT_ID:-}" \
+    --arg OAUTH_LINEAR_CLIENT_SECRET "${OAUTH_LINEAR_CLIENT_SECRET:-}" \
     --arg TOKEN_ENCRYPTION_KEY "${TOKEN_ENCRYPTION_KEY:-}" \
     '{
       GITHUB_APP_ID: $GITHUB_APP_ID,
@@ -108,6 +116,8 @@ cmd_push() {
       GITHUB_APP_SLUG: $GITHUB_APP_SLUG,
       GITHUB_APP_CLIENT_ID: $GITHUB_APP_CLIENT_ID,
       GITHUB_APP_CLIENT_SECRET: $GITHUB_APP_CLIENT_SECRET,
+      OAUTH_LINEAR_CLIENT_ID: $OAUTH_LINEAR_CLIENT_ID,
+      OAUTH_LINEAR_CLIENT_SECRET: $OAUTH_LINEAR_CLIENT_SECRET,
       TOKEN_ENCRYPTION_KEY: $TOKEN_ENCRYPTION_KEY
     } | with_entries(select(.value != ""))')"
 
@@ -125,7 +135,7 @@ cmd_push() {
   else
     aws secretsmanager create-secret \
       --name "$secret_id" \
-      --description "Propel DEV ingestion credentials (GitHub App)." \
+      --description "Propel DEV ingestion credentials (GitHub App, Linear OAuth)." \
       --secret-string "$payload" >/dev/null
     echo "Created secret '${secret_id}' ($(printf '%s' "$payload" | jq 'length') keys)"
   fi

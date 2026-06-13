@@ -157,6 +157,45 @@ origin set by `FRONTEND_BASE_URL` (e.g. `https://app.<zone>` in AWS;
 2. `OAUTH_GITHUB_CLIENT_ID` + `OAUTH_GITHUB_CLIENT_SECRET` — a standalone GitHub
    OAuth app (fallback when the App vars are unset).
 
+### Linear OAuth (data connection)
+
+Linear is a **data source** (not a login provider): a workspace admin connects
+their Linear workspace so Propel can ingest issues. It uses the OAuth
+authorization-code flow with `actor=app` (the token acts as the Propel app at
+the workspace level — the right model for team analytics, vs. `actor=user`).
+
+Create an OAuth application at **Linear → Settings → API → OAuth applications**
+(`https://linear.app/settings/api/applications/new`) and configure:
+
+- **Callback URL (redirect URI):**
+  `{OAUTH_CALLBACK_BASE_URL}/api/v1/connections/linear/callback`
+  (e.g. `https://api.<zone>/api/v1/connections/linear/callback` in AWS,
+  `http://localhost:8000/api/v1/connections/linear/callback` locally).
+- **Scopes:** `read` (all Propel ingestion needs).
+- **Public/Authorize for any workspace:** enable if multiple workspaces will
+  connect; otherwise it stays private to your own workspace.
+
+Set the resulting credentials as env (or Secrets Manager) values:
+
+- `OAUTH_LINEAR_CLIENT_ID` — the application's Client ID.
+- `OAUTH_LINEAR_CLIENT_SECRET` — the application's Client Secret.
+- `TOKEN_ENCRYPTION_KEY` — a Fernet key (`python -c "from cryptography.fernet
+  import Fernet; print(Fernet.generate_key().decode())"`) used to encrypt the
+  stored access/refresh tokens at rest. Required whenever Linear is enabled.
+
+The connect flow: `GET /api/v1/tenants/{tenant_id}/connections/linear/authorize`
+(admin) returns the Linear authorization URL with a signed `state`; the SPA
+redirects the browser there; Linear returns to
+`…/connections/linear/callback?code&state`, which exchanges the code, reads the
+workspace, stores encrypted tokens on a `connected_accounts` row
+(`provider='linear'`, `auth_type='oauth'`), and bounces back to
+`{FRONTEND_BASE_URL}/settings/workspace?linear=connected`. The Workspace
+settings page (admin-only) shows the Linear connection status by polling
+`GET /api/v1/tenants/{tenant_id}/connections/linear`.
+
+A Linear **developer token** (`lin_oauth_…`) issued from the app settings is for
+local/manual API testing only — it is not part of the production OAuth flow.
+
 ### Endpoints
 
 Unversioned (ALB health checks):
@@ -215,8 +254,11 @@ Connections (`/api/v1/tenants/{tenant_id}/connections`):
 |---|---|---|---|
 | GET | `/` | admin | List connected accounts |
 | GET | `/github/install` | admin | Signed GitHub App install URL |
+| GET | `/linear` | member | Linear connection status (`connected`, `workspace_name`) |
+| GET | `/linear/authorize` | `connections:manage` | Linear OAuth authorization URL (`actor=app`, `scope=read`) |
 | PATCH | `/{connection_id}` | admin | Pause / revoke a connection |
 | GET | `/api/v1/connections/github/setup` | authenticated | GitHub App setup callback (binds install to tenant) |
+| GET | `/api/v1/connections/linear/callback` | signed state | Linear OAuth callback (binds the workspace to the tenant) |
 | POST | `/api/v1/webhooks/github` | HMAC | Install events (`created`/`deleted`/`suspend`) |
 
 ### Tests
@@ -314,9 +356,11 @@ the installation to the tenant), or insert a row directly for testing with
 
 The ingestion GitHub App (separate from the login OAuth app) is configured via
 `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`, and
-`GITHUB_APP_SLUG`. Rather than passing a private key around, the shared **dev**
-App credentials live in AWS Secrets Manager under `propel/dev/ingestion` and are
-synced with [`scripts/dev-ingestion-secrets.sh`](../scripts/dev-ingestion-secrets.sh).
+`GITHUB_APP_SLUG`. Linear OAuth (`OAUTH_LINEAR_CLIENT_ID`, `OAUTH_LINEAR_CLIENT_SECRET`,
+`TOKEN_ENCRYPTION_KEY`) uses the same pull path. Rather than passing a private key
+around, the shared **dev** credentials live in AWS Secrets Manager under
+`propel/dev/ingestion` and are synced with
+[`scripts/dev-ingestion-secrets.sh`](../scripts/dev-ingestion-secrets.sh).
 
 **Pull (each developer, after `aws sso login` / configuring credentials):**
 
@@ -337,6 +381,9 @@ export GITHUB_APP_ID=123456
 export GITHUB_APP_PRIVATE_KEY_FILE=~/Downloads/propel-dev.private-key.pem
 export GITHUB_APP_WEBHOOK_SECRET=...        # optional
 export GITHUB_APP_SLUG=propel-dev           # optional
+export OAUTH_LINEAR_CLIENT_ID=...           # optional (Linear OAuth)
+export OAUTH_LINEAR_CLIENT_SECRET=...       # optional
+export TOKEN_ENCRYPTION_KEY=...             # optional (Fernet; generate per dev machine or share dev key)
 ./scripts/dev-ingestion-secrets.sh push
 ```
 

@@ -4,7 +4,10 @@
 name: propel
 
 services:
+  # Editor shell (Cursor devcontainer). Profile-gated so routine `docker compose up`
+  # from inside this container does not recreate/restart propel-dev.
   dev:
+    profiles: ["devcontainer"]
     build:
       context: .
       dockerfile: infrastructure/docker/dev.Dockerfile
@@ -33,7 +36,8 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PG 18+ stores data under /var/lib/postgresql/<major>/data; mount the parent dir.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-propel} -d ${POSTGRES_DB:-propel}"]
       interval: 5s

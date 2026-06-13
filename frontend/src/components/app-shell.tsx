@@ -43,6 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     "members:assign_role",
     "invites:read",
   );
+  const showWorkspace = useAnyPermission("connections:manage");
 
   return (
     <div className="bg-background min-h-svh">
@@ -54,7 +55,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             {status === "authenticated" && (
               <nav className="flex items-center gap-4">
+                <TopNavLink to="/home">Home</TopNavLink>
                 <TopNavLink to="/data">Data</TopNavLink>
+                {showWorkspace && (
+                  <TopNavLink to="/settings/workspace">Workspace</TopNavLink>
+                )}
                 {showAccess && <TopNavLink to="/settings/access">Access</TopNavLink>}
                 <TopNavLink to="/profile">Profile</TopNavLink>
               </nav>

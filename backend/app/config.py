@@ -74,7 +74,17 @@ class Settings(BaseSettings):
     def github_oauth_enabled(self) -> bool:
         return bool(self.github_oauth_client_id and self.github_oauth_client_secret)
 
-    # Fernet key for encrypting OAuth tool tokens (future providers). GitHub App
+    # Linear OAuth app (data connection). Unlike GitHub ingestion (App
+    # installation tokens minted per run), Linear uses the authorization-code
+    # flow: tokens are stored encrypted on connected_accounts and refreshed.
+    oauth_linear_client_id: str = ""
+    oauth_linear_client_secret: str = ""
+
+    @property
+    def linear_oauth_enabled(self) -> bool:
+        return bool(self.oauth_linear_client_id and self.oauth_linear_client_secret)
+
+    # Fernet key for encrypting OAuth tool tokens (e.g. Linear). GitHub App
     # installs mint tokens per run and do not use this.
     token_encryption_key: str = ""
 

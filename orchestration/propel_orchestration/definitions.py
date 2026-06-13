@@ -26,6 +26,8 @@ from propel_orchestration.jobs import (
     dask_worker_scaling_sensor,
     discovery_job,
     discovery_schedule,
+    linear_fanout_sensor,
+    linear_ingestion_job,
     org_fanout_sensor,
     org_ingestion_job,
 )
@@ -35,9 +37,19 @@ configure_logging()
 
 defs = Definitions(
     assets=[*ingestion_asset_specs, propel_dbt_assets],
-    jobs=[discovery_job, org_ingestion_job, analytics_assets_job],
+    jobs=[
+        discovery_job,
+        org_ingestion_job,
+        linear_ingestion_job,
+        analytics_assets_job,
+    ],
     schedules=[discovery_schedule],
-    sensors=[org_fanout_sensor, analytics_sensor, dask_worker_scaling_sensor],
+    sensors=[
+        org_fanout_sensor,
+        linear_fanout_sensor,
+        analytics_sensor,
+        dask_worker_scaling_sensor,
+    ],
     resources={
         "dbt": DbtCliResource(project_dir=dbt_project),
         # Raw distributed.Client for ops that want in-op parallelism on the

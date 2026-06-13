@@ -82,8 +82,23 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "0.0.0.0",
       port: 5174,
+      allowedHosts: ["frontend-landing", "localhost", "127.0.0.1"],
+      hmr: {
+        host: "localhost",
+        port: 5174,
+        clientPort: 5174,
+      },
       watch: {
         usePolling: true,
+        interval: 1000,
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/dist/**",
+          "**/dist-landing/**",
+          "**/__screenshots__/**",
+          "**/storybook-static/**",
+        ],
       },
     },
   };

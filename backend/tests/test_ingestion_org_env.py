@@ -194,3 +194,52 @@ async def test_copilot_stale_cache_reprobes(clean_db, monkeypatch):
         assert calls == [("tok", _ORG)]
         await session.refresh(account)
         assert account.meta["copilot_metrics"]["available"] is True
+
+
+@pytest.mark.asyncio
+async def test_linear_job_builds_oauth_env(clean_db, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    from app.services import linear_connection, token_crypto
+
+    monkeypatch.setattr(
+        linear_connection.settings,
+        "token_encryption_key",
+        Fernet.generate_key().decode(),
+    )
+    token_crypto._fernet.cache_clear()
+
+    async with async_session_maker() as session:
+        tenant = Tenant(name="Acme", slug=f"acme-{uuid.uuid4().hex[:8]}")
+        session.add(tenant)
+        await session.flush()
+        account = ConnectedAccount(
+            tenant_id=tenant.id,
+            provider=IntegrationProvider.linear.value,
+            auth_type=AuthType.oauth.value,
+            external_account_id="ws-1",
+            external_account_name="Acme WS",
+            access_token_encrypted=token_crypto.encrypt_token("linear-access"),
+            token_expires_at=datetime.now(UTC) + timedelta(hours=12),
+            scopes=["read"],
+        )
+        session.add(account)
+        await session.flush()
+
+        job = _job("linear_issues_sync")
+        run = IngestionRun(
+            tenant_id=account.tenant_id,
+            connected_account_id=account.id,
+            source=IntegrationProvider.linear.value,
+            resource_type=job.resource_type,
+            status=IngestionRunStatus.running.value,
+        )
+        session.add(run)
+        await session.flush()
+
+        env = await orchestrator._build_env(session, account, job, run)
+
+    assert env["PROPEL_SOURCE"] == "linear"
+    assert env["TAP_LINEAR_AUTH_TOKEN"] == "linear-access"
+    assert "TAP_LINEAR_START_DATE" in env
+    assert "GITHUB_INSTALLATION_TOKEN" not in env

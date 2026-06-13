@@ -47,7 +47,7 @@ from dagster import (
 )
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 
-from propel_orchestration.jobs import _ACCOUNT_TAG, _run, org_ingestion_job
+from propel_orchestration.jobs import _ACCOUNT_TAG, _run, linear_ingestion_job, org_ingestion_job
 
 logger = logging.getLogger("propel.analytics.dagster")
 
@@ -161,6 +161,11 @@ ingestion_asset_specs = [
         description="GitHub Copilot usage metrics for the org.",
         group_name="ingestion",
     ),
+    AssetSpec(
+        key=["linear", "issues"],
+        description="Issues pulled from the connected Linear workspace.",
+        group_name="ingestion",
+    ),
 ]
 
 
@@ -174,15 +179,18 @@ analytics_assets_job = define_asset_job(
 
 
 async def _resolve_tenant_ids(account_id: uuid.UUID | None) -> list[str]:
-    """Map a connected account to its tenant id (or list every active tenant)."""
+    """Map a connected account to its tenant id (or list every active tenant).
+
+    Provider-agnostic: GitHub org runs and Linear workspace runs both resolve
+    to the owning tenant via connected_accounts.
+    """
     from sqlalchemy import select
 
     from app.db.session import async_session_maker
     from app.models.connected_account import ConnectedAccount
-    from app.models.enums import ConnectionStatus, IntegrationProvider
+    from app.models.enums import ConnectionStatus
 
     query = select(ConnectedAccount.tenant_id).where(
-        ConnectedAccount.provider == IntegrationProvider.github.value,
         ConnectedAccount.status == ConnectionStatus.active.value,
     )
     if account_id is not None:
@@ -194,7 +202,7 @@ async def _resolve_tenant_ids(account_id: uuid.UUID | None) -> list[str]:
 
 @run_status_sensor(
     run_status=DagsterRunStatus.SUCCESS,
-    monitored_jobs=[org_ingestion_job],
+    monitored_jobs=[org_ingestion_job, linear_ingestion_job],
     request_job=analytics_assets_job,
     default_status=DefaultSensorStatus.RUNNING,
 )

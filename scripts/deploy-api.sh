@@ -28,6 +28,50 @@ SERVICE="$(terraform -chdir="$TF_DIR" output -raw ecs_service_name)"
 # disabled). `2>/dev/null || true` keeps deploys working before it is provisioned.
 INGESTION_SERVICE="$(terraform -chdir="$TF_DIR" output -raw ingestion_service_name 2>/dev/null || true)"
 REGISTRY="${ECR_URL%%/*}"
+IMAGE="${ECR_URL}:${TAG}"
+
+# Register a new task definition revision from the latest in ``family`` (picks up
+# Terraform's newest env/secrets/cpu) with ``image``, then update the service
+# once. Avoids a double rollout when CI runs terraform apply then this script.
+roll_ecs_service_to_image() {
+  local cluster=$1
+  local service=$2
+  local family=$3
+  local image=$4
+
+  local register_json new_arn
+  register_json=$(aws ecs describe-task-definition \
+    --task-definition "$family" \
+    --region "$REGION" \
+    --query 'taskDefinition' \
+    --output json \
+    | jq --arg image "$image" '
+        del(
+          .taskDefinitionArn,
+          .revision,
+          .status,
+          .requiresAttributes,
+          .compatibilities,
+          .registeredAt,
+          .registeredBy
+        )
+        | .containerDefinitions |= map(.image = $image)
+      ')
+
+  new_arn=$(aws ecs register-task-definition \
+    --region "$REGION" \
+    --cli-input-json "$register_json" \
+    --query 'taskDefinition.taskDefinitionArn' \
+    --output text)
+
+  aws ecs update-service \
+    --cluster "$cluster" \
+    --service "$service" \
+    --task-definition "$new_arn" \
+    --region "$REGION" >/dev/null
+
+  echo "$new_arn"
+}
 
 echo "==> Logging in to ECR ($REGISTRY)"
 aws ecr get-login-password --region "$REGION" |
@@ -35,14 +79,14 @@ aws ecr get-login-password --region "$REGION" |
 
 # Build context is the repo root: the image bundles backend/ + orchestration/ so
 # the same image serves the API and the Dagster ingestion service.
-echo "==> Building $ECR_URL:$TAG"
+echo "==> Building $IMAGE"
 docker build \
   -f "$REPO_ROOT/infrastructure/docker/backend.prod.Dockerfile" \
-  -t "$ECR_URL:$TAG" \
+  -t "$IMAGE" \
   "$REPO_ROOT"
 
 echo "==> Pushing image"
-docker push "$ECR_URL:$TAG"
+docker push "$IMAGE"
 
 echo "==> Forcing new ECS deployment ($CLUSTER/$SERVICE)"
 aws ecs update-service \
@@ -51,14 +95,11 @@ aws ecs update-service \
   --force-new-deployment \
   --region "$REGION" >/dev/null
 
-# The ingestion service runs the same image; roll it too so it picks up new code.
+# Ingestion: one rollout (new revision + image). Terraform owns the task def
+# template but ignores service.task_definition so apply does not deploy.
 if [ -n "${INGESTION_SERVICE:-}" ] && [ "$INGESTION_SERVICE" != "null" ]; then
-  echo "==> Forcing new ECS deployment ($CLUSTER/$INGESTION_SERVICE)"
-  aws ecs update-service \
-    --cluster "$CLUSTER" \
-    --service "$INGESTION_SERVICE" \
-    --force-new-deployment \
-    --region "$REGION" >/dev/null
+  echo "==> Rolling ingestion service ($CLUSTER/$INGESTION_SERVICE)"
+  roll_ecs_service_to_image "$CLUSTER" "$INGESTION_SERVICE" "$INGESTION_SERVICE" "$IMAGE"
 fi
 
 # Dask workers run the same image. Usually scaled to 0 (the Dagster coordinator
@@ -66,12 +107,8 @@ fi
 # next scale-up boots tasks on the new image; if workers are mid-run they roll.
 DASK_WORKER_SERVICE="$(terraform -chdir="$TF_DIR" output -raw dask_worker_service_name 2>/dev/null || true)"
 if [ -n "${DASK_WORKER_SERVICE:-}" ] && [ "$DASK_WORKER_SERVICE" != "null" ]; then
-  echo "==> Forcing new ECS deployment ($CLUSTER/$DASK_WORKER_SERVICE)"
-  aws ecs update-service \
-    --cluster "$CLUSTER" \
-    --service "$DASK_WORKER_SERVICE" \
-    --force-new-deployment \
-    --region "$REGION" >/dev/null
+  echo "==> Rolling Dask worker service ($CLUSTER/$DASK_WORKER_SERVICE)"
+  roll_ecs_service_to_image "$CLUSTER" "$DASK_WORKER_SERVICE" "$DASK_WORKER_SERVICE" "$IMAGE"
 fi
 
-echo "Done. Deployed $ECR_URL:$TAG to $ENV."
+echo "Done. Deployed $IMAGE to $ENV."

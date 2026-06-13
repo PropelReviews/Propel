@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { usePostHog } from "posthog-js/react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useAuthFlag } from "@/hooks/use-auth-flag";
@@ -11,11 +11,17 @@ function App() {
   const posthog = usePostHog();
   const authEnabled = useAuthFlag();
   const chartDemoEnabled = useChartDemoFlag();
-  const { status, user, signOut } = useAuth();
+  const { status } = useAuth();
 
   useEffect(() => {
     posthog?.capture("homepage_viewed");
   }, [posthog]);
+
+  // Authenticated users skip the marketing root and land directly in their
+  // role-aware dashboard.
+  if (authEnabled && status === "authenticated") {
+    return <Navigate to="/home" replace />;
+  }
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 p-8">
@@ -26,23 +32,6 @@ function App() {
 
       {authEnabled && status === "loading" ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
-      ) : authEnabled && status === "authenticated" ? (
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-muted-foreground text-sm">
-            Signed in as {user?.name ?? user?.email}
-          </p>
-          <div className="flex items-center gap-3">
-            <Button asChild analyticsName="nav_data">
-              <Link to="/data">View data</Link>
-            </Button>
-            <Button asChild variant="outline" analyticsName="nav_profile">
-              <Link to="/profile">Profile</Link>
-            </Button>
-            <Button variant="outline" analyticsName="sign_out" onClick={signOut}>
-              Sign out
-            </Button>
-          </div>
-        </div>
       ) : authEnabled ? (
         <div className="flex items-center gap-3">
           <Button asChild analyticsName="get_started">

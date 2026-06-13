@@ -208,5 +208,12 @@ resource "aws_ecs_service" "ingestion" {
 
   depends_on = [aws_lb_listener.https]
 
+  # Task definition revisions are registered by Terraform (env/cpu/secrets)
+  # but rolled out by scripts/deploy-api.sh (one register+update per deploy).
+  # Without this, terraform apply and deploy-api both trigger a rollout.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
+
   tags = var.tags
 }

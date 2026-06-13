@@ -7,6 +7,8 @@
 # Optional env (included in app_secrets when non-empty):
 #   OAUTH_GOOGLE_CLIENT_SECRET
 #   OAUTH_GITHUB_CLIENT_SECRET    standalone GitHub OAuth app (login fallback)
+#   OAUTH_LINEAR_CLIENT_SECRET    Linear OAuth app (data connection)
+#   TOKEN_ENCRYPTION_KEY          Fernet key for OAuth tool tokens at rest
 #   GITHUB_APP_ID                 ingestion GitHub App (data extraction)
 #   GITHUB_APP_PRIVATE_KEY        PEM, one line with \n escapes or multi-line
 #   GITHUB_APP_WEBHOOK_SECRET
@@ -33,6 +35,8 @@ jq -n \
   --argjson app_environment "$APP_ENVIRONMENT_JSON" \
   --arg google "${OAUTH_GOOGLE_CLIENT_SECRET:-}" \
   --arg github "${OAUTH_GITHUB_CLIENT_SECRET:-}" \
+  --arg linear "${OAUTH_LINEAR_CLIENT_SECRET:-}" \
+  --arg token_encryption "${TOKEN_ENCRYPTION_KEY:-}" \
   --arg gh_app_id "${GITHUB_APP_ID:-}" \
   --arg gh_app_key "${GITHUB_APP_PRIVATE_KEY:-}" \
   --arg gh_app_webhook "${GITHUB_APP_WEBHOOK_SECRET:-}" \
@@ -54,6 +58,8 @@ jq -n \
       {}
       | if ($google | length) > 0 then . + {OAUTH_GOOGLE_CLIENT_SECRET: $google} else . end
       | if ($github | length) > 0 then . + {OAUTH_GITHUB_CLIENT_SECRET: $github} else . end
+      | if ($linear | length) > 0 then . + {OAUTH_LINEAR_CLIENT_SECRET: $linear} else . end
+      | if ($token_encryption | length) > 0 then . + {TOKEN_ENCRYPTION_KEY: $token_encryption} else . end
       | if ($gh_app_id | length) > 0 then . + {GITHUB_APP_ID: $gh_app_id} else . end
       | if ($gh_app_key | length) > 0 then . + {GITHUB_APP_PRIVATE_KEY: $gh_app_key} else . end
       | if ($gh_app_webhook | length) > 0 then . + {GITHUB_APP_WEBHOOK_SECRET: $gh_app_webhook} else . end

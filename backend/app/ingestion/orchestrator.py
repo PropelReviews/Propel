@@ -61,6 +61,7 @@ _COPILOT_META_KEY = "copilot_metrics"
 class JobSpec:
     name: str  # meltano job name
     resource_type: str  # ingestion_run.resource_type + overlap-guard key
+    provider: str = IntegrationProvider.github.value  # owning data source
     needs_repos: bool = False
     needs_org: bool = False  # requires the connected org login to run
     org_mode: str | None = None  # "array" (tap-github) | "copilot" (bare login)
@@ -88,6 +89,11 @@ JOBS: list[JobSpec] = [
     JobSpec("github_pull_requests_sync", "github.pull_requests", needs_repos=True),
     JobSpec("github_issues_sync", "github.issues", needs_repos=True),
     JobSpec("copilot_sync", "copilot.usage", needs_org=True, org_mode="copilot"),
+    JobSpec(
+        "linear_issues_sync",
+        "linear.issues",
+        provider=IntegrationProvider.linear.value,
+    ),
 ]
 
 # Jobs after which the GitHub identity roster is reconciled into users/memberships.
@@ -142,57 +148,65 @@ async def run_all(
     async with async_session_maker() as session:
         await _clear_stale_runs(session)
 
-    async with async_session_maker() as session:
-        accounts = await _active_github_accounts(session, account_id)
-
-    logger.info(
-        "Ingestion batch starting",
-        extra={
-            "event": "extraction.batch",
-            "ingestion.job_count": len(jobs),
-            "ingestion.account_count": len(accounts),
-            "ingestion.jobs": [job.name for job in jobs],
-            "ingestion.account_ids": [str(account.id) for account in accounts],
-            "ingestion.org_logins": [
-                account.external_account_name for account in accounts
-            ],
-        },
-    )
-    if not accounts:
-        logger.info(
-            "No active GitHub connected accounts to ingest",
-            extra={"event": "extraction.batch"},
-        )
-        return []
-
+    # Jobs may span providers (GitHub + Linear); list accounts per provider so a
+    # GitHub-scoped account is never paired with a Linear job (and vice versa).
+    providers = {job.provider for job in jobs}
     runs: list[IngestionRun] = []
-    for account in accounts:
-        for job in jobs:
-            # Each (account, job) uses its own short-lived session so a failure
-            # is isolated and the run row is always finalized.
-            async with async_session_maker() as session:
-                run = await run_account_job(
-                    session, account, job, start_date_override=start_date
-                )
-            if run is not None:
-                runs.append(run)
+    for provider in sorted(providers):
+        provider_jobs = [job for job in jobs if job.provider == provider]
+        async with async_session_maker() as session:
+            accounts = await _active_accounts(session, account_id, provider)
+
+        logger.info(
+            "Ingestion batch starting",
+            extra={
+                "event": "extraction.batch",
+                "ingestion.provider": provider,
+                "ingestion.job_count": len(provider_jobs),
+                "ingestion.account_count": len(accounts),
+                "ingestion.jobs": [job.name for job in provider_jobs],
+                "ingestion.account_ids": [str(account.id) for account in accounts],
+                "ingestion.org_logins": [
+                    account.external_account_name for account in accounts
+                ],
+            },
+        )
+        if not accounts:
+            logger.info(
+                "No active connected accounts to ingest",
+                extra={"event": "extraction.batch", "ingestion.provider": provider},
+            )
+            continue
+
+        for account in accounts:
+            for job in provider_jobs:
+                # Each (account, job) uses its own short-lived session so a
+                # failure is isolated and the run row is always finalized.
+                async with async_session_maker() as session:
+                    run = await run_account_job(
+                        session, account, job, start_date_override=start_date
+                    )
+                if run is not None:
+                    runs.append(run)
 
     logger.info(
         "Ingestion batch finished",
         extra={
             "event": "extraction.batch",
             "ingestion.job_count": len(jobs),
-            "ingestion.account_count": len(accounts),
+            "ingestion.run_count": len(runs),
         },
     )
     return runs
 
 
-async def _active_github_accounts(
-    session: AsyncSession, account_id: uuid.UUID | None
+async def _active_accounts(
+    session: AsyncSession,
+    account_id: uuid.UUID | None,
+    provider: str = IntegrationProvider.github.value,
 ) -> list[ConnectedAccount]:
     query = select(ConnectedAccount).where(
-        ConnectedAccount.provider == IntegrationProvider.github.value,
+        ConnectedAccount.provider == provider,
         ConnectedAccount.status == ConnectionStatus.active.value,
     )
     if account_id is not None:
@@ -230,7 +244,7 @@ async def discover_installed_orgs(account_id: uuid.UUID | None = None) -> int:
     if account_id is None:
         await _sync_installations()
     async with async_session_maker() as session:
-        accounts = await _active_github_accounts(session, account_id)
+        accounts = await _active_accounts(session, account_id)
 
     logger.info(
         "Discovered installed GitHub orgs",
@@ -248,18 +262,20 @@ async def discover_installed_orgs(account_id: uuid.UUID | None = None) -> int:
 
 async def list_active_accounts(
     account_id: uuid.UUID | None = None,
+    provider: str = IntegrationProvider.github.value,
 ) -> list[tuple[str, str | None]]:
-    """Return ``(account_id, org_login)`` for active GitHub accounts.
+    """Return ``(account_id, account_name)`` for active accounts of ``provider``.
 
-    Used by the Dagster schedule to fan out one run per org. Unscoped calls
-    first sync installations from GitHub so newly installed orgs are picked up
-    without any manual connect step. Returns plain tuples (not ORM rows) so the
-    caller can use them after the session closes.
+    Used by the Dagster schedule to fan out one run per account. For GitHub,
+    unscoped calls first sync installations so newly installed orgs are picked
+    up without any manual step; other providers (e.g. Linear) are provisioned
+    by their OAuth connect flow, so no external sync is needed. Returns plain
+    tuples (not ORM rows) so the caller can use them after the session closes.
     """
-    if account_id is None:
+    if account_id is None and provider == IntegrationProvider.github.value:
         await _sync_installations()
     async with async_session_maker() as session:
-        accounts = await _active_github_accounts(session, account_id)
+        accounts = await _active_accounts(session, account_id, provider)
     return [(str(account.id), account.external_account_name) for account in accounts]
 
 
@@ -285,7 +301,7 @@ async def run_account_job(
     run = IngestionRun(
         tenant_id=account.tenant_id,
         connected_account_id=account.id,
-        source=IntegrationProvider.github.value,
+        source=account.provider,
         resource_type=job.resource_type,
         status=IngestionRunStatus.running.value,
     )
@@ -396,8 +412,9 @@ def _log_env_built(
     if members_raw:
         with contextlib.suppress(ValueError, TypeError):
             extra["ingestion.member_login_count"] = len(json.loads(members_raw))
-    if env.get("TAP_GITHUB_START_DATE"):
-        extra["ingestion.start_date"] = env["TAP_GITHUB_START_DATE"]
+    start_date = env.get("TAP_GITHUB_START_DATE") or env.get("TAP_LINEAR_START_DATE")
+    if start_date:
+        extra["ingestion.start_date"] = start_date
     if env.get("COPILOT_ORG"):
         extra["ingestion.copilot_org"] = env["COPILOT_ORG"]
 
@@ -465,10 +482,61 @@ async def _build_env(
 ) -> dict[str, str] | None:
     """Build the per-run environment, or None to skip (nothing to ingest).
 
-    ``start_date_override`` (ISO date) replaces the watermark-derived
-    ``TAP_GITHUB_START_DATE`` for time-based backfills.
+    ``start_date_override`` (ISO date) replaces the watermark-derived start date
+    for time-based backfills. Dispatches per provider.
     """
+    if job.provider == IntegrationProvider.linear.value:
+        return await _build_linear_env(
+            session, account, job, run, start_date_override=start_date_override
+        )
+    return await _build_github_env(
+        session, account, job, run, start_date_override=start_date_override
+    )
 
+
+async def _build_linear_env(
+    session: AsyncSession,
+    account: ConnectedAccount,
+    job: JobSpec,
+    run: IngestionRun,
+    *,
+    start_date_override: str | None = None,
+) -> dict[str, str] | None:
+    from app.services import linear_connection
+
+    if account.auth_type != AuthType.oauth.value:
+        skip_extra = _ingestion_extra(
+            account, job, run=run, skip_reason="unsupported_auth_type"
+        )
+        skip_extra["connected_account.auth_type"] = account.auth_type
+        logger.warning(
+            "Skipping extraction run: unsupported auth type", extra=skip_extra
+        )
+        return None
+
+    access_token = await linear_connection.get_access_token(session, account)
+    start_date = start_date_override or await _start_date(
+        session, account.id, job.resource_type
+    )
+    return {
+        "PROPEL_DATABASE_URL": settings.sync_database_url,
+        "PROPEL_TENANT_ID": str(account.tenant_id),
+        "PROPEL_CONNECTED_ACCOUNT_ID": str(account.id),
+        "PROPEL_RUN_ID": str(run.id),
+        "PROPEL_SOURCE": IntegrationProvider.linear.value,
+        "TAP_LINEAR_AUTH_TOKEN": access_token,
+        "TAP_LINEAR_START_DATE": start_date,
+    }
+
+
+async def _build_github_env(
+    session: AsyncSession,
+    account: ConnectedAccount,
+    job: JobSpec,
+    run: IngestionRun,
+    *,
+    start_date_override: str | None = None,
+) -> dict[str, str] | None:
     async def resolved_start_date() -> str:
         if start_date_override:
             return start_date_override
