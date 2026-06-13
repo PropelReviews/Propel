@@ -89,6 +89,7 @@ _ASSET_KEYS: dict[str, AssetKey] = {
     "github_pull_requests_sync": AssetKey(["github", "pull_requests"]),
     "github_issues_sync": AssetKey(["github", "issues"]),
     "copilot_sync": AssetKey(["github", "copilot_usage"]),
+    "linear_issues_sync": AssetKey(["linear", "issues"]),
 }
 
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -313,6 +314,11 @@ get_copilot_usage = _resource_op(
     "copilot_sync",
     "Pull GitHub Copilot usage metrics for the org.",
 )
+get_linear_issues = _resource_op(
+    "get_linear_issues",
+    "linear_issues_sync",
+    "Pull issues for the connected Linear workspace.",
+)
 
 
 @op(
@@ -362,10 +368,25 @@ def org_ingestion_job() -> None:
     flush_logs(after=[profiles, commits, pulls, issues, copilot])
 
 
-async def _list_accounts(account_id: uuid.UUID | None = None):
+@job(
+    executor_def=build_dask_executor(),
+    description=(
+        "Pull one Linear workspace's issues (scoped by the propel/account_id "
+        "tag; tag propel/start_date for a time-based backfill)."
+    ),
+)
+def linear_ingestion_job() -> None:
+    started = start_org_ingestion()
+    issues = get_linear_issues(start=started)
+    flush_logs(after=[issues])
+
+
+async def _list_accounts(
+    account_id: uuid.UUID | None = None, provider: str = "github"
+):
     from app.ingestion import orchestrator
 
-    return await orchestrator.list_active_accounts(account_id)
+    return await orchestrator.list_active_accounts(account_id, provider)
 
 
 @schedule(
@@ -421,8 +442,42 @@ def org_fanout_sensor(context: RunStatusSensorContext):
     ]
 
 
-# Runs that need Dask workers: anything queued or in progress for the
-# ingestion job. CANCELING still holds workers (steps may be mid-flight).
+@run_status_sensor(
+    run_status=DagsterRunStatus.SUCCESS,
+    monitored_jobs=[discovery_job],
+    request_job=linear_ingestion_job,
+    default_status=DefaultSensorStatus.RUNNING,
+)
+def linear_fanout_sensor(context: RunStatusSensorContext):
+    """Fan out one ``linear_ingestion_job`` run per connected Linear workspace.
+
+    Shares the hourly ``discovery_job`` cadence with ``org_fanout_sensor``.
+    Linear workspaces are provisioned by the OAuth connect flow (no external
+    installation sync), so this just lists the active Linear accounts and tags
+    each run with its connected_account id.
+    """
+    try:
+        accounts = _run(_list_accounts(provider="linear"))
+    except Exception as exc:  # noqa: BLE001 — surface as a skip, not a crash
+        return SkipReason(f"Could not list active Linear workspaces: {exc}")
+
+    if not accounts:
+        return SkipReason("No active Linear connected accounts to ingest")
+
+    worker_scaling.scale_up_for_runs(len(accounts))
+
+    discovery_run_id = context.dagster_run.run_id
+    return [
+        RunRequest(
+            run_key=f"linear:{account_id}:{discovery_run_id}",
+            tags={_ACCOUNT_TAG: account_id, _ORG_TAG: name or ""},
+        )
+        for account_id, name in accounts
+    ]
+
+
+# Runs that need Dask workers: anything queued or in progress for the org or
+# Linear ingestion jobs. CANCELING still holds workers (steps may be mid-flight).
 _ACTIVE_RUN_STATUSES = [
     DagsterRunStatus.QUEUED,
     DagsterRunStatus.NOT_STARTED,
@@ -447,8 +502,11 @@ def dask_worker_scaling_sensor(context: SensorEvaluationContext):
     if not worker_scaling.scaling_enabled():
         return SkipReason("Dask worker autoscaling disabled (no ECS service env)")
 
-    active = context.instance.get_runs_count(
-        RunsFilter(job_name="org_ingestion_job", statuses=_ACTIVE_RUN_STATUSES)
+    active = sum(
+        context.instance.get_runs_count(
+            RunsFilter(job_name=job_name, statuses=_ACTIVE_RUN_STATUSES)
+        )
+        for job_name in ("org_ingestion_job", "linear_ingestion_job")
     )
     try:
         summary = worker_scaling.reconcile(active)

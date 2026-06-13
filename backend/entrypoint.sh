@@ -45,14 +45,18 @@ if [ "$1" = "dagster" ] && [ "$2" = "api" ]; then
   : "${DAGSTER_HOME:=/tmp/dagster}"
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"
-  cp /app/orchestration/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
+  export PATH="/opt/orchestration-venv/bin:$PATH"
+  export PYTHONPATH="/app:/app/orchestration${PYTHONPATH:+:$PYTHONPATH}"
+  if ! DAGSTER_PG_URL="$(python /app/orchestration/scripts/prepare_dagster_db.py --dagster-home "$DAGSTER_HOME")" \
+    || [ -z "$DAGSTER_PG_URL" ]; then
+    rm -f "$DAGSTER_HOME/dagster.yaml"
+    echo "ERROR: Dagster DB prep failed"
+    exit 1
+  fi
+  export DAGSTER_PG_URL
   if [ "${DAGSTER_RUN_LAUNCHER:-}" = "ecs" ]; then
     cat /app/orchestration/run_launcher_ecs.yaml >> "$DAGSTER_HOME/dagster.yaml"
   fi
-  export PATH="/opt/orchestration-venv/bin:$PATH"
-  export PYTHONPATH="/app:/app/orchestration${PYTHONPATH:+:$PYTHONPATH}"
-  DAGSTER_PG_URL="$(python /app/orchestration/scripts/prepare_dagster_db.py)"
-  export DAGSTER_PG_URL
   cd /app/orchestration
   exec "$@"
 fi
@@ -75,12 +79,12 @@ if [ "$1" = "dask-worker" ]; then
 
   export PATH="/opt/orchestration-venv/bin:$PATH"
   export PYTHONPATH="/app:$ORCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
-  cp "$ORCH_DIR/dagster.yaml" "$DAGSTER_HOME/dagster.yaml"
 
-  if DAGSTER_PG_URL="$(python "$ORCH_DIR/scripts/prepare_dagster_db.py")" \
+  if DAGSTER_PG_URL="$(python "$ORCH_DIR/scripts/prepare_dagster_db.py" --dagster-home "$DAGSTER_HOME")" \
     && [ -n "$DAGSTER_PG_URL" ]; then
     export DAGSTER_PG_URL
   else
+    rm -f "$DAGSTER_HOME/dagster.yaml"
     echo "WARN: Dagster DB prep failed; steps will fail to load the Dagster instance"
   fi
 
@@ -107,13 +111,13 @@ if [ "$1" = "dagster" ]; then
   ORCH_DIR=/orchestration
   [ -d "$ORCH_DIR" ] || ORCH_DIR=/app/orchestration
 
-  if DAGSTER_PG_URL="$(python "$ORCH_DIR/scripts/prepare_dagster_db.py")" \
+  if DAGSTER_PG_URL="$(python "$ORCH_DIR/scripts/prepare_dagster_db.py" --dagster-home "$DAGSTER_HOME")" \
     && [ -n "$DAGSTER_PG_URL" ]; then
     export DAGSTER_PG_URL
-    cp "$ORCH_DIR/dagster.yaml" "$DAGSTER_HOME/dagster.yaml"
     echo "==> Dagster storage: Postgres ('dagster' schema) — run history persists across restarts"
     dagster instance migrate || echo "WARN: 'dagster instance migrate' failed"
   else
+    rm -f "$DAGSTER_HOME/dagster.yaml"
     echo "WARN: Dagster DB prep failed; using ephemeral SQLite in $DAGSTER_HOME (run history will NOT persist)"
   fi
 
@@ -137,14 +141,6 @@ if [ "$1" = "dagster-service" ]; then
   : "${DAGSTER_HOME:=/tmp/dagster}"
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"
-  cp /app/orchestration/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
-  # On ECS, launch each run as its own Fargate task (the coordinator task only
-  # hosts the daemon + webserver). Opt-in via env so local dev keeps the
-  # default subprocess launcher.
-  if [ "${DAGSTER_RUN_LAUNCHER:-}" = "ecs" ]; then
-    echo "==> Run launcher: EcsRunLauncher (one Fargate task per run)"
-    cat /app/orchestration/run_launcher_ecs.yaml >> "$DAGSTER_HOME/dagster.yaml"
-  fi
 
   # Run Dagster from its own venv (keeps the API venv pristine); import the
   # backend `app` and `propel_orchestration` packages from source. `meltano`
@@ -152,8 +148,20 @@ if [ "$1" = "dagster-service" ]; then
   export PATH="/opt/orchestration-venv/bin:$PATH"
   export PYTHONPATH="/app:/app/orchestration${PYTHONPATH:+:$PYTHONPATH}"
 
-  DAGSTER_PG_URL="$(python /app/orchestration/scripts/prepare_dagster_db.py)"
+  if ! DAGSTER_PG_URL="$(python /app/orchestration/scripts/prepare_dagster_db.py --dagster-home "$DAGSTER_HOME")" \
+    || [ -z "$DAGSTER_PG_URL" ]; then
+    rm -f "$DAGSTER_HOME/dagster.yaml"
+    echo "ERROR: Dagster DB prep failed"
+    exit 1
+  fi
   export DAGSTER_PG_URL
+  # On ECS, launch each run as its own Fargate task (the coordinator task only
+  # hosts the daemon + webserver). Opt-in via env so local dev keeps the
+  # default subprocess launcher.
+  if [ "${DAGSTER_RUN_LAUNCHER:-}" = "ecs" ]; then
+    echo "==> Run launcher: EcsRunLauncher (one Fargate task per run)"
+    cat /app/orchestration/run_launcher_ecs.yaml >> "$DAGSTER_HOME/dagster.yaml"
+  fi
 
   cd /app/orchestration
 

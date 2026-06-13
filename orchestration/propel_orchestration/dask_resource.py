@@ -2,8 +2,8 @@
 
 ``org_ingestion_job`` distributes its steps across an external Dask cluster
 via ``dagster-dask``'s ``dask_executor``. The scheduler address comes from the
-``DASK_SCHEDULER_ADDRESS`` env var — the ``dask-scheduler`` compose service
-locally, Cloud Map DNS (``dask-scheduler.<namespace>``) on ECS. When the env
+``DASK_SCHEDULER_ADDRESS`` env var — embedded in the ``ingestion`` compose
+service locally, Cloud Map DNS (``dask-scheduler.<namespace>``) on ECS. When the
 var is unset the executor falls back to an ephemeral in-process
 ``LocalCluster`` so a bare ``dagster dev`` keeps working with zero setup.
 

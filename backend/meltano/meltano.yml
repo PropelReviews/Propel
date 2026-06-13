@@ -14,6 +14,8 @@ project_id: propel-ingestion
 #   TAP_GITHUB_USER_USERNAMES   JSON array of logins (user profile enrichment)
 #   TAP_GITHUB_START_DATE       backfill window / watermark
 #   COPILOT_ORG                 org login for Copilot usage metrics
+#   TAP_LINEAR_AUTH_TOKEN       OAuth access token for the connected workspace
+#   TAP_LINEAR_START_DATE       backfill window / watermark (Linear)
 #   PROPEL_DATABASE_URL, PROPEL_TENANT_ID, PROPEL_CONNECTED_ACCOUNT_ID,
 #   PROPEL_RUN_ID, PROPEL_SOURCE   passed through to target-propel
 
@@ -87,6 +89,22 @@ plugins:
         org: ${COPILOT_ORG}
         auth_token: ${GITHUB_INSTALLATION_TOKEN}
 
+    # Linear issues via GraphQL. Auth is the per-workspace OAuth access token
+    # (actor=app), minted/refreshed by the orchestrator and passed per run.
+    - name: tap-linear
+      namespace: tap_linear
+      pip_url: -e ./tap-linear
+      executable: tap-linear
+      capabilities:
+        - state
+        - catalog
+        - discover
+      config:
+        auth_token: ${TAP_LINEAR_AUTH_TOKEN}
+        start_date: ${TAP_LINEAR_START_DATE}
+      select:
+        - issues.*
+
   loaders:
     - name: target-propel
       namespace: target_propel
@@ -112,3 +130,6 @@ jobs:
   - name: copilot_sync
     tasks:
       - tap-github-copilot target-propel
+  - name: linear_issues_sync
+    tasks:
+      - tap-linear target-propel

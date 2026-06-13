@@ -14,13 +14,16 @@ from singer_sdk.sinks import RecordSink
 from target_propel.db import get_connection
 from target_propel.envelopes.copilot import COPILOT_STREAM, map_copilot_record
 from target_propel.envelopes.github import Envelope, map_github_record
+from target_propel.envelopes.linear import map_linear_record
 from target_propel.writers import insert_raw_record, upsert_datapoint
 
 
 def _map_envelope(source: str, stream: str, record: dict) -> Envelope | None:
+    if source == "linear":
+        return map_linear_record(stream, record)
     if stream == COPILOT_STREAM:
         return map_copilot_record(record)
-    # V1 sources are GitHub (events) + GitHub Copilot (measurement, above).
+    # Remaining sources are GitHub (events) + GitHub Copilot (measurement, above).
     return map_github_record(stream, record)
 
 

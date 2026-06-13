@@ -2,6 +2,7 @@
   "name": "Propel",
   "dockerComposeFile": "../docker-compose.yml",
   "service": "dev",
+  "composeProfiles": ["devcontainer"],
   "runServices": ["postgres", "backend", "frontend"],
   "workspaceFolder": "/workspaces/Propel",
   "remoteUser": "vscode",
@@ -14,27 +15,31 @@
   },
   "postCreateCommand": "bash scripts/setup.sh",
   "postAttachCommand": "bash scripts/dev.sh",
-  "forwardPorts": [8000, 5173, 5432, 6006],
+  // Storybook runs inside propel-dev (npm run storybook). Sibling compose services
+  // publish their own ports on the Docker host — auto-forwarding them to propel-dev
+  // breaks localhost:5173 / :8000 (ERR_EMPTY_RESPONSE) and can drop after a few minutes.
+  "forwardPorts": [6006],
   "portsAttributes": {
-    "8000": {
-      "label": "Backend",
-      "onAutoForward": "notify"
-    },
-    "5173": {
-      "label": "Frontend (Vite)",
-      "onAutoForward": "notify"
-    },
+    "5173": { "label": "Frontend (Vite)", "onAutoForward": "ignore" },
+    "8000": { "label": "Backend", "onAutoForward": "ignore" },
+    "5432": { "label": "Postgres", "onAutoForward": "ignore" },
+    "3001": { "label": "Dagster", "onAutoForward": "ignore" },
+    "5174": { "label": "Landing", "onAutoForward": "ignore" },
+    "8787": { "label": "Dask dashboard", "onAutoForward": "ignore" },
     "6006": {
       "label": "Storybook",
       "onAutoForward": "notify"
-    },
-    "5432": {
-      "label": "Postgres",
-      "onAutoForward": "silent"
     }
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
   },
   "customizations": {
     "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": false,
+        "remote.restoreForwardedPorts": false
+      },
       "extensions": [
         "ms-python.python",
         "dbaeumer.vscode-eslint",

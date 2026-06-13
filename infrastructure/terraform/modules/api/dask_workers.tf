@@ -44,12 +44,11 @@ resource "aws_service_discovery_service" "dask_scheduler" {
     }
   }
 
-  # ECS reports container health to Cloud Map; one failure unregisters the IP.
-  # failure_threshold is deprecated in the AWS API (always 1) but omitting it
-  # forces Terraform to replace the service, which fails while the ingestion
-  # task is registered — keep it to match what's already in state.
-  health_check_custom_config {
-    failure_threshold = 1
+  # Do not set health_check_custom_config here — adding or changing it forces
+  # replacement of this resource, which fails while the ingestion task is
+  # registered. AWS defaults are fine; ignore drift if the API returns one.
+  lifecycle {
+    ignore_changes = [health_check_custom_config]
   }
 
   tags = var.tags
@@ -127,9 +126,10 @@ resource "aws_ecs_service" "dask_workers" {
   }
 
   # The Dagster coordinator owns desired_count (scale up on fan-out, down to 0
-  # when idle); terraform must not reset it on every apply.
+  # when idle); terraform must not reset it on every apply. Task definition
+  # rollouts are handled by scripts/deploy-api.sh (same as ingestion).
   lifecycle {
-    ignore_changes = [desired_count]
+    ignore_changes = [desired_count, task_definition]
   }
 
   tags = var.tags

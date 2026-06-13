@@ -29,6 +29,15 @@ class GitHubInstallURL(BaseModel):
     install_url: str
 
 
+class LinearAuthorizeURL(BaseModel):
+    authorization_url: str
+
+
+class LinearConnectionStatus(BaseModel):
+    connected: bool
+    workspace_name: str | None = None
+
+
 class InstallationSyncResult(BaseModel):
     created: int
     updated: int

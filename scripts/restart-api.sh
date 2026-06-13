@@ -29,12 +29,26 @@ if [ -n "${INGESTION_SERVICE:-}" ] && [ "$INGESTION_SERVICE" != "null" ]; then
 fi
 
 for svc in "${SERVICES[@]}"; do
-  echo "==> Forcing new ECS deployment ($CLUSTER/$svc)"
-  aws ecs update-service \
-    --cluster "$CLUSTER" \
-    --service "$svc" \
-    --force-new-deployment \
-    --region "$REGION" >/dev/null
+  if [ "$svc" = "$INGESTION_SERVICE" ] && [ -n "${INGESTION_SERVICE:-}" ]; then
+    echo "==> Rolling ingestion to latest task definition ($CLUSTER/$svc)"
+    latest_td=$(aws ecs describe-task-definition \
+      --task-definition "$svc" \
+      --region "$REGION" \
+      --query 'taskDefinition.taskDefinitionArn' \
+      --output text)
+    aws ecs update-service \
+      --cluster "$CLUSTER" \
+      --service "$svc" \
+      --task-definition "$latest_td" \
+      --region "$REGION" >/dev/null
+  else
+    echo "==> Forcing new ECS deployment ($CLUSTER/$svc)"
+    aws ecs update-service \
+      --cluster "$CLUSTER" \
+      --service "$svc" \
+      --force-new-deployment \
+      --region "$REGION" >/dev/null
+  fi
 done
 
 echo "==> Waiting for services to stabilize"

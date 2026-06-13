@@ -2,9 +2,9 @@
 #
 # Run, event-log, and schedule state live in the application's Postgres under a
 # dedicated `dagster` schema so Dagster's own `alembic_version` table never
-# collides with the app's Alembic migrations. The schema is created and the
-# schema-scoped connection URL (DAGSTER_PG_URL) is exported by entrypoint.sh via
-# scripts/prepare_dagster_db.py before the daemon and webserver start.
+# collides with the app's Alembic migrations. The schema is created and a
+# materialized dagster.yaml (Postgres URL inlined) is written to DAGSTER_HOME by
+# entrypoint.sh via scripts/prepare_dagster_db.py before the daemon and webserver start.
 #
 # In local dev (`dagster dev`) entrypoint.sh copies this file into DAGSTER_HOME
 # when the Postgres prep succeeds; otherwise Dagster falls back to its default

@@ -248,6 +248,39 @@ export async function getGithubAppInstallUrl(token: string): Promise<string> {
   return install_url;
 }
 
+export type LinearConnection = {
+  connected: boolean;
+  workspace_name: string | null;
+};
+
+/** Whether the tenant has an active Linear connection (visible to members). */
+export async function getLinearConnection(
+  token: string,
+  tenantId: string,
+): Promise<LinearConnection> {
+  return authedGet<LinearConnection>(
+    `/api/v1/tenants/${tenantId}/connections/linear`,
+    token,
+  );
+}
+
+/**
+ * Fetch the Linear authorization URL to connect a workspace's Linear account.
+ * Requires the `connections:manage` permission. The caller redirects the
+ * browser to this URL; Linear returns to the backend callback, which binds the
+ * connection and bounces back to `/profile?linear=connected`.
+ */
+export async function getLinearAuthorizeUrl(
+  token: string,
+  tenantId: string,
+): Promise<string> {
+  const { authorization_url } = await authedGet<{ authorization_url: string }>(
+    `/api/v1/tenants/${tenantId}/connections/linear/authorize`,
+    token,
+  );
+  return authorization_url;
+}
+
 export type InstallationSyncResult = {
   created: number;
   updated: number;

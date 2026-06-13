@@ -161,6 +161,11 @@ ingestion_asset_specs = [
         description="GitHub Copilot usage metrics for the org.",
         group_name="ingestion",
     ),
+    AssetSpec(
+        key=["linear", "issues"],
+        description="Issues pulled from the connected Linear workspace.",
+        group_name="ingestion",
+    ),
 ]
 
 

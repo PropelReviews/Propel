@@ -78,9 +78,27 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "0.0.0.0",
       port: 5173,
+      // Compose service name + localhost (Vite 6 host guard); devcontainer must
+      // not forward :5173 — docker-compose publishes this container directly.
+      allowedHosts: ["frontend", "localhost", "127.0.0.1"],
+      // Browser hits localhost:5173 on the Docker host; point HMR websocket there too.
+      hmr: {
+        host: "localhost",
+        port: 5173,
+        clientPort: 5173,
+      },
       watch: {
         // Bind mounts from the dev container may not propagate inotify events.
         usePolling: true,
+        interval: 1000,
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/dist/**",
+          "**/dist-landing/**",
+          "**/__screenshots__/**",
+          "**/storybook-static/**",
+        ],
       },
     },
   };

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_permission
+from app.auth.dependencies import get_tenant_context, require_permission
 from app.auth.manager import current_active_user
 from app.config import get_settings
 from app.db.session import get_async_session
@@ -16,8 +16,11 @@ from app.schemas.connection import (
     ConnectionStatusUpdate,
     GitHubInstallURL,
     InstallationSyncResult,
+    LinearAuthorizeURL,
+    LinearConnectionStatus,
 )
 from app.services import connections as connection_service
+from app.services import linear_connection as linear_connection_service
 
 logger = logging.getLogger("propel.connections")
 
@@ -63,6 +66,62 @@ async def update_connection(
         session, ctx.tenant.id, connection_id, payload
     )
     return ConnectionRead.model_validate(account)
+
+
+@router.get(
+    "/tenants/{tenant_id}/connections/linear",
+    response_model=LinearConnectionStatus,
+)
+async def linear_connection_status(
+    ctx=Depends(get_tenant_context),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Whether this tenant has an active Linear connection (visible to members)."""
+    account = await linear_connection_service.get_active_linear_account(
+        session, ctx.tenant.id
+    )
+    return LinearConnectionStatus(
+        connected=account is not None,
+        workspace_name=account.external_account_name if account else None,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/connections/linear/authorize",
+    response_model=LinearAuthorizeURL,
+)
+async def linear_authorize_url(
+    ctx=Depends(require_permission("connections:manage")),
+    user: User = Depends(current_active_user),
+):
+    """Authorization URL to connect a Linear workspace to this tenant.
+
+    The SPA redirects the browser here; Linear returns to the backend callback,
+    which exchanges the code and binds the connection.
+    """
+    url = linear_connection_service.build_authorize_url(ctx.tenant.id, user.id)
+    return LinearAuthorizeURL(authorization_url=url)
+
+
+@router.get("/connections/linear/callback")
+async def linear_callback(
+    code: str,
+    state: str,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Linear redirects here after authorization with code + signed state.
+
+    The signed state (not a bearer header) carries the initiating user, so this
+    endpoint is reachable as a top-level browser navigation. On success or
+    failure we bounce back to the SPA workspace settings page.
+    """
+    redirect_base = f"{settings.frontend_base_url}/settings/workspace"
+    try:
+        await linear_connection_service.bind_linear_oauth(session, code, state)
+    except Exception:  # noqa: BLE001 — surface failure to the SPA, don't 500 the redirect
+        logger.exception("Linear connection failed")
+        return RedirectResponse(url=f"{redirect_base}?linear=error", status_code=303)
+    return RedirectResponse(url=f"{redirect_base}?linear=connected", status_code=303)
 
 
 @router.get("/connections/github/app", response_model=GitHubInstallURL)

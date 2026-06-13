@@ -10,9 +10,11 @@ import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { ChartDemoPage } from "@/pages/chart-demo";
 import { DataPage } from "@/pages/data";
 import { GithubCallbackPage } from "@/pages/github-callback";
+import { HomePage } from "@/pages/home";
 import { InviteAcceptPage } from "@/pages/invites/accept";
 import { ProfilePage } from "@/pages/profile";
 import { AccessPage } from "@/pages/settings/access";
+import { WorkspacePage } from "@/pages/settings/workspace";
 import { SignInPage } from "@/pages/sign-in";
 import { SignUpPage } from "@/pages/sign-up";
 
@@ -44,6 +46,7 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<App />} />
       <Route element={<ShellLayout />}>
+        <Route path="/home" element={<HomePage />} />
         <Route path="/data" element={<DataPage />} />
         <Route
           path="/settings/access"
@@ -53,6 +56,16 @@ export function AppRoutes() {
                 anyOf={["roles:manage", "members:assign_role", "invites:read"]}
               >
                 <AccessPage />
+              </RequirePermission>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/settings/workspace"
+          element={
+            <RequireAuth>
+              <RequirePermission anyOf={["connections:manage"]}>
+                <WorkspacePage />
               </RequirePermission>
             </RequireAuth>
           }

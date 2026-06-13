@@ -17,6 +17,7 @@ dependencies = [
     "httpx-oauth",
     "httpx",
     "pyjwt[crypto]",
+    "cryptography",
     "pydantic-settings",
     "python-dotenv",
     "email-validator",
