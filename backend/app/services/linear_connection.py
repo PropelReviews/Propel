@@ -158,9 +158,7 @@ async def bind_linear_oauth(
     )
     access_encrypted = token_crypto.encrypt_token(token.access_token)
     refresh_encrypted = (
-        token_crypto.encrypt_token(token.refresh_token)
-        if token.refresh_token
-        else None
+        token_crypto.encrypt_token(token.refresh_token) if token.refresh_token else None
     )
 
     if existing is None:
@@ -242,9 +240,7 @@ def _is_expiring(expires_at: datetime | None) -> bool:
     return datetime.now(UTC) >= expires_at - _REFRESH_LEEWAY
 
 
-async def get_access_token(
-    session: AsyncSession, account: ConnectedAccount
-) -> str:
+async def get_access_token(session: AsyncSession, account: ConnectedAccount) -> str:
     """Return a valid Linear access token, refreshing and persisting if needed.
 
     Raises ``LinearOAuthError`` / ``TokenEncryptionError`` if the stored token

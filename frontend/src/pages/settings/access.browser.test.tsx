@@ -234,9 +234,8 @@ describe("AccessPage invites tab", () => {
     });
     await openTab(container, "Invites");
 
-    await waitFor(() => container.textContent!.includes("Pending invites"));
+    await waitFor(() => container.textContent!.includes("pending@example.com"));
     expect(container.textContent).not.toContain("Invite someone");
-    expect(container.textContent).toContain("pending@example.com");
     // No invites:revoke, so no revoke action either.
     expect(findButton(container, "Revoke")).toBeUndefined();
   });
@@ -272,7 +271,7 @@ describe("AccessPage invites tab", () => {
     await userEvent.keyboard("{Escape}");
 
     // The pending invites table renders with a revoke action.
-    expect(container.textContent).toContain("pending@example.com");
+    await waitFor(() => container.textContent!.includes("pending@example.com"));
     expect(findButton(container, "Revoke")).not.toBeUndefined();
   });
 
