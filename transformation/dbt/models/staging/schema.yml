@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: stg_github_issues
+    description: Latest snapshot of every GitHub issue (one row per issue, PRs excluded).
+    columns:
+      - name: issue_node_id
+        data_tests:
+          - not_null
+
+  - name: stg_linear_issues
+    description: Latest snapshot of every Linear issue (one row per issue).
+    columns:
+      - name: issue_id
+        data_tests:
+          - not_null

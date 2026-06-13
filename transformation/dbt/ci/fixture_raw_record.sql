@@ -44,4 +44,34 @@ values
       "created_at": "2026-01-06T08:00:00Z", "closed_at": "2026-01-07T08:00:00Z",
       "merged_at": null, "user": {"login": "carol"}, "org": "acme", "repo": "web"}',
     '2026-01-07T09:00:00Z'
+),
+-- GitHub issues (exclude PR-shaped rows via pull_request key in staging)
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'issues', 'ISSUE_1',
+    '{"node_id": "ISSUE_1", "number": 10, "title": "Fix login", "state": "open",
+      "created_at": "2026-01-04T10:00:00Z", "updated_at": "2026-01-04T10:00:00Z",
+      "user": {"login": "alice"}, "assignee": {"login": "bob"}, "org": "acme", "repo": "api",
+      "html_url": "https://github.com/acme/api/issues/10"}',
+    '2026-01-04T12:00:00Z'
+),
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'issues', 'ISSUE_2',
+    '{"node_id": "ISSUE_2", "number": 11, "title": "Wont fix", "state": "closed",
+      "state_reason": "not_planned", "created_at": "2026-01-03T10:00:00Z",
+      "updated_at": "2026-01-05T10:00:00Z", "closed_at": "2026-01-05T10:00:00Z",
+      "user": {"login": "carol"}, "org": "acme", "repo": "web",
+      "html_url": "https://github.com/acme/web/issues/11"}',
+    '2026-01-05T11:00:00Z'
+),
+-- Linear issues
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'linear', 'issues', 'lin-issue-1',
+    '{"id": "lin-issue-1", "identifier": "ENG-42", "title": "Ship tickets mart",
+      "createdAt": "2026-01-02T10:00:00Z", "updatedAt": "2026-01-06T10:00:00Z",
+      "completedAt": "2026-01-06T10:00:00Z", "priority": 2, "estimate": 3,
+      "url": "https://linear.app/acme/issue/ENG-42",
+      "state": {"name": "Done", "type": "completed"},
+      "team": {"key": "ENG"},
+      "creator": {"email": "alice@acme.com"}, "assignee": {"email": "bob@acme.com"}}',
+    '2026-01-06T11:00:00Z'
 );

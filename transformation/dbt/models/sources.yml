@@ -15,3 +15,19 @@ sources:
             # Link dbt lineage to the asset the ingestion ops already
             # materialize, so the Dagster graph is connected end to end.
             asset_key: ["github", "pull_requests"]
+
+      - name: github_issues
+        identifier: raw_record
+        description: >
+          GitHub issue payloads (resource_type = 'issues') from tap-github-issues.
+        meta:
+          dagster:
+            asset_key: ["github", "issues"]
+
+      - name: linear_issues
+        identifier: raw_record
+        description: >
+          Linear issue payloads (resource_type = 'issues') from tap-linear.
+        meta:
+          dagster:
+            asset_key: ["linear", "issues"]

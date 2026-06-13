@@ -31,3 +31,28 @@ models:
       - name: pr_node_id
         data_tests:
           - not_null
+
+  - name: fct_tickets
+    description: >
+      Unified ticket entity across GitHub issues and Linear issues. One row per
+      ticket per tenant with a normalized status (open, in_progress, done,
+      canceled).
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: ticket_uid
+        description: Stable key source:external_id (unique per tenant).
+        data_tests:
+          - not_null
+          - unique
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['github', 'linear']
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['open', 'in_progress', 'done', 'canceled']
