@@ -1,69 +1,111 @@
 import logging
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.manager import (
-    auth_backend,
+from app.auth.oidc import oauth
+from app.auth.reconcile import create_test_user, reconcile_user_from_claims
+from app.auth.session import (
+    clear_session,
     current_active_user,
-    fastapi_users,
-    get_jwt_strategy,
-    get_user_manager,
+    establish_session,
 )
-from app.auth.oauth import github_oauth_client, google_oauth_client
 from app.config import get_settings
 from app.db.session import get_async_session
 from app.models.user import User
-from app.schemas.user import (
-    GitHubConnection,
-    GitHubLinkURL,
-    UserCreate,
-    UserMeRead,
-    UserRead,
-)
-from app.services import github_link, github_login
+from app.schemas.user import GitHubConnection, GitHubLinkURL, UserMeRead
+from app.services import github_link
 
 logger = logging.getLogger("propel.auth")
 settings = get_settings()
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-router.include_router(
-    fastapi_users.get_auth_router(auth_backend),
-    prefix="",
-)
-router.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate),
-    prefix="",
-)
 
-if settings.oauth_google_client_id and settings.oauth_google_client_secret:
-    router.include_router(
-        fastapi_users.get_oauth_router(
-            google_oauth_client,
-            auth_backend,
-            settings.jwt_secret,
-            redirect_url=f"{settings.oauth_callback_base_url}/api/v1/auth/google/callback",
-            # Disabled until email verification prevents account
-            # pre-registration attacks.
-            associate_by_email=False,
-            is_verified_by_default=True,
-        ),
-        prefix="/google",
+def _callback_url(request: Request) -> str:
+    return str(request.url_for("oidc_callback"))
+
+
+def _post_login_redirect(request: Request) -> str:
+    return request.session.pop("post_login_redirect", settings.frontend_base_url)
+
+
+@router.get("/login")
+async def login(request: Request):
+    """Start OIDC Auth Code + PKCE flow (redirect to Zitadel hosted login)."""
+    if not settings.zitadel_oidc_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC_NOT_CONFIGURED",
+        )
+    redirect_uri = _callback_url(request)
+    return await oauth.zitadel.authorize_redirect(
+        request,
+        redirect_uri,
+        code_challenge_method="S256",
     )
 
-if settings.github_oauth_enabled:
-    router.include_router(
-        fastapi_users.get_oauth_router(
-            github_oauth_client,
-            auth_backend,
-            settings.jwt_secret,
-            redirect_url=f"{settings.oauth_callback_base_url}/api/v1/auth/github/callback",
-            associate_by_email=False,
-            is_verified_by_default=True,
-        ),
-        prefix="/github",
+
+@router.get("/callback", name="oidc_callback")
+async def oidc_callback(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """OIDC callback — exchange code, reconcile user, set session cookie."""
+    if not settings.zitadel_oidc_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC_NOT_CONFIGURED",
+        )
+    try:
+        token = await oauth.zitadel.authorize_access_token(request)
+        userinfo = token.get("userinfo") or await oauth.zitadel.parse_id_token(
+            request, token
+        )
+    except Exception:
+        logger.exception("OIDC callback failed")
+        return RedirectResponse(
+            url=f"{settings.frontend_base_url}/signin?error=oidc_failed",
+            status_code=303,
+        )
+
+    sub = userinfo.get("sub")
+    email = userinfo.get("email")
+    if not sub or not email:
+        return RedirectResponse(
+            url=f"{settings.frontend_base_url}/signin?error=missing_claims",
+            status_code=303,
+        )
+
+    user = await reconcile_user_from_claims(
+        session,
+        sub=sub,
+        email=email,
+        email_verified=bool(userinfo.get("email_verified")),
+        org_id=userinfo.get("urn:zitadel:iam:org:id"),
+        org_name=userinfo.get("urn:zitadel:iam:org:name"),
+        name=userinfo.get("name") or userinfo.get("preferred_username"),
     )
+    establish_session(request, user)
+    return RedirectResponse(url=_post_login_redirect(request), status_code=303)
+
+
+@router.get("/logout")
+async def logout(request: Request):
+    """Clear the BFF session and redirect through Zitadel end-session."""
+    clear_session(request)
+    if not settings.zitadel_oidc_enabled:
+        return RedirectResponse(url=settings.frontend_base_url, status_code=303)
+
+    params = urlencode(
+        {
+            "post_logout_redirect_uri": settings.frontend_base_url,
+            "client_id": settings.zitadel_client_id,
+        }
+    )
+    end_session = f"{settings.zitadel_issuer.rstrip('/')}/oidc/v1/end_session?{params}"
+    return RedirectResponse(url=end_session, status_code=303)
 
 
 @router.get("/me", response_model=UserMeRead)
@@ -85,56 +127,10 @@ async def me(
         email=user.email,
         name=user.name,
         is_active=user.is_active,
-        is_verified=user.is_verified,
+        email_verified=user.email_verified,
         created_at=user.created_at,
         github=github,
     )
-
-
-@router.get("/github/login/authorize", response_model=GitHubLinkURL)
-async def github_login_authorize():
-    """Return the GitHub authorization URL to sign in / sign up with GitHub."""
-    url = await github_login.build_authorize_url()
-    return GitHubLinkURL(authorization_url=url)
-
-
-@router.get("/github/login/callback")
-async def github_login_callback(
-    code: str,
-    state: str,
-    user_manager=Depends(get_user_manager),
-    strategy=Depends(get_jwt_strategy),
-):
-    """GitHub redirects here after the user authorizes sign-in.
-
-    Finds or creates the Propel user for this GitHub identity, mints a session
-    JWT, and bounces back to the SPA OAuth handler with the token in the URL
-    fragment (fragments are never sent to a server). On failure we redirect with
-    an `error` marker instead.
-    """
-    handler = f"{settings.frontend_base_url}/auth/github/callback"
-    try:
-        github_login.verify_login_state(state)
-        access_token, account_id, account_email = await github_login.exchange_code(code)
-        user = await user_manager.oauth_callback(
-            "github",
-            access_token,
-            account_id,
-            account_email or "",
-            associate_by_email=False,
-            is_verified_by_default=True,
-        )
-        if not user.is_active:
-            return RedirectResponse(
-                url=f"{handler}#error=account_inactive", status_code=303
-            )
-        token = await strategy.write_token(user)
-    except Exception:  # noqa: BLE001 — report failure to the SPA, don't 500 the redirect
-        logger.exception("GitHub login failed")
-        return RedirectResponse(
-            url=f"{handler}#error=github_login_failed", status_code=303
-        )
-    return RedirectResponse(url=f"{handler}#access_token={token}", status_code=303)
 
 
 @router.get("/github/link/authorize", response_model=GitHubLinkURL)
@@ -150,16 +146,25 @@ async def github_link_callback(
     state: str,
     session: AsyncSession = Depends(get_async_session),
 ):
-    """GitHub redirects here after the user authorizes the link.
-
-    The state token (not a bearer header) carries the initiating user, so this
-    endpoint is reachable as a top-level browser navigation. On success we bounce
-    back to the SPA profile page.
-    """
+    """GitHub redirects here after the user authorizes the link."""
     redirect_base = f"{settings.frontend_base_url}/profile"
     try:
         await github_link.complete_link(session, code, state)
-    except Exception:  # noqa: BLE001 — surface failure to the SPA, don't 500 the redirect
+    except Exception:
         logger.exception("GitHub account link failed")
         return RedirectResponse(url=f"{redirect_base}?github=error", status_code=303)
     return RedirectResponse(url=f"{redirect_base}?github=connected", status_code=303)
+
+
+@router.post("/test/login")
+async def test_login(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+    email: str = "test@example.com",
+):
+    """Test-only session bootstrap (APP_ENV=test)."""
+    if not settings.is_test_env:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    user = await create_test_user(session, email=email)
+    establish_session(request, user)
+    return {"user_id": str(user.id), "email": user.email}

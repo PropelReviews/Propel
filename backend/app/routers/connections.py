@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_tenant_context, require_permission
-from app.auth.manager import current_active_user
+from app.auth.session import current_active_user
 from app.config import get_settings
 from app.db.session import get_async_session
 from app.models.user import User

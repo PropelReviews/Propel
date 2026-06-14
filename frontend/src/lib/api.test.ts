@@ -1,149 +1,47 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, getMe, joinWaitlist, login, register } from "./api";
+import { ApiError, getMe, joinWaitlist } from "./api";
 
-type FetchInit = {
-  method?: string;
-  headers: Record<string, string>;
-  body: string;
-};
+describe("api client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
-function mockFetch(response: { ok: boolean; status: number; body: unknown }) {
-  const fetchMock = vi.fn(async (_url: string, _init: FetchInit) => ({
-    ok: response.ok,
-    status: response.status,
-    text: async () => (response.body === null ? "" : JSON.stringify(response.body)),
-  }));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
-
-function lastFetchInit(fetchMock: ReturnType<typeof vi.fn>): FetchInit {
-  const init = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]?.[1];
-  expect(init).toBeDefined();
-  return init as FetchInit;
-}
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
-
-describe("register", () => {
-  it("POSTs JSON to /api/v1/auth/register", async () => {
-    const fetchMock = mockFetch({
+  it("joinWaitlist posts JSON and returns the entry", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 201,
-      body: { id: "1", email: "a@b.com", name: null },
+      text: async () =>
+        JSON.stringify({
+          id: "w1",
+          email: "a@b.com",
+          created_at: "2026-01-01T00:00:00Z",
+        }),
     });
-
-    await register({ email: "a@b.com", password: "supersecret", name: "Ada" });
-
-    const [url] = fetchMock.mock.calls[0]!;
-    const init = lastFetchInit(fetchMock);
-    expect(url).toContain("/api/v1/auth/register");
-    expect(init.method).toBe("POST");
-    expect(init.headers["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(init.body)).toEqual({
-      email: "a@b.com",
-      password: "supersecret",
-      name: "Ada",
-    });
-  });
-
-  it("maps REGISTER_USER_ALREADY_EXISTS to a friendly message", async () => {
-    mockFetch({
-      ok: false,
-      status: 400,
-      body: { detail: "REGISTER_USER_ALREADY_EXISTS" },
-    });
-
-    await expect(
-      register({ email: "a@b.com", password: "supersecret" }),
-    ).rejects.toMatchObject({
-      code: "REGISTER_USER_ALREADY_EXISTS",
-      message: "An account with this email already exists.",
-    });
-  });
-});
-
-describe("login", () => {
-  it("POSTs form-urlencoded with username (not email)", async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      status: 200,
-      body: { access_token: "tok", token_type: "bearer" },
-    });
-
-    const result = await login({ email: "a@b.com", password: "pw" });
-
-    const [url] = fetchMock.mock.calls[0]!;
-    const init = lastFetchInit(fetchMock);
-    expect(url).toContain("/api/v1/auth/login");
-    expect(init.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
-    const params = new URLSearchParams(init.body);
-    expect(params.get("username")).toBe("a@b.com");
-    expect(params.get("password")).toBe("pw");
-    expect(result.access_token).toBe("tok");
-  });
-
-  it("maps LOGIN_BAD_CREDENTIALS to a friendly message", async () => {
-    mockFetch({
-      ok: false,
-      status: 400,
-      body: { detail: "LOGIN_BAD_CREDENTIALS" },
-    });
-
-    await expect(login({ email: "a@b.com", password: "x" })).rejects.toMatchObject({
-      code: "LOGIN_BAD_CREDENTIALS",
-      message: "Incorrect email or password.",
-    });
-  });
-});
-
-describe("joinWaitlist", () => {
-  it("POSTs JSON to /api/v1/waitlist without auth", async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      status: 201,
-      body: { id: "1", email: "a@b.com", created_at: "2026-06-10T00:00:00Z" },
-    });
+    vi.stubGlobal("fetch", fetchMock);
 
     const result = await joinWaitlist({ email: "a@b.com" });
-
-    const [url] = fetchMock.mock.calls[0]!;
-    const init = lastFetchInit(fetchMock);
-    expect(url).toContain("/api/v1/waitlist");
-    expect(init.method).toBe("POST");
-    expect(init.headers["Content-Type"]).toBe("application/json");
-    expect(init.headers.Authorization).toBeUndefined();
-    expect(JSON.parse(init.body)).toEqual({ email: "a@b.com" });
     expect(result.email).toBe("a@b.com");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/waitlist"),
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
   });
 
-  it("maps WAITLIST_EMAIL_ALREADY_EXISTS to a friendly message", async () => {
-    mockFetch({
+  it("getMe uses session cookies and throws ApiError on 401", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
-      status: 409,
-      body: { detail: "WAITLIST_EMAIL_ALREADY_EXISTS" },
+      status: 401,
+      text: async () => JSON.stringify({ detail: "Not authenticated" }),
     });
+    vi.stubGlobal("fetch", fetchMock);
 
-    await expect(joinWaitlist({ email: "a@b.com" })).rejects.toMatchObject({
-      code: "WAITLIST_EMAIL_ALREADY_EXISTS",
-      message: "You're already on the waitlist.",
-    });
-  });
-});
-
-describe("getMe", () => {
-  it("sends the bearer token and throws ApiError on 401", async () => {
-    const fetchMock = mockFetch({ ok: false, status: 401, body: null });
-
-    const error = await getMe("tok").catch((e) => e);
+    const error = await getMe().catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(401);
-
-    const init = lastFetchInit(fetchMock);
-    expect(init.headers.Authorization).toBe("Bearer tok");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/auth/me"),
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 });

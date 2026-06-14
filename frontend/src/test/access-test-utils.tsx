@@ -17,7 +17,7 @@ export const TEST_USER: AuthUser = {
   email: "self@example.com",
   name: "Sam Self",
   is_active: true,
-  is_verified: true,
+  email_verified: true,
   created_at: "2026-01-01T00:00:00Z",
 };
 
@@ -30,9 +30,10 @@ export const ALL_PERMISSIONS: PermissionKey[] = [
   "members:remove",
   "invites:read",
   "invites:revoke",
+  "invites:role:owner",
   "invites:role:admin",
   "invites:role:manager",
-  "invites:role:individual",
+  "invites:role:member",
   "connections:manage",
   "github_identities:manage",
   "ingestion:read",
@@ -57,7 +58,7 @@ export function makeMember(
 ): Member {
   return {
     name: null,
-    role: "individual",
+    role: "member",
     created_at: "2026-02-03T00:00:00Z",
     github_login: null,
     github_link_status: null,
@@ -189,9 +190,9 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
   return { calls };
 }
 
-/** Persists a session token so AuthProvider boots into the loading state. */
+/** Caches user for faster AuthProvider bootstrap in browser tests. */
 export function seedAuth() {
-  localStorage.setItem("propel_token", "test-token");
+  localStorage.setItem("propel_user", JSON.stringify(TEST_USER));
 }
 
 /** Clears storage (token, cached user, tenant selection) and fetch stubs. */

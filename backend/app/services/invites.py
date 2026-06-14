@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.models.enums import MembershipStatus
 from app.models.invite import TenantInvite
 from app.models.membership import TenantMembership
 from app.models.user import User
@@ -146,6 +147,7 @@ async def accept_invite(
         tenant_id=invite.tenant_id,
         user_id=user.id,
         role=invite.role,
+        status=MembershipStatus.active,
     )
     invite.accepted_at = datetime.now(UTC)
     session.add(membership)

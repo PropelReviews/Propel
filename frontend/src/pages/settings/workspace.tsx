@@ -59,7 +59,7 @@ function LinearIntegrationCard({
     let cancelled = false;
     void (async () => {
       try {
-        const result = await getLinearConnection(token, tenantId);
+        const result = await getLinearConnection(tenantId);
         if (!cancelled) setLinear(result);
       } catch {
         if (!cancelled) setLinear(null);
@@ -77,7 +77,7 @@ function LinearIntegrationCard({
     void (async () => {
       if (result === "connected" && token && tenantId) {
         try {
-          setLinear(await getLinearConnection(token, tenantId));
+          setLinear(await getLinearConnection(tenantId));
         } catch {
           // Status refresh is best-effort; the notice still informs the user.
         }
@@ -94,7 +94,7 @@ function LinearIntegrationCard({
     setError(null);
     setConnecting(true);
     try {
-      const url = await getLinearAuthorizeUrl(token, tenantId);
+      const url = await getLinearAuthorizeUrl(tenantId);
       window.location.href = url;
     } catch (err) {
       setConnecting(false);

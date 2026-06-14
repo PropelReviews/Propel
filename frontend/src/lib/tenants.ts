@@ -12,6 +12,6 @@ export type Tenant = {
   permissions: PermissionKey[];
 };
 
-export function listTenants(token: string): Promise<Tenant[]> {
-  return authedGet<Tenant[]>("/api/v1/tenants/", token);
+export function listTenants(): Promise<Tenant[]> {
+  return authedGet<Tenant[]>("/api/v1/tenants/");
 }

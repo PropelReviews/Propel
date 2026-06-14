@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.permissions import (
     ALL_PERMISSION_KEYS,
     DEFAULT_ROLE_PERMISSIONS,
-    LOCKED_ADMIN_PERMISSIONS,
+    LOCKED_OWNER_PERMISSIONS,
     PERMISSION_CATALOG,
 )
 from app.models.enums import Role
@@ -72,12 +72,12 @@ async def set_role_permissions(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unknown permissions: {', '.join(sorted(unknown))}",
         )
-    if role == Role.admin:
-        missing_locked = LOCKED_ADMIN_PERMISSIONS - requested
+    if role == Role.owner:
+        missing_locked = LOCKED_OWNER_PERMISSIONS - requested
         if missing_locked:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(f"Admin role must keep: {', '.join(sorted(missing_locked))}"),
+                detail=(f"Owner role must keep: {', '.join(sorted(missing_locked))}"),
             )
 
     result = await session.execute(

@@ -340,7 +340,7 @@ function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role | "">(
-    invitableRoles.includes("individual") ? "individual" : (invitableRoles[0] ?? ""),
+    invitableRoles.includes("member") ? "member" : (invitableRoles[0] ?? ""),
   );
   const [sending, setSending] = useState(false);
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);

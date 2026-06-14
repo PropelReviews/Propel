@@ -51,8 +51,8 @@ async def test_tenant_list_includes_role_and_permissions(client: AsyncClient):
     listed = await client.get("/api/v1/tenants/", headers=auth_headers(token))
     assert listed.status_code == 200
     body = listed.json()
-    assert body[0]["role"] == "admin"
-    assert set(body[0]["permissions"]) == set(DEFAULT_ROLE_PERMISSIONS[Role.admin])
+    assert body[0]["role"] == "owner"
+    assert set(body[0]["permissions"]) == set(DEFAULT_ROLE_PERMISSIONS[Role.owner])
 
 
 @pytest.mark.asyncio
@@ -89,7 +89,7 @@ async def test_admin_can_update_manager_permissions(client: AsyncClient):
     # Manager can no longer create invites.
     denied = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "new@example.com", "role": "individual"},
+        json={"email": "new@example.com", "role": "member"},
         headers=auth_headers(manager_token),
     )
     assert denied.status_code == 403
@@ -106,7 +106,7 @@ async def test_manager_cannot_manage_roles(client: AsyncClient):
     assert listed.status_code == 403
 
     updated = await client.put(
-        f"/api/v1/tenants/{tenant['id']}/roles/individual",
+        f"/api/v1/tenants/{tenant['id']}/roles/member",
         json={"permissions": ["tenant:read"]},
         headers=auth_headers(manager_token),
     )
@@ -120,12 +120,12 @@ async def test_locked_admin_permissions_cannot_be_removed(client: AsyncClient):
     tenant = await create_tenant(client, token)
 
     resp = await client.put(
-        f"/api/v1/tenants/{tenant['id']}/roles/admin",
+        f"/api/v1/tenants/{tenant['id']}/roles/owner",
         json={"permissions": ["tenant:read"]},
         headers=auth_headers(token),
     )
     assert resp.status_code == 422
-    assert "Admin role must keep" in resp.json()["detail"]
+    assert "Owner role must keep" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -135,7 +135,7 @@ async def test_unknown_permission_rejected(client: AsyncClient):
     tenant = await create_tenant(client, token)
 
     resp = await client.put(
-        f"/api/v1/tenants/{tenant['id']}/roles/individual",
+        f"/api/v1/tenants/{tenant['id']}/roles/member",
         json={"permissions": ["nope:invalid"]},
         headers=auth_headers(token),
     )
@@ -153,7 +153,7 @@ async def test_granting_invite_permission_expands_access(client: AsyncClient):
     member_token = await login_user(client, "member@example.com")
     invite = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "member@example.com", "role": "individual"},
+        json={"email": "member@example.com", "role": "member"},
         headers=auth_headers(admin_token),
     )
     token = invite.json()["invite_url"].split("/")[-2]
@@ -164,23 +164,23 @@ async def test_granting_invite_permission_expands_access(client: AsyncClient):
     # Individuals can't invite by default.
     denied = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "friend@example.com", "role": "individual"},
+        json={"email": "friend@example.com", "role": "member"},
         headers=auth_headers(member_token),
     )
     assert denied.status_code == 403
 
-    # Grant invites:role:individual to the individual role.
-    base = sorted(DEFAULT_ROLE_PERMISSIONS[Role.individual])
+    # Grant invites:role:member to the individual role.
+    base = sorted(DEFAULT_ROLE_PERMISSIONS[Role.member])
     resp = await client.put(
-        f"/api/v1/tenants/{tenant['id']}/roles/individual",
-        json={"permissions": [*base, "invites:role:individual"]},
+        f"/api/v1/tenants/{tenant['id']}/roles/member",
+        json={"permissions": [*base, "invites:role:member"]},
         headers=auth_headers(admin_token),
     )
     assert resp.status_code == 200
 
     allowed = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "friend@example.com", "role": "individual"},
+        json={"email": "friend@example.com", "role": "member"},
         headers=auth_headers(member_token),
     )
     assert allowed.status_code == 201

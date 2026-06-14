@@ -50,7 +50,7 @@ export function ConnectTools({ onConnected }: { onConnected: () => void }) {
   async function openInstallPage() {
     if (!token) return;
     try {
-      const url = await getGithubAppInstallUrl(token);
+      const url = await getGithubAppInstallUrl();
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
       const message =
@@ -64,7 +64,7 @@ export function ConnectTools({ onConnected }: { onConnected: () => void }) {
   async function connectGithubAccount() {
     if (!token) return;
     try {
-      const url = await getGithubLinkUrl(token);
+      const url = await getGithubLinkUrl();
       window.location.href = url;
     } catch (error) {
       const message =
@@ -79,10 +79,10 @@ export function ConnectTools({ onConnected }: { onConnected: () => void }) {
     if (!token) return;
     setCheck({ status: "checking" });
     try {
-      await syncGithubInstallations(token);
+      await syncGithubInstallations();
       // The roster import may have just linked this user to a workspace —
       // re-check membership before deciding what to show.
-      const tenants = await listTenants(token);
+      const tenants = await listTenants();
       if (tenants.length > 0) {
         onConnected();
         setCheck({ status: "idle" });

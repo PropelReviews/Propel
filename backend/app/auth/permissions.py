@@ -68,6 +68,12 @@ PERMISSION_CATALOG: tuple[PermissionDefinition, ...] = (
         group="Invites",
     ),
     PermissionDefinition(
+        key="invites:role:owner",
+        label="Invite owners",
+        description="Send invitations with the owner role.",
+        group="Invites",
+    ),
+    PermissionDefinition(
         key="invites:role:admin",
         label="Invite admins",
         description="Send invitations with the admin role.",
@@ -80,9 +86,9 @@ PERMISSION_CATALOG: tuple[PermissionDefinition, ...] = (
         group="Invites",
     ),
     PermissionDefinition(
-        key="invites:role:individual",
-        label="Invite individuals",
-        description="Send invitations with the individual role.",
+        key="invites:role:member",
+        label="Invite members",
+        description="Send invitations with the member role.",
         group="Invites",
     ),
     PermissionDefinition(
@@ -119,21 +125,42 @@ PERMISSION_CATALOG: tuple[PermissionDefinition, ...] = (
 
 ALL_PERMISSION_KEYS: frozenset[str] = frozenset(p.key for p in PERMISSION_CATALOG)
 
-# Permissions the admin role can never lose — prevents locking every admin
+# Permissions the owner role can never lose — prevents locking every owner
 # out of role/member management via the UI.
-LOCKED_ADMIN_PERMISSIONS: frozenset[str] = frozenset(
+LOCKED_OWNER_PERMISSIONS: frozenset[str] = frozenset(
     {"tenant:update", "members:assign_role", "roles:manage"}
 )
 
+# Backwards-compatible alias used in a few call sites during the rename.
+LOCKED_ADMIN_PERMISSIONS = LOCKED_OWNER_PERMISSIONS
+
 INVITE_ROLE_PERMISSIONS: dict[Role, str] = {
+    Role.owner: "invites:role:owner",
     Role.admin: "invites:role:admin",
     Role.manager: "invites:role:manager",
-    Role.individual: "invites:role:individual",
+    Role.member: "invites:role:member",
 }
 
-# Default matrix — mirrors the pre-configurable hardcoded behavior.
 DEFAULT_ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
-    Role.admin: ALL_PERMISSION_KEYS,
+    Role.owner: ALL_PERMISSION_KEYS,
+    Role.admin: frozenset(
+        {
+            "tenant:read",
+            "tenant:update",
+            "members:read",
+            "members:assign_role",
+            "members:remove",
+            "invites:read",
+            "invites:revoke",
+            "invites:role:admin",
+            "invites:role:manager",
+            "invites:role:member",
+            "connections:manage",
+            "github_identities:manage",
+            "ingestion:read",
+            "metrics:read",
+        }
+    ),
     Role.manager: frozenset(
         {
             "tenant:read",
@@ -141,12 +168,12 @@ DEFAULT_ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "invites:read",
             "invites:revoke",
             "invites:role:manager",
-            "invites:role:individual",
+            "invites:role:member",
             "ingestion:read",
             "metrics:read",
         }
     ),
-    Role.individual: frozenset(
+    Role.member: frozenset(
         {
             "tenant:read",
             "members:read",

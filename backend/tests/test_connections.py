@@ -50,10 +50,10 @@ def test_install_state_rejects_garbage():
 
 
 def test_install_state_rejects_wrong_signature(monkeypatch):
-    monkeypatch.setattr(connection_service.settings, "jwt_secret", "secret-a")
+    monkeypatch.setattr(connection_service.settings, "session_secret", "secret-a")
     state = connection_service.build_install_state(uuid.uuid4(), uuid.uuid4())
     # A state signed under a different secret must not verify.
-    monkeypatch.setattr(connection_service.settings, "jwt_secret", "secret-b")
+    monkeypatch.setattr(connection_service.settings, "session_secret", "secret-b")
     with pytest.raises(HTTPException) as exc:
         connection_service.verify_install_state(state)
     assert exc.value.status_code == 400

@@ -101,7 +101,7 @@ async def test_provisions_user_and_membership_for_unmatched_member(clean_db):
 
         user = await session.get(User, identity.propel_user_id)
         assert user.email == "octocat@acme.com"
-        assert user.is_verified is False
+        assert user.email_verified is False
 
         membership = await session.scalar(
             select(TenantMembership).where(
@@ -109,7 +109,7 @@ async def test_provisions_user_and_membership_for_unmatched_member(clean_db):
                 TenantMembership.user_id == user.id,
             )
         )
-        assert membership.role == Role.individual
+        assert membership.role == Role.member
 
 
 @pytest.mark.asyncio
@@ -135,7 +135,7 @@ async def test_org_admin_provisions_as_propel_admin(clean_db):
                 TenantMembership.user_id == identity.propel_user_id
             )
         )
-        assert membership.role == Role.admin
+        assert membership.role == Role.owner
 
 
 @pytest.mark.asyncio
@@ -143,7 +143,7 @@ async def test_links_existing_user_by_email(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
         user = User(
-            email="dev@acme.com", hashed_password="x", is_active=True, is_verified=True
+            email="dev@acme.com", is_active=True, email_verified=True
         )
         session.add(user)
         await session.flush()
@@ -170,7 +170,7 @@ async def test_links_existing_user_by_oauth_id(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
         user = User(
-            email="gh@acme.com", hashed_password="x", is_active=True, is_verified=True
+            email="gh@acme.com", is_active=True, email_verified=True
         )
         session.add(user)
         await session.flush()
@@ -252,13 +252,13 @@ async def test_last_admin_is_not_demoted(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
         user = User(
-            email="boss@acme.com", hashed_password="x", is_active=True, is_verified=True
+            email="boss@acme.com", is_active=True, email_verified=True
         )
         session.add(user)
         await session.flush()
         session.add(
             TenantMembership(
-                tenant_id=account.tenant_id, user_id=user.id, role=Role.admin
+                tenant_id=account.tenant_id, user_id=user.id, role=Role.owner
             )
         )
         session.add(
@@ -288,7 +288,7 @@ async def test_last_admin_is_not_demoted(clean_db):
         membership = await session.scalar(
             select(TenantMembership).where(TenantMembership.user_id == user.id)
         )
-        assert membership.role == Role.admin
+        assert membership.role == Role.owner
 
 
 @pytest.mark.asyncio
@@ -307,7 +307,7 @@ async def test_retroactive_oauth_link_claims_pending_identity(clean_db):
             )
         )
         user = User(
-            email="late@acme.com", hashed_password="x", is_active=True, is_verified=True
+            email="late@acme.com", is_active=True, email_verified=True
         )
         session.add(user)
         await session.flush()
@@ -362,7 +362,7 @@ async def test_register_claims_pending_identity_by_email(client: AsyncClient):
             )
         )
         assert membership is not None
-        assert membership.role == Role.admin
+        assert membership.role == Role.owner
 
 
 @pytest.mark.asyncio

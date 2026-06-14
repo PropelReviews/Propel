@@ -43,7 +43,8 @@ _GITHUB_INSTALL_URL = "https://github.com/apps/{slug}/installations/new?state={s
 # Signed install state
 # --------------------------------------------------------------------------- #
 def _sign(payload: str) -> str:
-    return hmac.new(settings.jwt_secret.encode(), payload.encode(), sha256).hexdigest()
+    secret = settings.session_secret.encode()
+    return hmac.new(secret, payload.encode(), sha256).hexdigest()
 
 
 def build_install_state(tenant_id: uuid.UUID, user_id: uuid.UUID) -> str:
@@ -151,7 +152,7 @@ async def bind_github_installation(
         )
     )
     membership = membership.scalar_one_or_none()
-    if membership is None or membership.role != Role.admin:
+    if membership is None or membership.role not in {Role.owner, Role.admin}:
         logger.warning(
             "Non-admin attempted GitHub install binding",
             extra={

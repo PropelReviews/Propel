@@ -8,7 +8,7 @@ from app.auth.dependencies import (
     require_any_permission,
     require_permission,
 )
-from app.auth.manager import current_active_user
+from app.auth.session import current_active_user
 from app.db.session import get_async_session
 from app.models.user import User
 from app.schemas.invite import InviteAcceptRead, InviteCreate, InviteCreated, InviteRead
@@ -26,9 +26,10 @@ async def create_invite(
     payload: InviteCreate,
     ctx=Depends(
         require_any_permission(
+            "invites:role:owner",
             "invites:role:admin",
             "invites:role:manager",
-            "invites:role:individual",
+            "invites:role:member",
         )
     ),
     user: User = Depends(current_active_user),

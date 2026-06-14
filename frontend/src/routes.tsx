@@ -9,7 +9,6 @@ import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { ChartDemoPage } from "@/pages/chart-demo";
 import { DataPage } from "@/pages/data";
-import { GithubCallbackPage } from "@/pages/github-callback";
 import { HomePage } from "@/pages/home";
 import { InviteAcceptPage } from "@/pages/invites/accept";
 import { ProfilePage } from "@/pages/profile";
@@ -103,14 +102,7 @@ export function AppRoutes() {
           </RequireAuthFlag>
         }
       />
-      <Route
-        path="/auth/github/callback"
-        element={
-          <RequireAuthFlag>
-            <GithubCallbackPage />
-          </RequireAuthFlag>
-        }
-      />
+      <Route path="/auth/callback" element={<Navigate to="/" replace />} />
       <Route
         path="/dev/charts"
         element={

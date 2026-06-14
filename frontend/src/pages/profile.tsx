@@ -59,7 +59,7 @@ export function ProfilePage() {
     setError(null);
     setConnecting(true);
     try {
-      const url = await getGithubLinkUrl(token);
+      const url = await getGithubLinkUrl();
       window.location.href = url;
     } catch (err) {
       setConnecting(false);

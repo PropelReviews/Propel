@@ -5,8 +5,8 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql://propel:propel@localhost:5432/propel_test",
 )
-os.environ.setdefault("JWT_SECRET", "test-secret")
-os.environ.setdefault("AUTH_REGISTRATION_ENABLED", "true")
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("SESSION_SECRET", "test-secret")
 
 import pytest
 from alembic import command
@@ -85,12 +85,13 @@ async def register_user(
     password: str = "testpass123",
     name: str | None = "Test User",
 ) -> dict:
-    payload = {"email": email, "password": password}
-    if name is not None:
-        payload["name"] = name
-    response = await client.post("/api/v1/auth/register", json=payload)
-    assert response.status_code == 201, response.text
-    return response.json()
+    response = await client.post(
+        "/api/v1/auth/test/login",
+        params={"email": email},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    return {"id": body["user_id"], "email": body["email"], "name": name}
 
 
 async def login_user(
@@ -99,15 +100,16 @@ async def login_user(
     password: str = "testpass123",
 ) -> str:
     response = await client.post(
-        "/api/v1/auth/login",
-        data={"username": email, "password": password},
+        "/api/v1/auth/test/login",
+        params={"email": email},
     )
     assert response.status_code == 200, response.text
-    return response.json()["access_token"]
+    return response.json()["user_id"]
 
 
-def auth_headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+def auth_headers(token: str | None = None) -> dict[str, str]:
+    # BFF auth uses httpOnly session cookies; the shared AsyncClient carries them.
+    return {}
 
 
 async def create_tenant(

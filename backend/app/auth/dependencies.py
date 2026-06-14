@@ -5,10 +5,10 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.manager import current_active_user
 from app.auth.permissions import INVITE_ROLE_PERMISSIONS
+from app.auth.session import current_active_user
 from app.db.session import get_async_session
-from app.models.enums import Role
+from app.models.enums import MembershipStatus, Role
 from app.models.membership import TenantMembership
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -33,6 +33,7 @@ async def get_membership(
         .where(
             TenantMembership.tenant_id == tenant_id,
             TenantMembership.user_id == user.id,
+            TenantMembership.status == MembershipStatus.active,
             Tenant.deleted_at.is_(None),
         )
     )
@@ -79,8 +80,6 @@ def require_any_permission(*keys: str, detail: str = "Forbidden"):
     return dependency
 
 
-# Common deps. `require_member` covers read access for any role with
-# workspace visibility; `require_admin` remains the gate for tenant updates.
 require_member = require_permission("tenant:read")
 require_admin = require_permission("tenant:update", detail="Admin required")
 

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_member, require_permission
-from app.auth.manager import current_active_user
+from app.auth.session import current_active_user
 from app.db.session import get_async_session
 from app.models.user import User
 from app.schemas.roles import TenantWithMembershipRead

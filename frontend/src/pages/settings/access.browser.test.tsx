@@ -44,7 +44,7 @@ const manager = makeMember({
 const pendingInvite: Invite = {
   id: "invite-1",
   email: "pending@example.com",
-  role: "individual",
+  role: "member",
   expires_at: "2026-07-01T00:00:00Z",
   created_at: "2026-06-01T00:00:00Z",
   invited_by_user_id: TEST_USER.id,
@@ -88,7 +88,7 @@ const ROLE_PERMS: RolePermissions[] = [
     ],
   },
   { role: "manager", permissions: ["invites:read"] },
-  { role: "individual", permissions: [] },
+  { role: "member", permissions: [] },
 ];
 
 let result: RenderResult | undefined;
@@ -247,7 +247,7 @@ describe("AccessPage invites tab", () => {
         "invites:read",
         "invites:revoke",
         "invites:role:manager",
-        "invites:role:individual",
+        "invites:role:member",
       ],
       { members: [selfAdmin], invites: [pendingInvite] },
     );
@@ -277,7 +277,7 @@ describe("AccessPage invites tab", () => {
 
   it("sends an invite and surfaces the invite link", async () => {
     const { container, calls } = await mountAccess(
-      ["members:read", "invites:read", "invites:role:individual"],
+      ["members:read", "invites:read", "invites:role:member"],
       { members: [selfAdmin], invites: [] },
     );
     await openTab(container, "Invites");
@@ -294,7 +294,7 @@ describe("AccessPage invites tab", () => {
     const post = calls.find(
       (c) => c.method === "POST" && c.path === "/api/v1/tenants/tenant-1/invites",
     );
-    expect(post?.body).toEqual({ email: "teammate@example.com", role: "individual" });
+    expect(post?.body).toEqual({ email: "teammate@example.com", role: "member" });
     expect(container.querySelector("code")!.textContent).toContain(
       "http://app.test/invite/",
     );

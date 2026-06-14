@@ -28,6 +28,10 @@ type Scope = {
 // Manager teams aren't modeled yet, so a manager currently sees the same
 // workspace-wide data as an admin, just framed as "your team".
 const ROLE_SCOPE: Record<Role, Scope> = {
+  owner: {
+    title: "Organization",
+    subtitle: "Engineering activity across your whole workspace.",
+  },
   admin: {
     title: "Organization",
     subtitle: "Engineering activity across your whole workspace.",
@@ -36,7 +40,7 @@ const ROLE_SCOPE: Record<Role, Scope> = {
     title: "Your team",
     subtitle: "Engineering activity across your team.",
   },
-  individual: {
+  member: {
     title: "Your stats",
     subtitle: "Your personal contribution metrics.",
   },
@@ -120,7 +124,7 @@ export function HomePage() {
     );
   }
 
-  const scope = role ? ROLE_SCOPE[role] : ROLE_SCOPE.individual;
+  const scope = role ? ROLE_SCOPE[role] : ROLE_SCOPE.member;
   const firstName = user?.name?.split(" ")[0];
 
   return (
@@ -129,7 +133,7 @@ export function HomePage() {
       subtitle={scope.subtitle}
       greeting={firstName ? `Welcome back, ${firstName}.` : undefined}
     >
-      {role === "individual" ? (
+      {role === "member" ? (
         <PersonalStats />
       ) : (
         <WorkspaceStats key={reloadKey} tenantId={tenant.id} token={token} />

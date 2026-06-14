@@ -11,13 +11,13 @@ from app.models.user import User
 from app.schemas.membership import MemberRead, MemberRoleUpdate
 
 
-async def count_admins(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+async def count_owners(session: AsyncSession, tenant_id: uuid.UUID) -> int:
     result = await session.execute(
         select(func.count())
         .select_from(TenantMembership)
         .where(
             TenantMembership.tenant_id == tenant_id,
-            TenantMembership.role == Role.admin,
+            TenantMembership.role == Role.owner,
         )
     )
     return int(result.scalar_one())
@@ -71,12 +71,12 @@ async def assign_role(
         )
 
     membership, user = row
-    if membership.role == Role.admin and payload.role != Role.admin:
-        admin_count = await count_admins(session, tenant_id)
-        if admin_count <= 1:
+    if membership.role == Role.owner and payload.role != Role.owner:
+        owner_count = await count_owners(session, tenant_id)
+        if owner_count <= 1:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot demote the last admin",
+                detail="Cannot demote the last owner",
             )
 
     membership.role = payload.role
@@ -106,12 +106,12 @@ async def remove_member(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
 
-    if membership.role == Role.admin:
-        admin_count = await count_admins(session, tenant_id)
-        if admin_count <= 1:
+    if membership.role == Role.owner:
+        owner_count = await count_owners(session, tenant_id)
+        if owner_count <= 1:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot remove the last admin",
+                detail="Cannot remove the last owner",
             )
 
     await session.delete(membership)

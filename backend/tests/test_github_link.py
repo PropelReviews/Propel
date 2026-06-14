@@ -124,9 +124,8 @@ async def test_complete_link_creates_oauth_account_and_claims_org_identity(
         # is private, so org sync parked them as pending_email.
         user = User(
             email="dev@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(user)
         await session.flush()
@@ -181,9 +180,8 @@ async def test_complete_link_is_idempotent(clean_db, monkeypatch):
     async with async_session_maker() as session:
         user = User(
             email="repeat@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(user)
         await session.commit()
@@ -215,9 +213,8 @@ async def test_complete_link_conflict_when_github_owned_by_other_user(
     async with async_session_maker() as session:
         other = User(
             email="other@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(other)
         await session.flush()
@@ -232,9 +229,8 @@ async def test_complete_link_conflict_when_github_owned_by_other_user(
         )
         me = User(
             email="me@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(me)
         await session.commit()

@@ -19,7 +19,7 @@ async def create_tenant(
     session: AsyncSession, user: User, payload: TenantCreate
 ) -> Tenant:
     tenant = Tenant(name=payload.name, slug=payload.slug)
-    membership = TenantMembership(tenant=tenant, user_id=user.id, role=Role.admin)
+    membership = TenantMembership(tenant=tenant, user_id=user.id, role=Role.owner)
     session.add(tenant)
     session.add(membership)
     try:

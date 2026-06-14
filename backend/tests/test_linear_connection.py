@@ -44,9 +44,9 @@ def test_connect_state_roundtrip():
 
 
 def test_connect_state_rejects_wrong_signature(monkeypatch):
-    monkeypatch.setattr(svc.settings, "jwt_secret", "secret-a")
+    monkeypatch.setattr(svc.settings, "session_secret", "secret-a")
     state = svc.build_connect_state(uuid.uuid4(), uuid.uuid4())
-    monkeypatch.setattr(svc.settings, "jwt_secret", "secret-b")
+    monkeypatch.setattr(svc.settings, "session_secret", "secret-b")
     with pytest.raises(Exception) as exc:
         svc.verify_connect_state(state)
     assert getattr(exc.value, "status_code", None) == 400
