@@ -145,18 +145,23 @@ async def _activate_invited_memberships(session: AsyncSession, user: User) -> No
         membership.status = MembershipStatus.active
 
 
-async def create_test_user(
+async def get_or_create_test_user(
     session: AsyncSession,
     *,
     email: str,
     zitadel_user_id: str | None = None,
     name: str | None = "Test User",
 ) -> User:
-    """Create a user for integration tests (APP_ENV=test only)."""
-    sub = zitadel_user_id or str(uuid.uuid4())
+    """Return an existing test user by email, or create one."""
+    normalized = email.lower()
+    result = await session.execute(select(User).where(User.email == normalized))
+    user = result.scalar_one_or_none()
+    if user is not None:
+        return user
+
     user = User(
-        zitadel_user_id=sub,
-        email=email,
+        zitadel_user_id=zitadel_user_id or str(uuid.uuid4()),
+        email=normalized,
         email_verified=True,
         name=name,
     )
@@ -164,3 +169,7 @@ async def create_test_user(
     await session.commit()
     await session.refresh(user)
     return user
+
+
+# Backwards-compatible alias for callers that create users in tests.
+create_test_user = get_or_create_test_user

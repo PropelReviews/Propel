@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.oidc import oauth
-from app.auth.reconcile import create_test_user, reconcile_user_from_claims
+from app.auth.reconcile import get_or_create_test_user, reconcile_user_from_claims
 from app.auth.session import (
     clear_session,
     current_active_user,
@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.db.session import get_async_session
 from app.models.user import User
 from app.schemas.user import GitHubConnection, GitHubLinkURL, UserMeRead
-from app.services import github_link
+from app.services import github_identity, github_link
 
 logger = logging.getLogger("propel.auth")
 settings = get_settings()
@@ -163,8 +163,9 @@ async def test_login(
     email: str = "test@example.com",
 ):
     """Test-only session bootstrap (APP_ENV=test)."""
-    if not settings.is_test_env:
+    if not get_settings().is_test_env:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    user = await create_test_user(session, email=email)
+    user = await get_or_create_test_user(session, email=email)
+    await github_identity.link_email_identity(session, user.id, user.email)
     establish_session(request, user)
     return {"user_id": str(user.id), "email": user.email}

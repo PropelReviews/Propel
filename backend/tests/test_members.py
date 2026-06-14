@@ -25,7 +25,7 @@ async def _setup_tenant_with_roles(client: AsyncClient):
     member_token = await login_user(client, "member@example.com")
     mem_invite = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "member@example.com", "role": "individual"},
+        json={"email": "member@example.com", "role": "member"},
         headers=auth_headers(admin_token),
     )
     mem_token = mem_invite.json()["invite_url"].split("/")[-2]

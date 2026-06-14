@@ -59,8 +59,9 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
-      JWT_SECRET: test-secret
-      AUTH_REGISTRATION_ENABLED: "true"
+      APP_ENV: test
+      SESSION_SECRET: test-secret
+      TOKEN_ENCRYPTION_KEY: iqHnNRvDhs_n1rp2O6nMgbrerNt1cjcvCkBHg543YVc=
     defaults:
       run:
         working-directory: backend
@@ -105,7 +106,9 @@ jobs:
       DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
       # target-propel reads the sync DSN from PROPEL_DATABASE_URL.
       PROPEL_DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
-      JWT_SECRET: test-secret
+      APP_ENV: test
+      SESSION_SECRET: test-secret
+      TOKEN_ENCRYPTION_KEY: iqHnNRvDhs_n1rp2O6nMgbrerNt1cjcvCkBHg543YVc=
     defaults:
       run:
         working-directory: backend

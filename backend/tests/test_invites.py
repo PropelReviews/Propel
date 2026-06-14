@@ -30,7 +30,7 @@ async def test_manager_can_invite_individual_not_admin(client: AsyncClient):
 
     ok = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "newbie@example.com", "role": "individual"},
+        json={"email": "newbie@example.com", "role": "member"},
         headers=auth_headers(manager_token),
     )
     assert ok.status_code == 201
@@ -54,7 +54,7 @@ async def test_accept_invite_creates_membership(client: AsyncClient):
 
     created = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "invitee@example.com", "role": "individual"},
+        json={"email": "invitee@example.com", "role": "member"},
         headers=auth_headers(admin_token),
     )
     raw_token = created.json()["invite_url"].split("/")[-2]
@@ -65,7 +65,7 @@ async def test_accept_invite_creates_membership(client: AsyncClient):
     )
     assert accepted.status_code == 200
     assert accepted.json()["tenant_id"] == tenant["id"]
-    assert accepted.json()["role"] == "individual"
+    assert accepted.json()["role"] == "member"
 
     members = await client.get(
         f"/api/v1/tenants/{tenant['id']}/members/",
@@ -86,7 +86,7 @@ async def test_expired_invite_rejected(client: AsyncClient):
 
     created = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "late@example.com", "role": "individual"},
+        json={"email": "late@example.com", "role": "member"},
         headers=auth_headers(admin_token),
     )
     raw_token = created.json()["invite_url"].split("/")[-2]

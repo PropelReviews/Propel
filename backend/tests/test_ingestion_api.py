@@ -150,5 +150,6 @@ async def test_ingestion_endpoints_require_auth(client: AsyncClient):
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
 
+    client.cookies.clear()
     resp = await client.get(f"/api/v1/tenants/{tenant['id']}/ingestion/stats")
     assert resp.status_code == 401

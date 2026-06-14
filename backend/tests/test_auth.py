@@ -30,11 +30,9 @@ async def test_logout_clears_session(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_test_login_disabled_outside_test_env(client: AsyncClient, monkeypatch):
-    from app.config import get_settings
-
-    get_settings.cache_clear()
-    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setattr(
+        "app.routers.auth.get_settings",
+        lambda: type("S", (), {"is_test_env": False})(),
+    )
     response = await client.post("/api/v1/auth/test/login", params={"email": "x@y.com"})
     assert response.status_code == 404
-    get_settings.cache_clear()
-    monkeypatch.setenv("APP_ENV", "test")

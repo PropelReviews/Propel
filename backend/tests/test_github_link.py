@@ -73,8 +73,8 @@ async def test_authorize_returns_url_when_configured(client: AsyncClient, monkey
     await register_user(client, "linker@example.com")
     token = await login_user(client, "linker@example.com")
 
-    monkeypatch.setattr(github_link.settings, "oauth_github_client_id", "cid")
-    monkeypatch.setattr(github_link.settings, "oauth_github_client_secret", "secret")
+    monkeypatch.setattr(github_link.settings, "github_app_client_id", "cid")
+    monkeypatch.setattr(github_link.settings, "github_app_client_secret", "secret")
 
     async def fake_authorize_url(redirect_uri, state=None, **kwargs):
         return f"https://github.com/login/oauth/authorize?state={state}"

@@ -17,7 +17,7 @@ async def test_create_tenant_makes_creator_admin(client: AsyncClient):
     body = members.json()
     assert len(body) == 1
     assert body[0]["email"] == "owner@example.com"
-    assert body[0]["role"] == "admin"
+    assert body[0]["role"] == "owner"
 
 
 @pytest.mark.asyncio
@@ -42,7 +42,7 @@ async def test_soft_delete_admin_only(client: AsyncClient):
 
     invite = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "member@example.com", "role": "individual"},
+        json={"email": "member@example.com", "role": "member"},
         headers=auth_headers(admin_token),
     )
     assert invite.status_code == 201
