@@ -16,6 +16,7 @@ docs live here under `docs/`.
 |-----|----------------|
 | [deployment/bootstrap.md](deployment/bootstrap.md) | **One-time AWS setup runbook** — state buckets, OIDC, IAM roles, hosted zones, first apply. Start here for a fresh AWS account. |
 | [deployment/cicd.md](deployment/cicd.md) | GitHub Actions workflows: PR checks and beta/prod deploys. |
+| [deployment/zitadel.md](deployment/zitadel.md) | **Zitadel on ECS** — deploy target, ALB/DNS layout, secrets, and CI/CD pipeline changes for cloud auth. |
 | [deployment/aws-sso.md](deployment/aws-sso.md) | Local AWS access via SSO profiles in the dev container. |
 
 ## Infrastructure reference

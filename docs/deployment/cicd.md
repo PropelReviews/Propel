@@ -9,7 +9,11 @@ AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
 |----------|---------|--------------|
 | [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | Terraform `fmt -check` + `validate` (beta & prod); backend Ruff lint/format + `pytest`; frontend ESLint + Prettier + TypeScript + `vitest` + Vite builds |
 | [`deploy-beta.yml`](../../.github/workflows/deploy-beta.yml) | push to `main`, manual | OIDC → beta role → `terraform apply` → deploy API → deploy frontend (uses the `beta` Environment for vars) |
-| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | successful beta deploy on `main`, push `v*` tag, manual | Same as beta, in prod, gated by the `prod` Environment approval |
+| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | `v*` tag, successful beta on `main`, manual | Same as beta, in prod, gated by the `prod` Environment approval |
+
+> **Zitadel (planned):** the OIDC auth migration adds a `deploy-zitadel.sh` step
+> and `auth.<zone>` ECS services before the API roll. See
+> [zitadel.md](zitadel.md) for the full target pipeline.
 
 ## Deploy flow (beta and prod are identical except account/trigger)
 
@@ -55,6 +59,11 @@ client secrets when those providers are enabled:
 apply and stores it in AWS Secrets Manager (64 characters, unique per
 environment/account). Set the `APP_ENV` variable (`beta` or `production`) on
 each environment so the API validates configuration at startup.
+
+> **OIDC migration:** `JWT_SECRET` will be replaced by `SESSION_SECRET`
+> (BFF cookie signing) and Zitadel OIDC secrets (`ZITADEL_CLIENT_ID`,
+> `ZITADEL_CLIENT_SECRET`, `ZITADEL_ISSUER`). See
+> [docs/deployment/zitadel.md](../../docs/deployment/zitadel.md).
 
 ## Releasing to prod
 
