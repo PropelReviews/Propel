@@ -16,11 +16,9 @@ import {
   getLinearConnection,
   type LinearConnection,
 } from "@/lib/api";
-import { useAuth } from "@/providers/auth-provider";
 import { useTenant } from "@/providers/tenant-provider";
 
 export function WorkspacePage() {
-  const { token } = useAuth();
   const { tenant } = useTenant();
 
   return (
@@ -35,19 +33,13 @@ export function WorkspacePage() {
 
       <section className="space-y-6">
         <h2 className="text-lg font-medium">Integrations</h2>
-        <LinearIntegrationCard token={token} tenantId={tenant?.id ?? null} />
+        <LinearIntegrationCard tenantId={tenant?.id ?? null} />
       </section>
     </main>
   );
 }
 
-function LinearIntegrationCard({
-  token,
-  tenantId,
-}: {
-  token: string | null;
-  tenantId: string | null;
-}) {
+function LinearIntegrationCard({ tenantId }: { tenantId: string | null }) {
   const [params, setParams] = useSearchParams();
   const [linear, setLinear] = useState<LinearConnection | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -55,11 +47,11 @@ function LinearIntegrationCard({
   const [notice, setNotice] = useState<"connected" | "error" | null>(null);
 
   useEffect(() => {
-    if (!token || !tenantId) return;
+    if (!tenantId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const result = await getLinearConnection(token, tenantId);
+        const result = await getLinearConnection(tenantId);
         if (!cancelled) setLinear(result);
       } catch {
         if (!cancelled) setLinear(null);
@@ -68,16 +60,16 @@ function LinearIntegrationCard({
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId]);
+  }, [tenantId]);
 
   // Handle the redirect back from Linear (`?linear=connected` / `?linear=error`).
   useEffect(() => {
     const result = params.get("linear");
     if (result !== "connected" && result !== "error") return;
     void (async () => {
-      if (result === "connected" && token && tenantId) {
+      if (result === "connected" && tenantId) {
         try {
-          setLinear(await getLinearConnection(token, tenantId));
+          setLinear(await getLinearConnection(tenantId));
         } catch {
           // Status refresh is best-effort; the notice still informs the user.
         }
@@ -87,14 +79,14 @@ function LinearIntegrationCard({
     const next = new URLSearchParams(params);
     next.delete("linear");
     setParams(next, { replace: true });
-  }, [params, setParams, token, tenantId]);
+  }, [params, setParams, tenantId]);
 
   const onConnect = async () => {
-    if (!token || !tenantId) return;
+    if (!tenantId) return;
     setError(null);
     setConnecting(true);
     try {
-      const url = await getLinearAuthorizeUrl(token, tenantId);
+      const url = await getLinearAuthorizeUrl(tenantId);
       window.location.href = url;
     } catch (err) {
       setConnecting(false);

@@ -8,9 +8,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from app.config import get_settings
-from app.feature_flags import registration_enabled
 
-REGISTER_PATH = "/api/v1/auth/register"
 LOGIN_PATH = "/api/v1/auth/login"
 WAITLIST_PATH = "/api/v1/waitlist"
 
@@ -59,21 +57,22 @@ class AuthSecurityMiddleware(BaseHTTPMiddleware):
         settings = get_settings()
         path = request.url.path
 
-        if (
-            request.method == "POST"
-            and path == REGISTER_PATH
-            and not registration_enabled(get_client_ip(request))
-        ):
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "REGISTRATION_DISABLED"},
-            )
+        if request.method == "GET" and path == LOGIN_PATH:
+            client_ip = get_client_ip(request)
+            if not auth_rate_limiter.is_allowed(
+                f"{path}:{client_ip}",
+                max_requests=settings.auth_rate_limit_max_requests,
+                window_seconds=settings.auth_rate_limit_window_seconds,
+            ):
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "TOO_MANY_REQUESTS"},
+                    headers={
+                        "Retry-After": str(settings.auth_rate_limit_window_seconds)
+                    },
+                )
 
-        if request.method == "POST" and path in {
-            REGISTER_PATH,
-            LOGIN_PATH,
-            WAITLIST_PATH,
-        }:
+        if request.method == "POST" and path == WAITLIST_PATH:
             client_ip = get_client_ip(request)
             if not auth_rate_limiter.is_allowed(
                 f"{path}:{client_ip}",

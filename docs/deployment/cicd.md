@@ -8,8 +8,14 @@ AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
 | [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | Terraform `fmt -check` + `validate` (beta & prod); backend Ruff lint/format + `pytest`; frontend ESLint + Prettier + TypeScript + `vitest` + Vite builds |
-| [`deploy-beta.yml`](../../.github/workflows/deploy-beta.yml) | push to `main`, manual | OIDC → beta role → `terraform apply` → deploy API → deploy frontend (uses the `beta` Environment for vars) |
-| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | successful beta deploy on `main`, push `v*` tag, manual | Same as beta, in prod, gated by the `prod` Environment approval |
+| [`deploy-beta.yml`](../../.github/workflows/deploy-beta.yml) | push to `main`, manual | OIDC → beta role → `terraform apply` → `deploy-zitadel.sh` → deploy API → deploy frontend (uses the `beta` Environment for vars) |
+| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | `v*` tag, successful beta on `main`, manual | Same as beta, in prod, gated by the `prod` Environment approval |
+
+> **Zitadel:** the deploy job runs `scripts/deploy-zitadel.sh <env>` after
+> `terraform apply` and before the API roll (gated on the `ZITADEL_ENABLED`
+> Actions variable). It bootstraps this env's OIDC app on the single shared prod
+> instance and publishes the client id/secret into Secrets Manager. See
+> [zitadel.md](zitadel.md).
 
 ## Deploy flow (beta and prod are identical except account/trigger)
 
@@ -31,10 +37,18 @@ AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
    `app.auto.tfvars.json` in the environment's Terraform directory.
 5. **`terraform init` + `apply`** — prod additionally assumes the beta role to
    write the `beta.propel.ninja` NS delegation.
-6. **Build, push & deploy API** — `scripts/deploy-api.sh <env>` builds
+6. **Provision Zitadel** (when `ZITADEL_ENABLED=true`) — `scripts/deploy-zitadel.sh
+   <env>` ensures the env's OIDC app on the shared prod instance and writes the
+   client id/secret to Secrets Manager, **before** the API rolls so it picks them
+   up.
+7. **Build, push & deploy API** — `scripts/deploy-api.sh <env>` builds
    `backend.prod.Dockerfile`, pushes to ECR, forces an ECS redeploy.
-7. **Build & publish frontend** — `scripts/deploy-frontend.sh <env>` runs
-   `vite build`, syncs to S3, invalidates CloudFront.
+8. **Build & publish frontend** — `scripts/deploy-frontend.sh <env>` runs
+   `vite build`, syncs to S3, invalidates CloudFront. Source-map upload reads
+   `POSTHOG_PERSONAL_API_KEY` (secret) and `POSTHOG_PROJECT_ID` (variable) from
+   the Terraform config artifact — beta's deploy job cannot bind the GitHub
+   Environment (OIDC subject must stay `refs/heads/main`), so environment secrets
+   are not available there directly.
 
 ## Adding app config
 
@@ -49,12 +63,20 @@ client secrets when those providers are enabled:
 | `OAUTH_GOOGLE_CLIENT_SECRET` | Optional | API |
 | `OAUTH_GITHUB_CLIENT_SECRET` | Optional | API |
 | `OAUTH_LINEAR_CLIENT_SECRET` | Optional | API (Linear data connection) |
+| `ZITADEL_MGMT_TOKEN` | When auth enabled | `deploy-zitadel.sh` (IAM_OWNER PAT for the shared instance). `ZITADEL_CLIENT_SECRET` is **not** a GitHub secret — it is Secrets-Manager-managed and set by the bootstrap. |
 | `TOKEN_ENCRYPTION_KEY` | When Linear is enabled | API (encrypts stored OAuth tokens) |
 
-`JWT_SECRET` is **not** configured in GitHub — Terraform generates it on first
+`SESSION_SECRET` is **not** configured in GitHub — Terraform generates it on first
 apply and stores it in AWS Secrets Manager (64 characters, unique per
 environment/account). Set the `APP_ENV` variable (`beta` or `production`) on
 each environment so the API validates configuration at startup.
+
+For Zitadel, set the `ZITADEL_ENABLED=true` Actions **variable** (plus
+`ZITADEL_ADMIN_EMAIL` on prod) and the `ZITADEL_MGMT_TOKEN` **secret**.
+`ZITADEL_ISSUER` is Terraform-injected and `ZITADEL_CLIENT_ID/SECRET` are
+Secrets-Manager-managed by the bootstrap — do not set them in GitHub. See
+[docs/deployment/bootstrap.md](bootstrap.md) Step 9 and
+[docs/deployment/zitadel.md](zitadel.md).
 
 ## Releasing to prod
 

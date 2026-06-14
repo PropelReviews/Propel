@@ -75,14 +75,13 @@ function formatDate(iso: string): string {
 }
 
 export function AccessPage() {
-  const { token } = useAuth();
   const { tenant, refresh } = useTenant();
   const canManageRoles = usePermission("roles:manage");
   const canReadInvites = usePermission("invites:read");
   const invitableRoles = useInvitableRoles();
   const showInvites = canReadInvites || invitableRoles.length > 0;
 
-  if (!token || !tenant) return null;
+  if (!tenant) return null;
 
   return (
     <main className="mx-auto min-h-svh max-w-6xl px-6 py-12">
@@ -103,20 +102,16 @@ export function AccessPage() {
           )}
         </TabsList>
         <TabsContent value="members">
-          <MembersTab token={token} tenantId={tenant.id} />
+          <MembersTab tenantId={tenant.id} />
         </TabsContent>
         {showInvites && (
           <TabsContent value="invites">
-            <InvitesTab token={token} tenantId={tenant.id} />
+            <InvitesTab tenantId={tenant.id} />
           </TabsContent>
         )}
         {canManageRoles && (
           <TabsContent value="roles">
-            <RolesTab
-              token={token}
-              tenantId={tenant.id}
-              onSaved={() => void refresh()}
-            />
+            <RolesTab tenantId={tenant.id} onSaved={() => void refresh()} />
           </TabsContent>
         )}
       </Tabs>
@@ -128,7 +123,7 @@ export function AccessPage() {
 // Members
 // --------------------------------------------------------------------------
 
-function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
+function MembersTab({ tenantId }: { tenantId: string }) {
   const { user } = useAuth();
   const canAssign = usePermission("members:assign_role");
   const canRemove = usePermission("members:remove");
@@ -140,7 +135,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
     let cancelled = false;
     (async () => {
       try {
-        const loaded = await listMembers(token, tenantId);
+        const loaded = await listMembers(tenantId);
         if (!cancelled) setMembers(loaded);
       } catch (err) {
         if (!cancelled)
@@ -150,10 +145,10 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId]);
+  }, [tenantId]);
 
-  const adminCount = useMemo(
-    () => (members ?? []).filter((m) => m.role === "admin").length,
+  const ownerCount = useMemo(
+    () => (members ?? []).filter((m) => m.role === "owner").length,
     [members],
   );
 
@@ -161,7 +156,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
     setBusyUserId(member.user_id);
     setError(null);
     try {
-      const updated = await assignMemberRole(token, tenantId, member.user_id, role);
+      const updated = await assignMemberRole(tenantId, member.user_id, role);
       setMembers(
         (prev) =>
           prev?.map((m) => (m.user_id === updated.user_id ? updated : m)) ?? null,
@@ -177,7 +172,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
     setBusyUserId(member.user_id);
     setError(null);
     try {
-      await removeMember(token, tenantId, member.user_id);
+      await removeMember(tenantId, member.user_id);
       setMembers((prev) => prev?.filter((m) => m.user_id !== member.user_id) ?? null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not remove the member.");
@@ -216,7 +211,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
           <TableBody>
             {members.map((member) => {
               const isSelf = member.user_id === user?.id;
-              const isLastAdmin = member.role === "admin" && adminCount === 1;
+              const isLastOwner = member.role === "owner" && ownerCount === 1;
               return (
                 <TableRow key={member.user_id}>
                   <TableCell>
@@ -239,7 +234,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
                     {formatDate(member.created_at)}
                   </TableCell>
                   <TableCell>
-                    {canAssign && !isLastAdmin ? (
+                    {canAssign && !isLastOwner ? (
                       <Select
                         value={member.role}
                         disabled={busyUserId === member.user_id}
@@ -262,7 +257,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
                   </TableCell>
                   {canRemove && (
                     <TableCell className="text-right">
-                      {!isSelf && !isLastAdmin && (
+                      {!isSelf && !isLastOwner && (
                         <RemoveMemberDialog
                           member={member}
                           busy={busyUserId === member.user_id}
@@ -330,7 +325,7 @@ function RemoveMemberDialog({
 // Invites
 // --------------------------------------------------------------------------
 
-function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
+function InvitesTab({ tenantId }: { tenantId: string }) {
   const canRead = usePermission("invites:read");
   const canRevoke = usePermission("invites:revoke");
   const invitableRoles = useInvitableRoles();
@@ -340,7 +335,7 @@ function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role | "">(
-    invitableRoles.includes("individual") ? "individual" : (invitableRoles[0] ?? ""),
+    invitableRoles.includes("member") ? "member" : (invitableRoles[0] ?? ""),
   );
   const [sending, setSending] = useState(false);
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -351,7 +346,7 @@ function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
     let cancelled = false;
     (async () => {
       try {
-        const loaded = await listInvites(token, tenantId);
+        const loaded = await listInvites(tenantId);
         if (!cancelled) setInvites(loaded);
       } catch (err) {
         if (!cancelled)
@@ -363,7 +358,7 @@ function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId, canRead]);
+  }, [tenantId, canRead]);
 
   async function sendInvite(event: React.FormEvent) {
     event.preventDefault();
@@ -373,7 +368,7 @@ function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
     setLastInviteUrl(null);
     setCopied(false);
     try {
-      const created = await createInvite(token, tenantId, { email, role });
+      const created = await createInvite(tenantId, { email, role });
       setInvites((prev) => [created.invite, ...prev]);
       setLastInviteUrl(created.invite_url);
       setEmail("");
@@ -387,7 +382,7 @@ function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
   async function revoke(invite: Invite) {
     setError(null);
     try {
-      await revokeInvite(token, tenantId, invite.id);
+      await revokeInvite(tenantId, invite.id);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not revoke the invite.");
@@ -530,15 +525,7 @@ function InvitesTab({ token, tenantId }: { token: string; tenantId: string }) {
 
 type RoleGrants = Record<Role, Set<PermissionKey>>;
 
-function RolesTab({
-  token,
-  tenantId,
-  onSaved,
-}: {
-  token: string;
-  tenantId: string;
-  onSaved: () => void;
-}) {
+function RolesTab({ tenantId, onSaved }: { tenantId: string; onSaved: () => void }) {
   const [catalog, setCatalog] = useState<PermissionDefinition[] | null>(null);
   const [grants, setGrants] = useState<RoleGrants | null>(null);
   const [dirtyRoles, setDirtyRoles] = useState<Set<Role>>(new Set());
@@ -551,13 +538,16 @@ function RolesTab({
     (async () => {
       try {
         const [defs, rolePerms] = await Promise.all([
-          getPermissionCatalog(token),
-          listRolePermissions(token, tenantId),
+          getPermissionCatalog(),
+          listRolePermissions(tenantId),
         ]);
         if (cancelled) return;
         setCatalog(defs);
         const next = Object.fromEntries(
-          rolePerms.map((rp) => [rp.role, new Set(rp.permissions)]),
+          ROLES.map((role) => [
+            role,
+            new Set(rolePerms.find((rp) => rp.role === role)?.permissions ?? []),
+          ]),
         ) as RoleGrants;
         setGrants(next);
         setDirtyRoles(new Set());
@@ -571,7 +561,7 @@ function RolesTab({
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId]);
+  }, [tenantId]);
 
   const groups = useMemo(() => {
     if (!catalog) return [];
@@ -602,7 +592,7 @@ function RolesTab({
     setError(null);
     try {
       for (const role of dirtyRoles) {
-        await updateRolePermissions(token, tenantId, role, [...grants[role]]);
+        await updateRolePermissions(tenantId, role, [...grants[role]]);
       }
       setDirtyRoles(new Set());
       setSaved(true);
@@ -705,7 +695,7 @@ function GroupRows({
           </TableCell>
           {ROLES.map((role) => {
             const locked =
-              role === "admin" && LOCKED_ADMIN_PERMISSIONS.includes(def.key);
+              role === "owner" && LOCKED_ADMIN_PERMISSIONS.includes(def.key);
             return (
               <TableCell key={role} className="text-center">
                 <Switch

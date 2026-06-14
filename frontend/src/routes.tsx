@@ -9,14 +9,12 @@ import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { ChartDemoPage } from "@/pages/chart-demo";
 import { DataPage } from "@/pages/data";
-import { GithubCallbackPage } from "@/pages/github-callback";
 import { HomePage } from "@/pages/home";
 import { InviteAcceptPage } from "@/pages/invites/accept";
 import { ProfilePage } from "@/pages/profile";
 import { AccessPage } from "@/pages/settings/access";
 import { WorkspacePage } from "@/pages/settings/workspace";
 import { SignInPage } from "@/pages/sign-in";
-import { SignUpPage } from "@/pages/sign-up";
 
 /** Gates auth routes behind the `signup-signin` feature flag. */
 function RequireAuthFlag({ children }: { children: ReactNode }) {
@@ -95,22 +93,10 @@ export function AppRoutes() {
           </RequireAuthFlag>
         }
       />
-      <Route
-        path="/signup"
-        element={
-          <RequireAuthFlag>
-            <SignUpPage />
-          </RequireAuthFlag>
-        }
-      />
-      <Route
-        path="/auth/github/callback"
-        element={
-          <RequireAuthFlag>
-            <GithubCallbackPage />
-          </RequireAuthFlag>
-        }
-      />
+      {/* Sign-up now funnels through the same Zitadel hosted login as sign-in;
+          keep the path as a redirect to preserve existing links/bookmarks. */}
+      <Route path="/signup" element={<Navigate to="/signin" replace />} />
+      <Route path="/auth/callback" element={<Navigate to="/" replace />} />
       <Route
         path="/dev/charts"
         element={

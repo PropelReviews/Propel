@@ -52,7 +52,8 @@ def _redirect_uri() -> str:
 # Signed connect state (binds the OAuth round-trip to tenant + user)
 # --------------------------------------------------------------------------- #
 def _sign(payload: str) -> str:
-    return hmac.new(settings.jwt_secret.encode(), payload.encode(), sha256).hexdigest()
+    secret = settings.session_secret.encode()
+    return hmac.new(secret, payload.encode(), sha256).hexdigest()
 
 
 def build_connect_state(tenant_id: uuid.UUID, user_id: uuid.UUID) -> str:

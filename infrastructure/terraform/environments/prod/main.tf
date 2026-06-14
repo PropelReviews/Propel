@@ -30,6 +30,7 @@ locals {
   api_fqdn     = "${var.api_subdomain}.${var.zone_name}"
   app_fqdn     = "${var.app_subdomain}.${var.zone_name}"
   dagster_fqdn = "${var.dagster_subdomain}.${var.zone_name}"
+  auth_fqdn    = "${var.auth_subdomain}.${var.zone_name}"
   # Landing site on the zone apex + www (e.g. propel.ninja +
   # www.propel.ninja). The apex (first entry) is the canonical URL.
   landing_fqdns = [var.zone_name, "www.${var.zone_name}"]
@@ -64,6 +65,12 @@ module "stack" {
   ingestion_enabled     = var.ingestion_enabled
   dagster_fqdn          = local.dagster_fqdn
   dagster_allowed_cidrs = var.dagster_allowed_cidrs
+
+  # Prod hosts the single shared Zitadel instance and consumes it locally.
+  zitadel_enabled    = var.zitadel_enabled
+  zitadel_issuer_url = var.zitadel_enabled ? "https://${local.auth_fqdn}" : ""
+  zitadel_mgmt_token = var.zitadel_mgmt_token
+  auth_fqdn          = local.auth_fqdn
 
   tags = local.tags
 }

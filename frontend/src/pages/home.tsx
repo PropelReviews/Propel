@@ -28,6 +28,10 @@ type Scope = {
 // Manager teams aren't modeled yet, so a manager currently sees the same
 // workspace-wide data as an admin, just framed as "your team".
 const ROLE_SCOPE: Record<Role, Scope> = {
+  owner: {
+    title: "Organization",
+    subtitle: "Engineering activity across your whole workspace.",
+  },
   admin: {
     title: "Organization",
     subtitle: "Engineering activity across your whole workspace.",
@@ -36,7 +40,7 @@ const ROLE_SCOPE: Record<Role, Scope> = {
     title: "Your team",
     subtitle: "Engineering activity across your team.",
   },
-  individual: {
+  member: {
     title: "Your stats",
     subtitle: "Your personal contribution metrics.",
   },
@@ -55,7 +59,7 @@ function formatTimestamp(iso: string | null): string {
 }
 
 export function HomePage() {
-  const { token, status: authStatus, user } = useAuth();
+  const { status: authStatus, user } = useAuth();
   const { tenant, role, status: tenantStatus, refresh } = useTenant();
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -120,7 +124,7 @@ export function HomePage() {
     );
   }
 
-  const scope = role ? ROLE_SCOPE[role] : ROLE_SCOPE.individual;
+  const scope = role ? ROLE_SCOPE[role] : ROLE_SCOPE.member;
   const firstName = user?.name?.split(" ")[0];
 
   return (
@@ -129,10 +133,10 @@ export function HomePage() {
       subtitle={scope.subtitle}
       greeting={firstName ? `Welcome back, ${firstName}.` : undefined}
     >
-      {role === "individual" ? (
+      {role === "member" ? (
         <PersonalStats />
       ) : (
-        <WorkspaceStats key={reloadKey} tenantId={tenant.id} token={token} />
+        <WorkspaceStats key={reloadKey} tenantId={tenant.id} />
       )}
     </Page>
   );
@@ -163,13 +167,7 @@ function Page({
   );
 }
 
-function WorkspaceStats({
-  tenantId,
-  token,
-}: {
-  tenantId: string;
-  token: string | null;
-}) {
+function WorkspaceStats({ tenantId }: { tenantId: string }) {
   const [state, setState] = useState<
     | { status: "loading" }
     | { status: "ready"; stats: IngestionStats }
@@ -177,12 +175,11 @@ function WorkspaceStats({
   >({ status: "loading" });
 
   useEffect(() => {
-    if (!token) return;
     let cancelled = false;
     (async () => {
       setState({ status: "loading" });
       try {
-        const stats = await getIngestionStats(token, tenantId);
+        const stats = await getIngestionStats(tenantId);
         if (!cancelled) setState({ status: "ready", stats });
       } catch (error) {
         if (cancelled) return;
@@ -194,7 +191,7 @@ function WorkspaceStats({
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId]);
+  }, [tenantId]);
 
   if (state.status === "loading") return <LoadingState />;
   if (state.status === "error") {

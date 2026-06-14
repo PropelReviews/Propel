@@ -72,12 +72,14 @@ are set in the build environment — see [analytics docs](../docs/frontend/analy
 
 ## Auth (sign up / sign in)
 
-Email/password auth wired to the backend `/api/v1/auth` endpoints.
+Auth is a cookie-based backend-for-frontend (BFF) flow over Zitadel OIDC (Auth
+Code + PKCE). Sign-in and sign-up both redirect to Zitadel's hosted login via
+the backend `/api/v1/auth` endpoints — there is no email/password form.
 
-- **Routes:** `/signin` and `/signup` (the landing page links to them when auth is enabled).
+- **Routes:** `/signin` (and `/signup`, which redirects to `/signin`) render `AuthRedirectForm`, which auto-redirects to Zitadel when OIDC is configured.
 - **Feature flag:** the entire auth surface is gated behind the PostHog feature flag **`signup-signin`**. Create and enable it in PostHog to expose auth. When PostHog runs without a key (keyless self-host), set `VITE_AUTH_ENABLED=true` to enable it instead.
-- **Session:** the JWT is stored in `localStorage` (`propel_token`) and validated against `/api/v1/auth/me` on load.
-- **Backend:** must be running with migrations applied — `cd backend && alembic upgrade head`.
+- **Session:** a server-side httpOnly cookie holds the session; the SPA reads the signed-in user from `/api/v1/auth/me` on load and caches it in `localStorage` (`propel_user`) for fast paint. No token is stored client-side.
+- **Backend:** must be running with migrations applied — `cd backend && alembic upgrade head` — and Zitadel configured (`./scripts/setup-zitadel-oidc.sh` for local dev).
 
 See [docs/frontend/analytics.md](../docs/frontend/analytics.md) for the auth events and the `signup-signin` flag.
 

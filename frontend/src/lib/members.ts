@@ -13,12 +13,11 @@ export type Member = {
   github_link_status: string | null;
 };
 
-export function listMembers(token: string, tenantId: string): Promise<Member[]> {
-  return authedGet<Member[]>(`/api/v1/tenants/${tenantId}/members/`, token);
+export function listMembers(tenantId: string): Promise<Member[]> {
+  return authedGet<Member[]>(`/api/v1/tenants/${tenantId}/members/`);
 }
 
 export function assignMemberRole(
-  token: string,
   tenantId: string,
   userId: string,
   role: Role,
@@ -26,19 +25,10 @@ export function assignMemberRole(
   return authedRequest<Member>(
     "PATCH",
     `/api/v1/tenants/${tenantId}/members/${userId}/role`,
-    token,
     { role },
   );
 }
 
-export function removeMember(
-  token: string,
-  tenantId: string,
-  userId: string,
-): Promise<null> {
-  return authedRequest<null>(
-    "DELETE",
-    `/api/v1/tenants/${tenantId}/members/${userId}`,
-    token,
-  );
+export function removeMember(tenantId: string, userId: string): Promise<null> {
+  return authedRequest<null>("DELETE", `/api/v1/tenants/${tenantId}/members/${userId}`);
 }

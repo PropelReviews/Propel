@@ -17,7 +17,7 @@ export const TEST_USER: AuthUser = {
   email: "self@example.com",
   name: "Sam Self",
   is_active: true,
-  is_verified: true,
+  email_verified: true,
   created_at: "2026-01-01T00:00:00Z",
 };
 
@@ -30,9 +30,10 @@ export const ALL_PERMISSIONS: PermissionKey[] = [
   "members:remove",
   "invites:read",
   "invites:revoke",
+  "invites:role:owner",
   "invites:role:admin",
   "invites:role:manager",
-  "invites:role:individual",
+  "invites:role:member",
   "connections:manage",
   "github_identities:manage",
   "ingestion:read",
@@ -57,7 +58,7 @@ export function makeMember(
 ): Member {
   return {
     name: null,
-    role: "individual",
+    role: "member",
     created_at: "2026-02-03T00:00:00Z",
     github_login: null,
     github_link_status: null,
@@ -72,7 +73,8 @@ export type RecordedCall = {
 };
 
 export type MockApiOptions = {
-  user?: AuthUser;
+  /** When `null`, `/api/v1/auth/me` returns 401. Defaults to TEST_USER. */
+  user?: AuthUser | null;
   tenants?: Tenant[];
   members?: Member[];
   invites?: Invite[];
@@ -89,7 +91,7 @@ export type MockApiOptions = {
  */
 export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] } {
   const {
-    user = TEST_USER,
+    user: userOption,
     tenants = [],
     members = [],
     invites = [],
@@ -97,6 +99,7 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
     rolePermissions = [],
     hang,
   } = options;
+  const user = userOption === undefined ? TEST_USER : userOption;
   const calls: RecordedCall[] = [];
 
   const json = (data: unknown, status = 200) =>
@@ -125,6 +128,9 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
       }
 
       if (method === "GET" && path === "/api/v1/auth/me") {
+        if (user === null) {
+          return Promise.resolve(json({ detail: "Not authenticated" }, 401));
+        }
         return Promise.resolve(json(user));
       }
       if (method === "GET" && path === "/api/v1/tenants/") {
@@ -159,7 +165,7 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
           role,
           expires_at: "2026-07-01T00:00:00Z",
           created_at: "2026-06-09T00:00:00Z",
-          invited_by_user_id: user.id,
+          invited_by_user_id: user?.id ?? TEST_USER.id,
         };
         return Promise.resolve(
           json({ invite, invite_url: `http://app.test/invite/${invite.id}` }, 201),
@@ -189,9 +195,9 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
   return { calls };
 }
 
-/** Persists a session token so AuthProvider boots into the loading state. */
+/** Caches user for faster AuthProvider bootstrap in browser tests. */
 export function seedAuth() {
-  localStorage.setItem("propel_token", "test-token");
+  localStorage.setItem("propel_user", JSON.stringify(TEST_USER));
 }
 
 /** Clears storage (token, cached user, tenant selection) and fetch stubs. */

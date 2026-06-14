@@ -12,7 +12,6 @@ import {
 } from "@/components/charts";
 import { ApiError } from "@/lib/api";
 import { getPullRequestActivity } from "@/lib/metrics";
-import { useAuth } from "@/providers/auth-provider";
 
 const PR_SERIES: ChartSeries[] = [
   { key: "opened", label: "Opened" },
@@ -43,7 +42,6 @@ export function PrActivityChart({ tenantId }: { tenantId: string }) {
 }
 
 function PrActivityChartInner({ tenantId }: { tenantId: string }) {
-  const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
 
@@ -52,13 +50,11 @@ function PrActivityChartInner({ tenantId }: { tenantId: string }) {
   const endMs = dateRange.end.getTime();
 
   useEffect(() => {
-    if (!token) return;
-
     let cancelled = false;
     (async () => {
       setState({ status: "loading" });
       try {
-        const response = await getPullRequestActivity(token, tenantId, {
+        const response = await getPullRequestActivity(tenantId, {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
@@ -86,7 +82,7 @@ function PrActivityChartInner({ tenantId }: { tenantId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId, granularity, startMs, endMs]);
+  }, [tenantId, granularity, startMs, endMs]);
 
   return (
     <LineChartWidget

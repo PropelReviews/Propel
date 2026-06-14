@@ -32,22 +32,14 @@ export type IngestionStats = {
 };
 
 export function listIngestionRuns(
-  token: string,
   tenantId: string,
   limit = 20,
 ): Promise<IngestionRun[]> {
   return authedGet<IngestionRun[]>(
     `/api/v1/tenants/${tenantId}/ingestion/runs?limit=${limit}`,
-    token,
   );
 }
 
-export function getIngestionStats(
-  token: string,
-  tenantId: string,
-): Promise<IngestionStats> {
-  return authedGet<IngestionStats>(
-    `/api/v1/tenants/${tenantId}/ingestion/stats`,
-    token,
-  );
+export function getIngestionStats(tenantId: string): Promise<IngestionStats> {
+  return authedGet<IngestionStats>(`/api/v1/tenants/${tenantId}/ingestion/stats`);
 }

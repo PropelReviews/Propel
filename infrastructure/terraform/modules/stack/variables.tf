@@ -131,6 +131,31 @@ variable "dask_worker_max_count" {
   description = "Ceiling for the Dagster-driven Dask worker autoscaler."
 }
 
+variable "zitadel_enabled" {
+  type        = bool
+  default     = false
+  description = "Host the single self-hosted Zitadel instance (ECS + login UI + EFS) behind auth.<zone>. True only in the environment that owns the instance (prod)."
+}
+
+variable "zitadel_issuer_url" {
+  type        = string
+  default     = ""
+  description = "Public OIDC issuer the API consumes. Set in every environment that uses Zitadel; beta points at the shared prod instance (https://auth.propel.ninja)."
+}
+
+variable "zitadel_mgmt_token" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Zitadel IAM_OWNER PAT for this env's deploy-zitadel.sh bootstrap step, seeded into {name_prefix}/zitadel/MGMT_TOKEN. Empty keeps the placeholder."
+}
+
+variable "auth_fqdn" {
+  type        = string
+  default     = ""
+  description = "Zitadel FQDN served via the ALB, e.g. auth.beta.propel.ninja."
+}
+
 variable "tags" {
   type        = map(string)
   default     = {}

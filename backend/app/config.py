@@ -1,8 +1,15 @@
 from functools import lru_cache
 from typing import Self
+from urllib.parse import urlparse
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Secret values written by Terraform/bootstrap that mean "not yet provisioned";
+# treated as unset by the app.
+PLACEHOLDER_SECRET_VALUES = frozenset(
+    {"", "pending-bootstrap", "pending-sync", "None", "null", "<PAT>"}
+)
 
 
 class Settings(BaseSettings):
@@ -12,14 +19,24 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     database_url: str = "postgresql+asyncpg://propel:propel@localhost:5432/propel"
-    jwt_secret: str = "change-me"
-    jwt_lifetime_seconds: int = 3600
 
-    # Server-side signup gate. When PostHog is configured the `auth_registration_flag`
-    # feature flag is the source of truth (fail closed if it can't be evaluated);
-    # otherwise (local/dev/test, no PostHog) this setting governs.
-    auth_registration_enabled: bool = False
-    auth_registration_flag: str = "auth-registration-enabled"
+    # Signed cookie for the BFF session (httpOnly, server-side user id).
+    session_secret: str = "change-me"
+    session_cookie_name: str = "propel_session"
+    session_max_age_seconds: int = 86400
+
+    # Zitadel OIDC (identity provider). When disabled (e.g. unit tests), use
+    # POST /api/v1/auth/test/login instead.
+    zitadel_issuer: str = "http://localhost:8080"
+    # Server-side OIDC discovery/token calls (defaults to public issuer).
+    zitadel_internal_issuer: str = ""
+    zitadel_client_id: str = ""
+    zitadel_client_secret: str = ""
+    # HMAC key for Zitadel Actions V2 webhooks (GitHub IdP mapping on Login V2).
+    zitadel_actions_signing_key: str = ""
+    # Default Zitadel org for org-scoped OIDC claims (local bootstrap writes this).
+    zitadel_org_id: str = ""
+
     auth_rate_limit_max_requests: int = 10
     auth_rate_limit_window_seconds: int = 60
 
@@ -30,18 +47,9 @@ class Settings(BaseSettings):
     posthog_host: str = "https://us.i.posthog.com"
     posthog_personal_api_key: str = ""
 
-    oauth_google_client_id: str = ""
-    oauth_google_client_secret: str = ""
-    oauth_github_client_id: str = ""
-    oauth_github_client_secret: str = ""
-    # Base URL of the API itself — where providers send the OAuth callback (the
-    # backend). Used to build OAuth `redirect_uri`s, e.g.
-    # {oauth_callback_base_url}/api/v1/auth/github/login/callback.
+    # Base URL of the API itself — where OIDC providers send the callback.
     oauth_callback_base_url: str = "http://localhost:8000"
-    # Base URL of the browser SPA. The API and SPA are separate origins in
-    # deployment (api.<zone> vs app.<zone>), so OAuth callbacks finish by
-    # redirecting the browser here (e.g. {frontend_base_url}/auth/github/callback).
-    # Defaults to the local Vite dev server.
+    # Base URL of the browser SPA.
     frontend_base_url: str = "http://localhost:5173"
 
     # GitHub App used for data ingestion. The private key signs the short-lived
@@ -53,30 +61,23 @@ class Settings(BaseSettings):
     github_app_slug: str = ""
 
     # The same GitHub App's user-authorization (OAuth) credentials, used to
-    # "Sign in / Connect with GitHub". These are the App's **Client ID** (e.g.
-    # `Iv1...`) and a generated **client secret** — distinct from
-    # `github_app_id` (numeric, app JWT) and `github_app_private_key`. When set,
-    # they take precedence over the standalone `oauth_github_*` app below, so a
-    # single GitHub App covers both ingestion and login.
+    # "Connect with GitHub" on the profile page (tool linking, not login).
     github_app_client_id: str = ""
     github_app_client_secret: str = ""
 
     @property
     def github_oauth_client_id(self) -> str:
-        """Effective GitHub login client id (App reused, else standalone app)."""
-        return self.github_app_client_id or self.oauth_github_client_id
+        return self.github_app_client_id
 
     @property
     def github_oauth_client_secret(self) -> str:
-        return self.github_app_client_secret or self.oauth_github_client_secret
+        return self.github_app_client_secret
 
     @property
     def github_oauth_enabled(self) -> bool:
         return bool(self.github_oauth_client_id and self.github_oauth_client_secret)
 
-    # Linear OAuth app (data connection). Unlike GitHub ingestion (App
-    # installation tokens minted per run), Linear uses the authorization-code
-    # flow: tokens are stored encrypted on connected_accounts and refreshed.
+    # Linear OAuth app (data connection).
     oauth_linear_client_id: str = ""
     oauth_linear_client_secret: str = ""
 
@@ -84,18 +85,12 @@ class Settings(BaseSettings):
     def linear_oauth_enabled(self) -> bool:
         return bool(self.oauth_linear_client_id and self.oauth_linear_client_secret)
 
-    # Fernet key for encrypting OAuth tool tokens (e.g. Linear). GitHub App
-    # installs mint tokens per run and do not use this.
     token_encryption_key: str = ""
 
-    # First-run backfill window for repo resources (Copilot is capped by GitHub).
     ingestion_backfill_days: int = 90
 
     invite_token_lifetime_hours: int = 72
 
-    # Comma-separated list of origins allowed to call the API from a browser.
-    # The SPA dev server runs on :5173, the landing dev server (waitlist form)
-    # on :5174; add deployed origins per environment.
     cors_allowed_origins: str = (
         "http://localhost:5173,http://localhost:5174,http://localhost:3000"
     )
@@ -126,13 +121,52 @@ class Settings(BaseSettings):
             return url.replace("postgres://", "postgresql://", 1)
         return url
 
+    @property
+    def zitadel_oidc_enabled(self) -> bool:
+        return bool(self.zitadel_client_id and self.zitadel_client_secret)
+
+    @property
+    def zitadel_actions_signing_key_effective(self) -> str:
+        key = self.zitadel_actions_signing_key.strip()
+        if key in PLACEHOLDER_SECRET_VALUES:
+            return ""
+        return key
+
+    @property
+    def zitadel_host_header(self) -> str:
+        return urlparse(self.zitadel_issuer).hostname or "localhost"
+
+    @property
+    def zitadel_internal_issuer_url(self) -> str:
+        return (self.zitadel_internal_issuer or self.zitadel_issuer).rstrip("/")
+
+    @property
+    def zitadel_oidc_metadata_url(self) -> str:
+        return f"{self.zitadel_internal_issuer_url}/.well-known/openid-configuration"
+
+    @property
+    def zitadel_oidc_scopes(self) -> str:
+        scopes = ["openid", "email", "profile"]
+        if self.zitadel_org_id:
+            scopes.append(f"urn:zitadel:iam:org:id:{self.zitadel_org_id}")
+        return " ".join(scopes)
+
+    @property
+    def is_test_env(self) -> bool:
+        return self.app_env.lower() == "test"
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> Self:
         if self.app_env.lower() in {"production", "prod", "beta"}:
             insecure_secrets = {"", "change-me", "test-secret"}
-            if self.jwt_secret in insecure_secrets or len(self.jwt_secret) < 32:
+            if self.session_secret in insecure_secrets or len(self.session_secret) < 32:
                 raise ValueError(
-                    "JWT_SECRET must be a random string of at least 32 characters in "
+                    "SESSION_SECRET must be a random string of at least "
+                    f"32 characters in {self.app_env} environments."
+                )
+            if not self.zitadel_oidc_enabled:
+                raise ValueError(
+                    "ZITADEL_CLIENT_ID and ZITADEL_CLIENT_SECRET are required in "
                     f"{self.app_env} environments."
                 )
         return self

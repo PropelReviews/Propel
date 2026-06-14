@@ -1,67 +1,44 @@
 import pytest
 from httpx import AsyncClient
-from tests.conftest import register_user
 
+from app.auth.middleware import auth_rate_limiter
 from app.config import Settings
 
 
 @pytest.mark.asyncio
-async def test_register_rejects_short_password(client: AsyncClient):
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={"email": "short@example.com", "password": "abc"},
-    )
-    assert response.status_code == 400
-    body = response.json()
-    assert body["detail"]["code"] == "REGISTER_INVALID_PASSWORD"
-
-
-@pytest.mark.asyncio
-async def test_register_disabled_returns_403(client: AsyncClient, monkeypatch):
-    from app.config import get_settings
-
-    monkeypatch.setattr(get_settings(), "auth_registration_enabled", False)
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={"email": "blocked@example.com", "password": "testpass123"},
-    )
-    assert response.status_code == 403
-    assert response.json()["detail"] == "REGISTRATION_DISABLED"
-
-
-@pytest.mark.asyncio
-async def test_login_rate_limited(client: AsyncClient, monkeypatch):
+async def test_login_rate_limit(client: AsyncClient, monkeypatch):
     from app.config import get_settings
 
     settings = get_settings()
-    monkeypatch.setattr(settings, "auth_rate_limit_max_requests", 3)
+    monkeypatch.setattr(settings, "auth_rate_limit_max_requests", 2)
     monkeypatch.setattr(settings, "auth_rate_limit_window_seconds", 60)
+    auth_rate_limiter.reset()
 
-    await register_user(client, "limit@example.com")
+    for _ in range(2):
+        response = await client.get("/api/v1/auth/login")
+        assert response.status_code != 429
 
-    for _ in range(3):
-        response = await client.post(
-            "/api/v1/auth/login",
-            data={"username": "limit@example.com", "password": "wrong-password"},
-        )
-        assert response.status_code == 400
-
-    response = await client.post(
-        "/api/v1/auth/login",
-        data={"username": "limit@example.com", "password": "wrong-password"},
-    )
+    response = await client.get("/api/v1/auth/login")
     assert response.status_code == 429
     assert response.json()["detail"] == "TOO_MANY_REQUESTS"
 
 
-def test_rejects_weak_jwt_secret_in_production():
-    with pytest.raises(ValueError, match="JWT_SECRET"):
-        Settings(app_env="production", jwt_secret="change-me")
+def test_rejects_weak_session_secret_in_production():
+    with pytest.raises(ValueError, match="SESSION_SECRET"):
+        Settings(app_env="production", session_secret="change-me")
 
 
-def test_accepts_strong_jwt_secret_in_production():
+def test_accepts_strong_session_secret_in_production():
     settings = Settings(
         app_env="production",
-        jwt_secret="a" * 32,
+        session_secret="a" * 32,
+        zitadel_client_id="client",
+        zitadel_client_secret="secret",
     )
-    assert settings.jwt_secret == "a" * 32
+    assert settings.session_secret == "a" * 32
+
+
+@pytest.mark.asyncio
+async def test_production_requires_zitadel_credentials():
+    with pytest.raises(ValueError, match="ZITADEL_CLIENT_ID"):
+        Settings(app_env="production", session_secret="a" * 32)

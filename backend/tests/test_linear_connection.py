@@ -5,7 +5,7 @@ import pytest
 from cryptography.fernet import Fernet
 from httpx import AsyncClient
 from sqlalchemy import select
-from tests.conftest import auth_headers, create_tenant, login_user, register_user
+from tests.conftest import act_as_headers, create_tenant, login_test_user, login_user
 
 from app.db.session import async_session_maker
 from app.integrations.linear import oauth as linear_oauth
@@ -33,7 +33,7 @@ def _fake_token(access="access-1", refresh="refresh-1", expires_in=86399):
 
 
 async def _user_id(client: AsyncClient, token: str) -> uuid.UUID:
-    me = await client.get("/api/v1/auth/me", headers=auth_headers(token))
+    me = await client.get("/api/v1/auth/me", headers=act_as_headers(token))
     return uuid.UUID(me.json()["id"])
 
 
@@ -44,9 +44,9 @@ def test_connect_state_roundtrip():
 
 
 def test_connect_state_rejects_wrong_signature(monkeypatch):
-    monkeypatch.setattr(svc.settings, "jwt_secret", "secret-a")
+    monkeypatch.setattr(svc.settings, "session_secret", "secret-a")
     state = svc.build_connect_state(uuid.uuid4(), uuid.uuid4())
-    monkeypatch.setattr(svc.settings, "jwt_secret", "secret-b")
+    monkeypatch.setattr(svc.settings, "session_secret", "secret-b")
     with pytest.raises(Exception) as exc:
         svc.verify_connect_state(state)
     assert getattr(exc.value, "status_code", None) == 400
@@ -54,7 +54,7 @@ def test_connect_state_rejects_wrong_signature(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_authorize_requires_config(client: AsyncClient, monkeypatch):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
 
@@ -62,7 +62,7 @@ async def test_authorize_requires_config(client: AsyncClient, monkeypatch):
     monkeypatch.setattr(svc.settings, "oauth_linear_client_secret", "")
     blocked = await client.get(
         f"/api/v1/tenants/{tenant['id']}/connections/linear/authorize",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert blocked.status_code == 503
 
@@ -70,7 +70,7 @@ async def test_authorize_requires_config(client: AsyncClient, monkeypatch):
     monkeypatch.setattr(svc.settings, "oauth_linear_client_secret", "client-secret")
     ok = await client.get(
         f"/api/v1/tenants/{tenant['id']}/connections/linear/authorize",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert ok.status_code == 200
     url = ok.json()["authorization_url"]
@@ -82,7 +82,7 @@ async def test_authorize_requires_config(client: AsyncClient, monkeypatch):
 @pytest.mark.asyncio
 async def test_callback_creates_and_reconnects(client: AsyncClient, monkeypatch):
     _configure(monkeypatch)
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
     user_id = await _user_id(client, token)

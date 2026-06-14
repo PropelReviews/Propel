@@ -20,19 +20,27 @@ import uuid
 from hashlib import sha256
 
 from fastapi import HTTPException, status
+from httpx_oauth.clients.github import GitHubOAuth2
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.oauth import github_oauth_client
 from app.config import get_settings
 from app.models.enums import IntegrationProvider
 from app.models.external_identity import ExternalIdentity
-from app.models.user import OAuthAccount, User
+from app.models.oauth_account import OAuthAccount
+from app.models.user import User
 from app.services import github_identity
 
 logger = logging.getLogger("propel.auth")
 
 settings = get_settings()
+
+# GitHub OAuth client for account linking (not login) — reuses the ingestion
+# GitHub App's user-authorization credentials.
+github_oauth_client = GitHubOAuth2(
+    settings.github_oauth_client_id,
+    settings.github_oauth_client_secret,
+)
 
 _GITHUB = IntegrationProvider.github.value
 _STATE_TTL_SECONDS = 600
@@ -47,7 +55,8 @@ def _redirect_uri() -> str:
 # Signed link state (binds the OAuth round-trip to the initiating user)
 # --------------------------------------------------------------------------- #
 def _sign(payload: str) -> str:
-    return hmac.new(settings.jwt_secret.encode(), payload.encode(), sha256).hexdigest()
+    secret = settings.session_secret.encode()
+    return hmac.new(secret, payload.encode(), sha256).hexdigest()
 
 
 def build_link_state(user_id: uuid.UUID) -> str:

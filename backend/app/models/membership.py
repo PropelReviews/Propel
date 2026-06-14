@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.enums import Role
+from app.models.enums import MembershipStatus, Role
 
 
 class TenantMembership(Base):
@@ -22,6 +22,11 @@ class TenantMembership(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"), nullable=False)
+    status: Mapped[MembershipStatus] = mapped_column(
+        Enum(MembershipStatus, name="membership_status"),
+        nullable=False,
+        server_default=MembershipStatus.active.value,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

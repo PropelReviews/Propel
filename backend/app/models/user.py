@@ -1,37 +1,33 @@
 import uuid
 from datetime import datetime
 
-from fastapi_users.db import (
-    SQLAlchemyBaseOAuthAccountTableUUID,
-    SQLAlchemyBaseUserTableUUID,
-)
-from sqlalchemy import DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-# Login OAuth only (Google/GitHub identity). Tool API tokens belong in the
-# future connected_accounts table — see docs/backend/data-model.md.
 
+class User(Base):
+    """Propel application user mirrored from Zitadel on login (JIT reconcile)."""
 
-class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
-    __tablename__ = "oauth_accounts"
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey("users.id", ondelete="cascade"), nullable=False
-    )
-
-
-class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    zitadel_user_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
+    )
+    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default="false"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default="true"
+    )
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
-        "OAuthAccount", lazy="selectin", cascade="all, delete-orphan"
-    )
     memberships: Mapped[list["TenantMembership"]] = relationship(  # noqa: F821
         "TenantMembership", back_populates="user", lazy="selectin"
     )

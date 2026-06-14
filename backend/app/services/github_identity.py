@@ -14,13 +14,11 @@ until the member signs in with GitHub.
 from __future__ import annotations
 
 import logging
-import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from fastapi_users.password import PasswordHelper
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,8 +32,9 @@ from app.models.enums import (
 )
 from app.models.external_identity import ExternalIdentity
 from app.models.membership import TenantMembership
+from app.models.oauth_account import OAuthAccount
 from app.models.raw_record import RawRecord
-from app.models.user import OAuthAccount, User
+from app.models.user import User
 from app.services import members as member_service
 
 logger = logging.getLogger("propel.ingestion")
@@ -43,7 +42,6 @@ logger = logging.getLogger("propel.ingestion")
 _GITHUB = IntegrationProvider.github.value
 _ORG_MEMBERS_RESOURCE = "organization_members"
 _USER_PROFILES_RESOURCE = "users"
-_password_helper = PasswordHelper()
 
 
 @dataclass
@@ -331,11 +329,9 @@ async def _provision(
     user = User(
         email=identity.external_email.lower(),
         name=identity.external_name,
-        # Unusable password: provisioned users sign in via GitHub OAuth (or a
-        # future invite/reset flow), never with this hash.
-        hashed_password=_password_helper.hash(secrets.token_urlsafe(32)),
+        email_verified=False,
         is_active=True,
-        is_verified=False,
+        zitadel_user_id=None,
     )
     session.add(user)
     await session.flush()
@@ -368,8 +364,8 @@ async def _ensure_membership(
 async def _reconcile_roles(session: AsyncSession, account: ConnectedAccount) -> None:
     """Promote/demote linked members to match their GitHub org role.
 
-    GitHub is the source of truth, except the last Propel admin is never demoted.
-    Only admin↔individual transitions are driven here; a manually-set `manager`
+    GitHub is the source of truth, except the last Propel owner is never demoted.
+    Only owner↔member transitions are driven here; a manually-set `manager`
     is left untouched when GitHub reports a plain member.
     """
     result = await session.execute(
@@ -387,27 +383,27 @@ async def _reconcile_roles(session: AsyncSession, account: ConnectedAccount) -> 
     )
     for identity, membership in result.all():
         desired = _propel_role(identity.github_org_role)
-        if desired == Role.admin and membership.role != Role.admin:
-            membership.role = Role.admin
+        if desired == Role.owner and membership.role != Role.owner:
+            membership.role = Role.owner
         elif (
             identity.github_org_role == GitHubOrgRole.member.value
-            and membership.role == Role.admin
+            and membership.role == Role.owner
         ):
-            admin_count = await member_service.count_admins(session, account.tenant_id)
-            if admin_count <= 1:
+            owner_count = await member_service.count_owners(session, account.tenant_id)
+            if owner_count <= 1:
                 logger.warning(
-                    "Not demoting %s: would remove the last admin in tenant %s",
+                    "Not demoting %s: would remove the last owner in tenant %s",
                     identity.external_login,
                     account.tenant_id,
                 )
                 continue
-            membership.role = Role.individual
+            membership.role = Role.member
 
 
 def _propel_role(org_role: str | None) -> Role:
     if org_role == GitHubOrgRole.admin.value:
-        return Role.admin
-    return Role.individual
+        return Role.owner
+    return Role.member
 
 
 async def link_oauth_identity(

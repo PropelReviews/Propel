@@ -55,44 +55,44 @@ function writeStoredTenantId(tenantId: string | null) {
 }
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  const { token, status: authStatus } = useAuth();
+  const { status: authStatus } = useAuth();
   const [loaded, setLoaded] = useState<LoadResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     readStoredTenantId(),
   );
 
   useEffect(() => {
-    if (authStatus !== "authenticated" || !token) return;
+    if (authStatus !== "authenticated") return;
 
     let cancelled = false;
     (async () => {
       try {
-        const tenants = await listTenants(token);
-        if (!cancelled) setLoaded({ token, tenants, error: false });
+        const tenants = await listTenants();
+        if (!cancelled) setLoaded({ token: "session", tenants, error: false });
       } catch {
-        if (!cancelled) setLoaded({ token, tenants: [], error: true });
+        if (!cancelled) setLoaded({ token: "session", tenants: [], error: true });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [authStatus, token]);
+  }, [authStatus]);
 
   const refresh = useCallback(async () => {
-    if (!token) return;
+    if (authStatus !== "authenticated") return;
     try {
-      const tenants = await listTenants(token);
-      setLoaded({ token, tenants, error: false });
+      const tenants = await listTenants();
+      setLoaded({ token: "session", tenants, error: false });
     } catch {
-      setLoaded({ token, tenants: [], error: true });
+      setLoaded({ token: "session", tenants: [], error: true });
     }
-  }, [token]);
+  }, [authStatus]);
 
   // Derive everything from the load result so signing out (or switching
   // users) never shows another session's tenants.
   const current =
-    authStatus === "authenticated" && token && loaded?.token === token ? loaded : null;
+    authStatus === "authenticated" && loaded?.token === "session" ? loaded : null;
   const tenants = useMemo(() => current?.tenants ?? [], [current]);
   const status: TenantStatus =
     authStatus === "anonymous"

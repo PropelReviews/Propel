@@ -15,19 +15,15 @@ export type RolePermissions = {
   permissions: PermissionKey[];
 };
 
-export function getPermissionCatalog(token: string): Promise<PermissionDefinition[]> {
-  return authedGet<PermissionDefinition[]>("/api/v1/permissions/catalog", token);
+export function getPermissionCatalog(): Promise<PermissionDefinition[]> {
+  return authedGet<PermissionDefinition[]>("/api/v1/permissions/catalog");
 }
 
-export function listRolePermissions(
-  token: string,
-  tenantId: string,
-): Promise<RolePermissions[]> {
-  return authedGet<RolePermissions[]>(`/api/v1/tenants/${tenantId}/roles`, token);
+export function listRolePermissions(tenantId: string): Promise<RolePermissions[]> {
+  return authedGet<RolePermissions[]>(`/api/v1/tenants/${tenantId}/roles`);
 }
 
 export function updateRolePermissions(
-  token: string,
   tenantId: string,
   role: Role,
   permissions: PermissionKey[],
@@ -35,7 +31,6 @@ export function updateRolePermissions(
   return authedRequest<RolePermissions>(
     "PUT",
     `/api/v1/tenants/${tenantId}/roles/${role}`,
-    token,
     { permissions },
   );
 }

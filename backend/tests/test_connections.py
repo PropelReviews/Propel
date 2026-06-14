@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import select
-from tests.conftest import auth_headers, create_tenant, login_user, register_user
+from tests.conftest import act_as_headers, create_tenant, login_test_user, login_user
 
 from app.db.session import async_session_maker
 from app.models.connected_account import ConnectedAccount
@@ -50,10 +50,10 @@ def test_install_state_rejects_garbage():
 
 
 def test_install_state_rejects_wrong_signature(monkeypatch):
-    monkeypatch.setattr(connection_service.settings, "jwt_secret", "secret-a")
+    monkeypatch.setattr(connection_service.settings, "session_secret", "secret-a")
     state = connection_service.build_install_state(uuid.uuid4(), uuid.uuid4())
     # A state signed under a different secret must not verify.
-    monkeypatch.setattr(connection_service.settings, "jwt_secret", "secret-b")
+    monkeypatch.setattr(connection_service.settings, "session_secret", "secret-b")
     with pytest.raises(HTTPException) as exc:
         connection_service.verify_install_state(state)
     assert exc.value.status_code == 400
@@ -73,21 +73,21 @@ def test_webhook_signature_requires_secret_and_matches(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_url_requires_slug(client: AsyncClient, monkeypatch):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
 
     monkeypatch.setattr(connection_service.settings, "github_app_slug", "")
     blocked = await client.get(
         f"/api/v1/tenants/{tenant['id']}/connections/github/install",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert blocked.status_code == 503
 
     monkeypatch.setattr(connection_service.settings, "github_app_slug", "propel-app")
     ok = await client.get(
         f"/api/v1/tenants/{tenant['id']}/connections/github/install",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert ok.status_code == 200
     assert "github.com/apps/propel-app/installations/new" in ok.json()["install_url"]
@@ -95,14 +95,14 @@ async def test_install_url_requires_slug(client: AsyncClient, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_list_and_pause_connection(client: AsyncClient):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
     connection_id = await _seed_connection(uuid.UUID(tenant["id"]))
 
     listed = await client.get(
         f"/api/v1/tenants/{tenant['id']}/connections",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert listed.status_code == 200
     assert len(listed.json()) == 1
@@ -111,7 +111,7 @@ async def test_list_and_pause_connection(client: AsyncClient):
     paused = await client.patch(
         f"/api/v1/tenants/{tenant['id']}/connections/{connection_id}",
         json={"status": "paused"},
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert paused.status_code == 200
     assert paused.json()["status"] == "paused"
@@ -119,33 +119,33 @@ async def test_list_and_pause_connection(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_non_admin_cannot_list_connections(client: AsyncClient):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     admin_token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, admin_token)
 
-    await register_user(client, "member@example.com")
+    await login_test_user(client, "member@example.com")
     member_token = await login_user(client, "member@example.com")
     invite = await client.post(
         f"/api/v1/tenants/{tenant['id']}/invites",
-        json={"email": "member@example.com", "role": "individual"},
-        headers=auth_headers(admin_token),
+        json={"email": "member@example.com", "role": "member"},
+        headers=act_as_headers(admin_token),
     )
     accept_token = invite.json()["invite_url"].split("/")[-2]
     await client.post(
         f"/api/v1/invites/{accept_token}/accept",
-        headers=auth_headers(member_token),
+        headers=act_as_headers(member_token),
     )
 
     forbidden = await client.get(
         f"/api/v1/tenants/{tenant['id']}/connections",
-        headers=auth_headers(member_token),
+        headers=act_as_headers(member_token),
     )
     assert forbidden.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_webhook_revokes_connection(client: AsyncClient, monkeypatch):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
     await _seed_connection(uuid.UUID(tenant["id"]), installation_id="99")
@@ -170,7 +170,7 @@ async def test_webhook_revokes_connection(client: AsyncClient, monkeypatch):
 
     listed = await client.get(
         f"/api/v1/tenants/{tenant['id']}/connections",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert listed.json()[0]["status"] == "revoked"
 

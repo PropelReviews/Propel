@@ -237,21 +237,26 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | `POSTHOG_TOKEN` | `phc_...` | API (OTEL → PostHog) + SPA |
    | `POSTHOG_HOST` | `https://us.i.posthog.com` | API + SPA |
    | `POSTHOG_PROJECT_ID` | `245238` | SPA build (source map upload) |
-   | `POSTHOG_PERSONAL_API_KEY` | `phx_...` | SPA build (source map upload; keep secret) |
-   | `AUTH_REGISTRATION_ENABLED` | `true` | API (allow signup when ready) |
+   | `ZITADEL_ENABLED` | `true` | Gates the `deploy-zitadel.sh` step (both envs use the shared prod instance) |
+   | `ZITADEL_ADMIN_EMAIL` | `you@propel.com` | prod only — human granted IAM_OWNER (console super-admin) |
    | `GITHUB_APP_CLIENT_ID` | `Iv1...` | API (GitHub login/link; the ingestion App's user-OAuth client id; pair with the `GH_APP_CLIENT_SECRET` secret) |
    | `OAUTH_LINEAR_CLIENT_ID` | `...` | API (Linear data connection; pair with `OAUTH_LINEAR_CLIENT_SECRET` secret) |
-   | `OAUTH_CALLBACK_BASE_URL` | `https://api.beta.propel.ninja` | API origin GitHub returns the OAuth code to |
-   | `FRONTEND_BASE_URL` | `https://app.beta.propel.ninja` | SPA origin OAuth callbacks redirect the browser back to |
+   | `OAUTH_CALLBACK_BASE_URL` | `https://api.beta.propel.ninja` | API origin Zitadel returns the OIDC code to |
+   | `FRONTEND_BASE_URL` | `https://app.beta.propel.ninja` | SPA origin post-login redirects return the browser to |
 
    `CORS_ALLOWED_ORIGINS` is injected automatically by Terraform (`https://app.<zone>`
    plus local dev origins). Only set this variable if you need extra browser origins
    beyond the deployed SPA URL.
 
-   Deploy workflows bind `environment: beta` / `environment: prod` so
-   environment-scoped variables are forwarded via `vars` into the API container
-   and SPA build. Without the environment binding, only repo/org variables are
-   visible and per-environment values (e.g. beta PostHog) are silently omitted.
+   The `config` job in each deploy workflow binds `environment: beta` /
+   `environment: prod` so environment-scoped variables are forwarded via `vars`
+   into the API container and SPA build. Without the environment binding, only
+   repo/org variables are visible and per-environment values (e.g. beta PostHog)
+   are silently omitted. The beta `deploy` job intentionally does **not** bind
+   `environment: beta` (its OIDC subject must stay `refs/heads/main` for the beta
+   IAM trust), so it reads the beta-scoped `ZITADEL_ENABLED` via `env.*` after the
+   "Forward Actions variables" step rather than `vars.*`. The prod `deploy` job
+   does bind `environment: prod`, so it reads `vars.ZITADEL_ENABLED` directly.
 
    Add Actions **secrets** on each environment for OAuth client secrets (when
    enabled). Deploy workflows pass these into Terraform `app_secrets` → AWS
@@ -264,19 +269,31 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | `GH_APP_CLIENT_SECRET` | No | GitHub App user-OAuth secret — enables Sign in / Connect with GitHub by reusing the ingestion App (pair with the `GITHUB_APP_CLIENT_ID` variable) |
    | `OAUTH_GITHUB_CLIENT_SECRET` | No | Only if using a **standalone** GitHub OAuth app instead of the App above |
    | `OAUTH_LINEAR_CLIENT_SECRET` | No | Linear OAuth app client secret (data connection) |
+   | `ZITADEL_MGMT_TOKEN` | When auth enabled | Zitadel IAM_OWNER PAT. prod: the instance admin PAT; beta: the same prod PAT (registers beta's OIDC app on the shared instance). **Not** part of `app_secrets` — the `config` job lifts it into the top-level `zitadel_mgmt_token` Terraform variable, which Terraform seeds into `{name_prefix}/zitadel/MGMT_TOKEN` for `deploy-zitadel.sh` to read. (CI is the source of truth; an empty value keeps the placeholder so prod's first-boot EFS PAT is not clobbered.) |
    | `TOKEN_ENCRYPTION_KEY` | No | Fernet key for encrypting OAuth tool tokens at rest (required for Linear) |
    | `GITHUB_APP_ID` | No | Ingestion GitHub App numeric ID |
    | `GITHUB_APP_PRIVATE_KEY` | No | Ingestion GitHub App PEM private key |
    | `GITHUB_APP_WEBHOOK_SECRET` | No | GitHub App webhook signing secret |
    | `GITHUB_APP_SLUG` | No | GitHub App URL slug |
+   | `POSTHOG_PERSONAL_API_KEY` | When PostHog enabled | Personal API key with error-tracking write — SPA build (source map upload) and API (fast feature-flag evaluation) |
 
-   **`JWT_SECRET` is not stored in GitHub.** Terraform generates a 64-character
-   secret on first apply and stores it in Secrets Manager (same pattern as the
-   database password). Rotating it requires a deliberate Terraform taint or
-   manual Secrets Manager update.
+   **`SESSION_SECRET` is not stored in GitHub.** Terraform generates a 64-character
+   secret on first apply and stores it in Secrets Manager at
+   `{name_prefix}/app/SESSION_SECRET` (same pattern as the database password).
+   Rotating it requires a deliberate Terraform taint or manual Secrets Manager
+   update (all users will need to sign in again).
+
+   > **Upgrading from `JWT_SECRET`:** If an environment still has
+   > `{name_prefix}/app/JWT_SECRET` in Secrets Manager, copy its value into a new
+   > `{name_prefix}/app/SESSION_SECRET` secret before apply, or accept a one-time
+   > session invalidation when Terraform creates the new secret.
 
    Non-secret OAuth client IDs (`OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GITHUB_CLIENT_ID`)
-   can be Actions **variables** in `app_environment`.
+   can be Actions **variables** in `app_environment`. `ZITADEL_ISSUER` is injected
+   by Terraform (the shared prod instance URL), and `ZITADEL_CLIENT_ID` /
+   `ZITADEL_CLIENT_SECRET` are managed as Secrets Manager placeholders and
+   overwritten by the `deploy-zitadel.sh` bootstrap — do **not** set them in
+   GitHub. Only `ZITADEL_MGMT_TOKEN` is a GitHub **secret**.
 
 2. **`prod` Environment** — add **required reviewers** so prod deploys pause for
    manual approval. The prod workflow declares `environment: prod`. Prod also
@@ -332,6 +349,40 @@ open https://app.beta.propel.ninja
 ```
 
 For prod, swap to `api.propel.ninja` / `app.propel.ninja`.
+
+---
+
+## Step 9 — Zitadel OIDC bootstrap
+
+Propel runs a **single** Zitadel instance in **prod** (`auth.propel.ninja`); beta
+consumes it. Sign-in requires a per-environment OIDC app on the shared instance,
+which is provisioned **automatically** by the `deploy-zitadel.sh` CI step — no
+manual paste of client id/secret. The full runbook is in
+[`zitadel.md`](zitadel.md); the one-time setup:
+
+1. Stand up the prod instance: set the `zitadel_enabled` tfvar `true` for prod and
+   `terraform apply`. Retrieve the first-boot IAM_OWNER PAT via ECS Exec and store
+   it (see [`zitadel.md` → First-time bootstrap](zitadel.md#first-time-bootstrap-prod)).
+
+2. Add `ZITADEL_MGMT_TOKEN` (that PAT) as a GitHub **secret** on both `beta` and
+   `prod`, and sync it into beta's Secrets Manager
+   (`propel-beta/zitadel/MGMT_TOKEN`) so beta can register its app on the shared
+   instance.
+
+3. Set the `ZITADEL_ENABLED=true` Actions **variable** on both environments (and
+   `ZITADEL_ADMIN_EMAIL` on prod for the console super-admin).
+
+4. Add the GitHub IdP callback URL to the GitHub App once
+   (`https://auth.propel.ninja/ui/login/login/externalidp/callback` — see
+   [`zitadel.md`](zitadel.md#github-app-callback-urls-one-time)).
+
+5. Deploy. `deploy-zitadel.sh` ensures the project/app, publishes the client
+   id/secret into that environment's Secrets Manager, and `deploy-api.sh` rolls
+   the API onto them.
+
+`ZITADEL_ISSUER` (TF-injected), `ZITADEL_CLIENT_ID`, and `ZITADEL_CLIENT_SECRET`
+(SM-managed) are **not** set in GitHub. `SESSION_SECRET` is generated by Terraform
+on apply (Step 6).
 
 ---
 

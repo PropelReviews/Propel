@@ -12,10 +12,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from tests.conftest import (
-    auth_headers,
+    act_as_headers,
     create_tenant,
+    login_test_user,
     login_user,
-    register_user,
 )
 
 from app.db.session import async_session_maker
@@ -70,7 +70,7 @@ async def _seed_activity(
 
 
 async def _setup_tenant(client: AsyncClient, email: str = "admin@example.com"):
-    await register_user(client, email)
+    await login_test_user(client, email)
     token = await login_user(client, email)
     tenant = await create_tenant(client, token)
     return token, tenant
@@ -87,7 +87,7 @@ async def test_pr_activity_daily(client: AsyncClient, analytics_table):
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
         params={"granularity": "daily", "start": "2026-06-01", "end": "2026-06-30"},
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -115,7 +115,7 @@ async def test_pr_activity_weekly_and_monthly_bucketing(
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
         params={"granularity": "weekly", "start": "2026-06-01", "end": "2026-07-31"},
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["points"] == [
@@ -127,7 +127,7 @@ async def test_pr_activity_weekly_and_monthly_bucketing(
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
         params={"granularity": "monthly", "start": "2026-06-01", "end": "2026-07-31"},
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["points"] == [
@@ -147,7 +147,7 @@ async def test_pr_activity_respects_date_range(client: AsyncClient, analytics_ta
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
         params={"granularity": "daily", "start": "2026-06-01", "end": "2026-06-30"},
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     points = resp.json()["points"]
@@ -164,17 +164,17 @@ async def test_pr_activity_tenant_isolation(client: AsyncClient, analytics_table
 
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["points"] == []
 
     # Non-members get 404 (never reveal a tenant's existence).
-    await register_user(client, "outsider@example.com")
+    await login_test_user(client, "outsider@example.com")
     outsider_token = await login_user(client, "outsider@example.com")
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
-        headers=auth_headers(outsider_token),
+        headers=act_as_headers(outsider_token),
     )
     assert resp.status_code == 404, resp.text
 
@@ -186,7 +186,7 @@ async def test_pr_activity_missing_table_returns_empty(client: AsyncClient):
 
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"granularity": "daily", "points": []}
@@ -199,6 +199,6 @@ async def test_pr_activity_invalid_range_rejected(client: AsyncClient, analytics
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/metrics/pull-requests",
         params={"start": "2026-06-30", "end": "2026-06-01"},
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 422, resp.text

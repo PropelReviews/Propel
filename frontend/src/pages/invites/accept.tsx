@@ -26,17 +26,17 @@ type AcceptState =
  */
 export function InviteAcceptPage() {
   const { token: inviteToken } = useParams<{ token: string }>();
-  const { token } = useAuth();
+  const { status } = useAuth();
   const { setTenant, refresh } = useTenant();
   const [state, setState] = useState<AcceptState>({ status: "accepting" });
   const attempted = useRef(false);
 
   useEffect(() => {
-    if (!token || !inviteToken || attempted.current) return;
+    if (status !== "authenticated" || !inviteToken || attempted.current) return;
     attempted.current = true;
     (async () => {
       try {
-        const accepted = await acceptInvite(token, inviteToken);
+        const accepted = await acceptInvite(inviteToken);
         await refresh();
         setTenant(accepted.tenant_id);
         setState({ status: "accepted" });
@@ -50,7 +50,7 @@ export function InviteAcceptPage() {
         });
       }
     })();
-  }, [token, inviteToken, refresh, setTenant]);
+  }, [status, inviteToken, refresh, setTenant]);
 
   return (
     <main className="flex min-h-svh items-center justify-center p-8">

@@ -17,6 +17,7 @@ resource "aws_acm_certificate" "this" {
     [var.app_fqdn],
     var.landing_fqdns,
     var.dagster_fqdn != "" ? [var.dagster_fqdn] : [],
+    var.auth_fqdn != "" ? [var.auth_fqdn] : [],
   )
   validation_method = "DNS"
 

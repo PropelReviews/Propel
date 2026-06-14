@@ -27,7 +27,7 @@ function formatDate(iso: string | null | undefined): string {
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { status, user, token, refreshUser } = useAuth();
+  const { status, user, refreshUser } = useAuth();
   const [params, setParams] = useSearchParams();
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,11 +55,10 @@ export function ProfilePage() {
   }, [params, refreshUser, setParams]);
 
   const onConnect = async () => {
-    if (!token) return;
     setError(null);
     setConnecting(true);
     try {
-      const url = await getGithubLinkUrl(token);
+      const url = await getGithubLinkUrl();
       window.location.href = url;
     } catch (err) {
       setConnecting(false);

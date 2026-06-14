@@ -5,8 +5,13 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql://propel:propel@localhost:5432/propel_test",
 )
-os.environ.setdefault("JWT_SECRET", "test-secret")
-os.environ.setdefault("AUTH_REGISTRATION_ENABLED", "true")
+os.environ.setdefault("APP_ENV", "test")
+# CI/local pytest only — not a real encryption key.
+os.environ.setdefault("SESSION_SECRET", "test-secret")
+os.environ.setdefault(
+    "TOKEN_ENCRYPTION_KEY",
+    "iqHnNRvDhs_n1rp2O6nMgbrerNt1cjcvCkBHg543YVc=",
+)
 
 import pytest
 from alembic import command
@@ -28,6 +33,37 @@ test_engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool, echo=Fa
 db_session.engine = test_engine
 db_session.async_session_maker = async_sessionmaker(test_engine, expire_on_commit=False)
 engine = test_engine
+
+_ACT_AS_HEADER = "X-Test-Act-As"
+
+
+class SessionAwareAsyncClient(AsyncClient):
+    """AsyncClient that swaps httpOnly session cookies per test user."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._saved_sessions: dict[str, dict[str, str]] = {}
+
+    def save_session(self, user_id: str) -> None:
+        cookie_name = get_settings().session_cookie_name
+        for cookie in self.cookies.jar:
+            if cookie.name == cookie_name:
+                self._saved_sessions[user_id] = {cookie_name: cookie.value}
+                return
+
+    def _apply_session(self, user_id: str | None) -> None:
+        self.cookies.clear()
+        if user_id and user_id in self._saved_sessions:
+            for name, value in self._saved_sessions[user_id].items():
+                self.cookies.set(name, value)
+
+    async def request(self, method, url, **kwargs):
+        headers = dict(kwargs.get("headers") or {})
+        act_as = headers.pop(_ACT_AS_HEADER, None)
+        if act_as is not None:
+            self._apply_session(act_as)
+        kwargs["headers"] = headers
+        return await super().request(method, url, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -75,48 +111,60 @@ async def clean_db(db_engine):
 @pytest.fixture
 async def client(apply_migrations, db_engine, clean_db):
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with SessionAwareAsyncClient(
+        transport=transport, base_url="http://test"
+    ) as ac:
         yield ac
 
 
-async def register_user(
-    client: AsyncClient,
+async def login_test_user(
+    client: SessionAwareAsyncClient,
     email: str,
-    password: str = "testpass123",
     name: str | None = "Test User",
 ) -> dict:
-    payload = {"email": email, "password": password}
-    if name is not None:
-        payload["name"] = name
-    response = await client.post("/api/v1/auth/register", json=payload)
-    assert response.status_code == 201, response.text
-    return response.json()
+    client.cookies.clear()
+    response = await client.post(
+        "/api/v1/auth/test/login",
+        params={"email": email},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    client.save_session(body["user_id"])
+    return {"id": body["user_id"], "email": body["email"], "name": name}
 
 
 async def login_user(
-    client: AsyncClient,
+    client: SessionAwareAsyncClient,
     email: str,
-    password: str = "testpass123",
 ) -> str:
+    client.cookies.clear()
     response = await client.post(
-        "/api/v1/auth/login",
-        data={"username": email, "password": password},
+        "/api/v1/auth/test/login",
+        params={"email": email},
     )
     assert response.status_code == 200, response.text
-    return response.json()["access_token"]
+    user_id = response.json()["user_id"]
+    client.save_session(user_id)
+    return user_id
 
 
-def auth_headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+def act_as_headers(user_id: str | None = None) -> dict[str, str]:
+    """Headers that make SessionAwareAsyncClient act as the given test user."""
+    if user_id:
+        return {_ACT_AS_HEADER: user_id}
+    return {}
 
 
 async def create_tenant(
-    client: AsyncClient, token: str, name: str = "Acme", slug: str = "acme"
+    client: SessionAwareAsyncClient,
+    user_id: str,
+    name: str = "Acme",
+    slug: str = "acme",
 ):
     response = await client.post(
         "/api/v1/tenants/",
         json={"name": name, "slug": slug},
-        headers=auth_headers(token),
+        headers=act_as_headers(user_id),
     )
     assert response.status_code == 201, response.text
     return response.json()

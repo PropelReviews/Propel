@@ -1,12 +1,11 @@
 import { useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
-import { SignInForm } from "@/components/auth/sign-in-form";
+import { AuthRedirectForm } from "@/components/auth/auth-redirect-form";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -15,7 +14,9 @@ import { useAuth } from "@/providers/auth-provider";
 export function SignInPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { status } = useAuth();
+  const errorCode = searchParams.get("error");
   // Where to land after sign-in (e.g. an invite accept link set by RequireAuth).
   const from = (location.state as { from?: string } | null)?.from ?? "/";
 
@@ -31,16 +32,11 @@ export function SignInPage() {
           <CardDescription>Sign in to your Propel account.</CardDescription>
         </CardHeader>
         <CardContent>
-          <SignInForm onSuccess={() => navigate(from, { replace: true })} />
+          <AuthRedirectForm
+            errorCode={errorCode}
+            onSuccess={() => navigate(from, { replace: true })}
+          />
         </CardContent>
-        <CardFooter className="text-muted-foreground justify-center text-sm">
-          <span>
-            Don&apos;t have an account?{" "}
-            <Link to="/signup" className="text-foreground underline underline-offset-4">
-              Sign up
-            </Link>
-          </span>
-        </CardFooter>
       </Card>
     </main>
   );

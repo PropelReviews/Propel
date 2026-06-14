@@ -20,10 +20,10 @@ def test_root():
 def test_cors_preflight_allows_local_dev_origin():
     with TestClient(app) as client:
         resp = client.options(
-            "/api/v1/auth/register",
+            "/api/v1/auth/login",
             headers={
                 "Origin": "http://localhost:5173",
-                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Method": "GET",
             },
         )
     assert resp.status_code == 200
@@ -33,10 +33,10 @@ def test_cors_preflight_allows_local_dev_origin():
 def test_cors_preflight_rejects_unlisted_origin():
     with TestClient(app) as client:
         resp = client.options(
-            "/api/v1/auth/register",
+            "/api/v1/auth/login",
             headers={
                 "Origin": "https://app.beta.propel.ninja",
-                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Method": "GET",
             },
         )
     assert resp.status_code == 400

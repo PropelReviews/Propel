@@ -2,9 +2,16 @@ from enum import StrEnum
 
 
 class Role(StrEnum):
+    owner = "owner"
     admin = "admin"
     manager = "manager"
-    individual = "individual"
+    member = "member"
+
+
+class MembershipStatus(StrEnum):
+    invited = "invited"
+    active = "active"
+    disabled = "disabled"
 
 
 class IntegrationProvider(StrEnum):

@@ -63,7 +63,7 @@ describe("AppShell", () => {
 
   it("hides the Access nav link without management permissions", async () => {
     const container = await mountShell([
-      makeTenant({ role: "individual", permissions: ["metrics:read", "tenant:read"] }),
+      makeTenant({ role: "member", permissions: ["metrics:read", "tenant:read"] }),
     ]);
 
     // The rest of the nav renders for authenticated users.

@@ -6,9 +6,8 @@ import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import select
-from tests.conftest import auth_headers, login_user, register_user
+from tests.conftest import act_as_headers, login_test_user, login_user
 
-from app.auth.oauth import github_oauth_client
 from app.db.session import async_session_maker
 from app.models.connected_account import ConnectedAccount
 from app.models.enums import (
@@ -20,9 +19,11 @@ from app.models.enums import (
 )
 from app.models.external_identity import ExternalIdentity
 from app.models.membership import TenantMembership
+from app.models.oauth_account import OAuthAccount
 from app.models.tenant import Tenant
-from app.models.user import OAuthAccount, User
+from app.models.user import User
 from app.services import github_link
+from app.services.github_link import github_oauth_client
 
 _GITHUB = IntegrationProvider.github.value
 
@@ -69,11 +70,11 @@ async def test_authorize_requires_auth(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_authorize_returns_url_when_configured(client: AsyncClient, monkeypatch):
-    await register_user(client, "linker@example.com")
+    await login_test_user(client, "linker@example.com")
     token = await login_user(client, "linker@example.com")
 
-    monkeypatch.setattr(github_link.settings, "oauth_github_client_id", "cid")
-    monkeypatch.setattr(github_link.settings, "oauth_github_client_secret", "secret")
+    monkeypatch.setattr(github_link.settings, "github_app_client_id", "cid")
+    monkeypatch.setattr(github_link.settings, "github_app_client_secret", "secret")
 
     async def fake_authorize_url(redirect_uri, state=None, **kwargs):
         return f"https://github.com/login/oauth/authorize?state={state}"
@@ -83,7 +84,7 @@ async def test_authorize_returns_url_when_configured(client: AsyncClient, monkey
     )
 
     response = await client.get(
-        "/api/v1/auth/github/link/authorize", headers=auth_headers(token)
+        "/api/v1/auth/github/link/authorize", headers=act_as_headers(token)
     )
     assert response.status_code == 200
     assert "github.com/login/oauth/authorize" in response.json()["authorization_url"]
@@ -91,10 +92,10 @@ async def test_authorize_returns_url_when_configured(client: AsyncClient, monkey
 
 @pytest.mark.asyncio
 async def test_authorize_503_when_github_not_configured(client: AsyncClient):
-    await register_user(client, "noconfig@example.com")
+    await login_test_user(client, "noconfig@example.com")
     token = await login_user(client, "noconfig@example.com")
     response = await client.get(
-        "/api/v1/auth/github/link/authorize", headers=auth_headers(token)
+        "/api/v1/auth/github/link/authorize", headers=act_as_headers(token)
     )
     assert response.status_code == 503
 
@@ -124,9 +125,8 @@ async def test_complete_link_creates_oauth_account_and_claims_org_identity(
         # is private, so org sync parked them as pending_email.
         user = User(
             email="dev@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(user)
         await session.flush()
@@ -181,9 +181,8 @@ async def test_complete_link_is_idempotent(clean_db, monkeypatch):
     async with async_session_maker() as session:
         user = User(
             email="repeat@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(user)
         await session.commit()
@@ -215,9 +214,8 @@ async def test_complete_link_conflict_when_github_owned_by_other_user(
     async with async_session_maker() as session:
         other = User(
             email="other@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(other)
         await session.flush()
@@ -232,9 +230,8 @@ async def test_complete_link_conflict_when_github_owned_by_other_user(
         )
         me = User(
             email="me@propel.ninja",
-            hashed_password="x",
             is_active=True,
-            is_verified=True,
+            email_verified=True,
         )
         session.add(me)
         await session.commit()
@@ -248,9 +245,9 @@ async def test_complete_link_conflict_when_github_owned_by_other_user(
 
 @pytest.mark.asyncio
 async def test_me_reports_github_connection(client: AsyncClient):
-    await register_user(client, "connected@example.com")
+    await login_test_user(client, "connected@example.com")
     token = await login_user(client, "connected@example.com")
-    me = await client.get("/api/v1/auth/me", headers=auth_headers(token))
+    me = await client.get("/api/v1/auth/me", headers=act_as_headers(token))
     assert me.json()["github"]["connected"] is False
 
     user_id = uuid.UUID(me.json()["id"])
@@ -266,7 +263,7 @@ async def test_me_reports_github_connection(client: AsyncClient):
         )
         await session.commit()
 
-    me2 = await client.get("/api/v1/auth/me", headers=auth_headers(token))
+    me2 = await client.get("/api/v1/auth/me", headers=act_as_headers(token))
     github = me2.json()["github"]
     assert github["connected"] is True
     assert github["account_id"] == "999"

@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_tenant_context, require_permission
-from app.auth.manager import current_active_user
+from app.auth.session import get_current_user
 from app.config import get_settings
 from app.db.session import get_async_session
 from app.models.user import User
@@ -46,7 +46,7 @@ async def list_connections(
 )
 async def github_install_url(
     ctx=Depends(require_permission("connections:manage")),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_current_user),
 ):
     url = connection_service.build_github_install_url(ctx.tenant.id, user.id)
     return GitHubInstallURL(install_url=url)
@@ -92,7 +92,7 @@ async def linear_connection_status(
 )
 async def linear_authorize_url(
     ctx=Depends(require_permission("connections:manage")),
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_current_user),
 ):
     """Authorization URL to connect a Linear workspace to this tenant.
 
@@ -126,7 +126,7 @@ async def linear_callback(
 
 @router.get("/connections/github/app", response_model=GitHubInstallURL)
 async def github_public_install_url(
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_current_user),
 ):
     """Public GitHub App install URL for onboarding (no tenant required).
 
@@ -146,7 +146,7 @@ async def github_public_install_url(
 
 @router.post("/connections/github/sync", response_model=InstallationSyncResult)
 async def sync_github_installations(
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Reconcile connections with GitHub installations on demand.
@@ -162,7 +162,7 @@ async def sync_github_installations(
 async def github_setup_callback(
     installation_id: str,
     state: str,
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """GitHub redirects here after install with installation_id + signed state."""

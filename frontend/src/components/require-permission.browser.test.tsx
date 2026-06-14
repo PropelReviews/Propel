@@ -38,7 +38,7 @@ describe("RequirePermission", () => {
   it("shows the access denied card when the permission is missing", async () => {
     seedAuth();
     mockApi({
-      tenants: [makeTenant({ role: "individual", permissions: ["metrics:read"] })],
+      tenants: [makeTenant({ role: "member", permissions: ["metrics:read"] })],
     });
 
     result = renderWithProviders(

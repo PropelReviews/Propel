@@ -17,7 +17,6 @@ export type PullRequestActivityResponse = {
 };
 
 export function getPullRequestActivity(
-  token: string,
   tenantId: string,
   options: { granularity: Granularity; start: Date; end: Date },
 ): Promise<PullRequestActivityResponse> {
@@ -28,6 +27,5 @@ export function getPullRequestActivity(
   });
   return authedGet<PullRequestActivityResponse>(
     `/api/v1/tenants/${tenantId}/metrics/pull-requests?${params}`,
-    token,
   );
 }

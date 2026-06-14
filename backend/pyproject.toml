@@ -13,15 +13,16 @@ dependencies = [
     "sqlalchemy[asyncio]",
     "asyncpg",
     "alembic",
-    "fastapi-users[sqlalchemy,oauth]",
+    "authlib",
     "httpx-oauth",
     "httpx",
-    "pyjwt[crypto]",
+    "itsdangerous",
     "cryptography",
     "pydantic-settings",
     "python-dotenv",
     "email-validator",
     "posthog",
+    "pyjwt[crypto]>=2.13.0",
 ]
 
 [dependency-groups]

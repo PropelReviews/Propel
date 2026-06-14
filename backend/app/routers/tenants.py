@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_member, require_permission
-from app.auth.manager import current_active_user
+from app.auth.session import get_current_user
 from app.db.session import get_async_session
 from app.models.user import User
 from app.schemas.roles import TenantWithMembershipRead
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
 @router.post("/", response_model=TenantRead, status_code=201)
 async def create_tenant(
     payload: TenantCreate,
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     tenant = await tenant_service.create_tenant(session, user, payload)
@@ -24,7 +24,7 @@ async def create_tenant(
 
 @router.get("/", response_model=list[TenantWithMembershipRead])
 async def list_tenants(
-    user: User = Depends(current_active_user),
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     rows = await tenant_service.list_user_tenants_with_membership(session, user.id)

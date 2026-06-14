@@ -5,7 +5,7 @@ import uuid
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
-from tests.conftest import auth_headers, create_tenant, login_user, register_user
+from tests.conftest import act_as_headers, create_tenant, login_test_user, login_user
 
 from app.db.session import async_session_maker
 from app.models.connected_account import ConnectedAccount
@@ -19,9 +19,10 @@ from app.models.enums import (
 )
 from app.models.external_identity import ExternalIdentity
 from app.models.membership import TenantMembership
+from app.models.oauth_account import OAuthAccount
 from app.models.raw_record import RawRecord
 from app.models.tenant import Tenant
-from app.models.user import OAuthAccount, User
+from app.models.user import User
 from app.services import github_identity
 
 _ORG = "acme"
@@ -101,7 +102,7 @@ async def test_provisions_user_and_membership_for_unmatched_member(clean_db):
 
         user = await session.get(User, identity.propel_user_id)
         assert user.email == "octocat@acme.com"
-        assert user.is_verified is False
+        assert user.email_verified is False
 
         membership = await session.scalar(
             select(TenantMembership).where(
@@ -109,7 +110,7 @@ async def test_provisions_user_and_membership_for_unmatched_member(clean_db):
                 TenantMembership.user_id == user.id,
             )
         )
-        assert membership.role == Role.individual
+        assert membership.role == Role.member
 
 
 @pytest.mark.asyncio
@@ -135,16 +136,14 @@ async def test_org_admin_provisions_as_propel_admin(clean_db):
                 TenantMembership.user_id == identity.propel_user_id
             )
         )
-        assert membership.role == Role.admin
+        assert membership.role == Role.owner
 
 
 @pytest.mark.asyncio
 async def test_links_existing_user_by_email(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
-        user = User(
-            email="dev@acme.com", hashed_password="x", is_active=True, is_verified=True
-        )
+        user = User(email="dev@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         await _add_raw(
@@ -169,9 +168,7 @@ async def test_links_existing_user_by_email(clean_db):
 async def test_links_existing_user_by_oauth_id(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
-        user = User(
-            email="gh@acme.com", hashed_password="x", is_active=True, is_verified=True
-        )
+        user = User(email="gh@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         session.add(
@@ -251,14 +248,12 @@ async def test_resync_is_idempotent(clean_db):
 async def test_last_admin_is_not_demoted(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
-        user = User(
-            email="boss@acme.com", hashed_password="x", is_active=True, is_verified=True
-        )
+        user = User(email="boss@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         session.add(
             TenantMembership(
-                tenant_id=account.tenant_id, user_id=user.id, role=Role.admin
+                tenant_id=account.tenant_id, user_id=user.id, role=Role.owner
             )
         )
         session.add(
@@ -288,7 +283,7 @@ async def test_last_admin_is_not_demoted(clean_db):
         membership = await session.scalar(
             select(TenantMembership).where(TenantMembership.user_id == user.id)
         )
-        assert membership.role == Role.admin
+        assert membership.role == Role.owner
 
 
 @pytest.mark.asyncio
@@ -306,9 +301,7 @@ async def test_retroactive_oauth_link_claims_pending_identity(clean_db):
                 github_org_role=GitHubOrgRole.member.value,
             )
         )
-        user = User(
-            email="late@acme.com", hashed_password="x", is_active=True, is_verified=True
-        )
+        user = User(email="late@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         await session.commit()
@@ -346,7 +339,7 @@ async def test_register_claims_pending_identity_by_email(client: AsyncClient):
         await session.commit()
 
     # Email match is case-insensitive; the org role maps to the Propel role.
-    registered = await register_user(client, "newhire@ACME.com")
+    registered = await login_test_user(client, "newhire@ACME.com")
 
     async with async_session_maker() as session:
         identity = await session.scalar(
@@ -362,7 +355,7 @@ async def test_register_claims_pending_identity_by_email(client: AsyncClient):
             )
         )
         assert membership is not None
-        assert membership.role == Role.admin
+        assert membership.role == Role.owner
 
 
 @pytest.mark.asyncio
@@ -415,7 +408,7 @@ async def test_import_roster_from_github_api(clean_db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_admin_can_list_and_manually_link_github_members(client: AsyncClient):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     admin_token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, admin_token)
 
@@ -450,18 +443,18 @@ async def test_admin_can_list_and_manually_link_github_members(client: AsyncClie
 
     listing = await client.get(
         f"/api/v1/tenants/{tenant['id']}/github-members/",
-        headers=auth_headers(admin_token),
+        headers=act_as_headers(admin_token),
     )
     assert listing.status_code == 200
     assert listing.json()[0]["external_login"] == "unlinked"
 
-    me = await client.get("/api/v1/auth/me", headers=auth_headers(admin_token))
+    me = await client.get("/api/v1/auth/me", headers=act_as_headers(admin_token))
     admin_user_id = me.json()["id"]
 
     linked = await client.patch(
         f"/api/v1/tenants/{tenant['id']}/github-members/{identity_id}/link",
         json={"user_id": admin_user_id},
-        headers=auth_headers(admin_token),
+        headers=act_as_headers(admin_token),
     )
     assert linked.status_code == 200
     assert linked.json()["status"] == IdentityStatus.linked.value
@@ -469,7 +462,7 @@ async def test_admin_can_list_and_manually_link_github_members(client: AsyncClie
 
     unlinked = await client.delete(
         f"/api/v1/tenants/{tenant['id']}/github-members/{identity_id}/link",
-        headers=auth_headers(admin_token),
+        headers=act_as_headers(admin_token),
     )
     assert unlinked.status_code == 200
     assert unlinked.json()["propel_user_id"] is None

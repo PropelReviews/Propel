@@ -22,42 +22,28 @@ export type InviteAccepted = {
   role: Role;
 };
 
-export function listInvites(token: string, tenantId: string): Promise<Invite[]> {
-  return authedGet<Invite[]>(`/api/v1/tenants/${tenantId}/invites`, token);
+export function listInvites(tenantId: string): Promise<Invite[]> {
+  return authedGet<Invite[]>(`/api/v1/tenants/${tenantId}/invites`);
 }
 
 export function createInvite(
-  token: string,
   tenantId: string,
   input: { email: string; role: Role },
 ): Promise<InviteCreated> {
   return authedRequest<InviteCreated>(
     "POST",
     `/api/v1/tenants/${tenantId}/invites`,
-    token,
     input,
   );
 }
 
-export function revokeInvite(
-  token: string,
-  tenantId: string,
-  inviteId: string,
-): Promise<null> {
+export function revokeInvite(tenantId: string, inviteId: string): Promise<null> {
   return authedRequest<null>(
     "DELETE",
     `/api/v1/tenants/${tenantId}/invites/${inviteId}`,
-    token,
   );
 }
 
-export function acceptInvite(
-  token: string,
-  inviteToken: string,
-): Promise<InviteAccepted> {
-  return authedRequest<InviteAccepted>(
-    "POST",
-    `/api/v1/invites/${inviteToken}/accept`,
-    token,
-  );
+export function acceptInvite(inviteToken: string): Promise<InviteAccepted> {
+  return authedRequest<InviteAccepted>("POST", `/api/v1/invites/${inviteToken}/accept`);
 }

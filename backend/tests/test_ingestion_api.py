@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 import pytest
 from httpx import AsyncClient
 from tests.conftest import (
-    auth_headers,
+    act_as_headers,
     create_tenant,
+    login_test_user,
     login_user,
-    register_user,
 )
 
 from app.db.session import async_session_maker
@@ -78,7 +78,7 @@ async def _seed_datapoint(
 
 @pytest.mark.asyncio
 async def test_list_ingestion_runs(client: AsyncClient):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
     tenant_id = uuid.UUID(tenant["id"])
@@ -89,7 +89,7 @@ async def test_list_ingestion_runs(client: AsyncClient):
 
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/ingestion/runs",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     runs = resp.json()
@@ -103,7 +103,7 @@ async def test_list_ingestion_runs(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_ingestion_stats(client: AsyncClient):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
     tenant_id = uuid.UUID(tenant["id"])
@@ -116,7 +116,7 @@ async def test_ingestion_stats(client: AsyncClient):
 
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/ingestion/stats",
-        headers=auth_headers(token),
+        headers=act_as_headers(token),
     )
     assert resp.status_code == 200, resp.text
     stats = resp.json()
@@ -130,25 +130,26 @@ async def test_ingestion_stats(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_ingestion_endpoints_are_tenant_scoped(client: AsyncClient):
     # A user with no membership in the tenant gets 404 (require_member).
-    await register_user(client, "owner@example.com")
+    await login_test_user(client, "owner@example.com")
     owner_token = await login_user(client, "owner@example.com")
     tenant = await create_tenant(client, owner_token)
 
-    await register_user(client, "outsider@example.com")
+    await login_test_user(client, "outsider@example.com")
     outsider_token = await login_user(client, "outsider@example.com")
 
     resp = await client.get(
         f"/api/v1/tenants/{tenant['id']}/ingestion/runs",
-        headers=auth_headers(outsider_token),
+        headers=act_as_headers(outsider_token),
     )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_ingestion_endpoints_require_auth(client: AsyncClient):
-    await register_user(client, "admin@example.com")
+    await login_test_user(client, "admin@example.com")
     token = await login_user(client, "admin@example.com")
     tenant = await create_tenant(client, token)
 
+    client.cookies.clear()
     resp = await client.get(f"/api/v1/tenants/{tenant['id']}/ingestion/stats")
     assert resp.status_code == 401

@@ -65,21 +65,21 @@ function formatRunDuration(run: IngestionRun): string {
 }
 
 export function DataPage() {
-  const { token, status: authStatus } = useAuth();
+  const { status: authStatus } = useAuth();
   const { tenant, status: tenantStatus, refresh } = useTenant();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (authStatus !== "authenticated" || !token || !tenant) return;
+    if (authStatus !== "authenticated" || !tenant) return;
 
     let cancelled = false;
     (async () => {
       setState({ status: "loading" });
       try {
         const [runs, stats] = await Promise.all([
-          listIngestionRuns(token, tenant.id),
-          getIngestionStats(token, tenant.id),
+          listIngestionRuns(tenant.id),
+          getIngestionStats(tenant.id),
         ]);
         if (cancelled) return;
         setState({ status: "ready", tenantId: tenant.id, runs, stats });
@@ -94,7 +94,7 @@ export function DataPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, authStatus, tenant, tenantStatus, reloadKey]);
+  }, [authStatus, tenant, tenantStatus, reloadKey]);
 
   return (
     <main className="bg-background mx-auto min-h-svh max-w-6xl px-6 py-12">

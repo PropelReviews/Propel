@@ -33,10 +33,10 @@ CI also runs both builds. Vitest has two projects: `unit` (Node, `*.test.tsx`) a
 
 - `src/routes.tsx` — React Router v7; auth pages and `/dev/charts` are gated by PostHog flags (`signup-signin`, `chart-demo`) with `VITE_AUTH_ENABLED` / `VITE_CHART_DEMO_ENABLED` env fallbacks. Default **off**.
 - `src/lib/api.ts` — single fetch-based client. `API_BASE` from `VITE_API_URL` (default `http://localhost:8000`). `ApiError` class; `authedGet()` for bearer-token calls. Domain modules (e.g. `src/lib/ingestion.ts`) build on it. **No axios / React Query / Redux.**
-- `src/providers/auth-provider.tsx` — React Context; JWT in `localStorage` (`propel_token`, `propel_user`); validated on boot via `GET /api/v1/auth/me`. Uses React 19 `<AuthContext value={...}>` syntax.
-- Login posts `application/x-www-form-urlencoded` with field **`username`** (the email) — fastapi-users requirement.
-- GitHub OAuth callback lands on `/auth/github/callback` with token in the URL fragment.
-- Forms: react-hook-form + Zod (schemas in `src/lib/auth-schemas.ts`).
+- `src/providers/auth-provider.tsx` — React Context; session is a server-side httpOnly cookie (no token in JS/`localStorage`); user is validated on boot via `GET /api/v1/auth/me`. Uses React 19 `<AuthContext value={...}>` syntax.
+- Sign in / sign up both redirect through the Zitadel OIDC BFF: `src/components/auth/auth-redirect-form.tsx` navigates to `GET /api/v1/auth/login`; `/signup` redirects to `/signin`.
+- API calls (`src/lib/api.ts`) send the cookie automatically (`credentials: "include"`) — no token argument is passed.
+- Forms: react-hook-form + Zod (component-local schemas; there is no shared `auth-schemas.ts`).
 - Charts: barrel export at `src/components/charts/index.ts`; filters via `MetricFiltersProvider` context.
 
 ## UI conventions
