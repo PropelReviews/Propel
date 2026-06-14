@@ -17,6 +17,7 @@ infrastructure/
 
 ## Deployment
 
+- **Self-hosting** (Docker Compose, env vars, integrations): [`../docs/self-hosting.md`](../docs/self-hosting.md)
 - **Bootstrap runbook** (one-time AWS setup): [`../docs/deployment/bootstrap.md`](../docs/deployment/bootstrap.md)
 - **CI/CD** (GitHub Actions): [`../docs/deployment/cicd.md`](../docs/deployment/cicd.md)
 - **Local AWS SSO**: [`../docs/deployment/aws-sso.md`](../docs/deployment/aws-sso.md)
@@ -30,13 +31,18 @@ The root `docker-compose.yml` orchestrates the full local stack:
 | Service  | Port | Description              |
 |----------|------|--------------------------|
 | postgres | 5432 | Postgres 18.3 database     |
-| backend  | 8000 | FastAPI + Meltano        |
+| backend  | 8000 | FastAPI API + auth         |
 | frontend | 5173 | Vite + React dashboard   |
+| ingestion | 3001 | Dagster scheduler + UI  |
+| dask-worker | — | Ingestion job executor |
 
 ```bash
 cp .env.example .env
-docker-compose up
+docker compose up
 ```
+
+For integration setup (GitHub App, Linear OAuth) and every environment variable,
+see the [self-hosting guide](../docs/self-hosting.md).
 
 ## Dev container
 

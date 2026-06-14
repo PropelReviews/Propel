@@ -48,6 +48,8 @@ client secrets when those providers are enabled:
 |--------|----------|-------------|
 | `OAUTH_GOOGLE_CLIENT_SECRET` | Optional | API |
 | `OAUTH_GITHUB_CLIENT_SECRET` | Optional | API |
+| `OAUTH_LINEAR_CLIENT_SECRET` | Optional | API (Linear data connection) |
+| `TOKEN_ENCRYPTION_KEY` | When Linear is enabled | API (encrypts stored OAuth tokens) |
 
 `JWT_SECRET` is **not** configured in GitHub — Terraform generates it on first
 apply and stores it in AWS Secrets Manager (64 characters, unique per

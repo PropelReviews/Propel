@@ -7,7 +7,7 @@ Thank you for your interest in contributing. Propel is an open source project, a
 | Area | Examples |
 |---|---|
 | **Metrics & data models** | New dbt models, metric definitions, SQL improvements |
-| **Integrations** | Connectors for GitHub, Linear, Cursor, and other tools |
+| **Integrations** | Connectors for GitHub, Linear, and other tools |
 | **Application** | FastAPI backend, React frontend, dashboard features |
 | **Documentation** | README improvements, setup guides, metric explanations |
 | **Issues** | Bug reports, feature requests, questions about how metrics work |
@@ -27,10 +27,11 @@ Metric contributions are especially valuable. Because transparency is central to
 git clone https://github.com/PropelReviews/Propel
 cd Propel
 cp .env.example .env
-docker-compose up
+docker compose up
 ```
 
-Once the project structure is in place, component-specific setup instructions will live alongside each service. Check the relevant directory README when working on a particular layer.
+See the [self-hosting guide](docs/self-hosting.md) for environment variables and
+GitHub / Linear integration setup.
 
 ## How to contribute
 
