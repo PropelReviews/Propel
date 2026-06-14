@@ -165,7 +165,7 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
           role,
           expires_at: "2026-07-01T00:00:00Z",
           created_at: "2026-06-09T00:00:00Z",
-          invited_by_user_id: user.id,
+          invited_by_user_id: user?.id ?? TEST_USER.id,
         };
         return Promise.resolve(
           json({ invite, invite_url: `http://app.test/invite/${invite.id}` }, 201),
