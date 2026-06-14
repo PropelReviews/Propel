@@ -6,6 +6,7 @@ os.environ.setdefault(
     "postgresql://propel:propel@localhost:5432/propel_test",
 )
 os.environ.setdefault("APP_ENV", "test")
+# CI/local pytest only — not a real encryption key.
 os.environ.setdefault("SESSION_SECRET", "test-secret")
 os.environ.setdefault(
     "TOKEN_ENCRYPTION_KEY",

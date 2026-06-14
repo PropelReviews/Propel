@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, getMe, joinWaitlist } from "./api";
+import {
+  ApiError,
+  getMe,
+  joinWaitlist,
+  redirectToLogin,
+  redirectToLogout,
+} from "./api";
 
 describe("api client", () => {
   afterEach(() => {
@@ -43,5 +49,23 @@ describe("api client", () => {
       expect.stringContaining("/api/v1/auth/me"),
       expect.objectContaining({ credentials: "include" }),
     );
+  });
+
+  it("redirectToLogin sends the browser to the BFF login endpoint", () => {
+    const location = { href: "http://localhost:5173/signin" };
+    vi.stubGlobal("window", { location });
+
+    redirectToLogin();
+
+    expect(location.href).toBe("http://localhost:8000/api/v1/auth/login");
+  });
+
+  it("redirectToLogout sends the browser to the BFF logout endpoint", () => {
+    const location = { href: "http://localhost:5173/" };
+    vi.stubGlobal("window", { location });
+
+    redirectToLogout();
+
+    expect(location.href).toBe("http://localhost:8000/api/v1/auth/logout");
   });
 });

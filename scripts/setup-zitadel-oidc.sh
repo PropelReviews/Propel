@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Bootstrap a Zitadel OIDC application for the Propel BFF (local dev).
 #
+# ⚠️  LOCAL DEVELOPMENT ONLY — values printed here are for your laptop. Use
+#     Secrets Manager / unique credentials in beta and prod (see docs/deployment/zitadel.md).
+#
 # Prerequisites: docker compose up (zitadel + postgres healthy).
 #
 # Usage:

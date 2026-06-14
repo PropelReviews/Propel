@@ -60,6 +60,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
       APP_ENV: test
+      # CI-only fixtures — not real secrets; never reuse outside GitHub Actions.
       SESSION_SECRET: test-secret
       TOKEN_ENCRYPTION_KEY: iqHnNRvDhs_n1rp2O6nMgbrerNt1cjcvCkBHg543YVc=
     defaults:
@@ -107,6 +108,7 @@ jobs:
       # target-propel reads the sync DSN from PROPEL_DATABASE_URL.
       PROPEL_DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
       APP_ENV: test
+      # CI-only fixtures — not real secrets; never reuse outside GitHub Actions.
       SESSION_SECRET: test-secret
       TOKEN_ENCRYPTION_KEY: iqHnNRvDhs_n1rp2O6nMgbrerNt1cjcvCkBHg543YVc=
     defaults:

@@ -4,6 +4,11 @@ How to run Zitadel alongside Propel in beta/prod. This doc is the **cloud
 counterpart** to the local `docker-compose` Zitadel services introduced in the
 OIDC auth migration ([PR #28](https://github.com/PropelReviews/Propel/pull/28)).
 
+> **Secrets in this PR / repo defaults:** `ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters`,
+> `SESSION_SECRET=change-me`, `POSTGRES_PASSWORD=propel`, and the CI `test-secret` /
+> `TOKEN_ENCRYPTION_KEY` fixture are **local-dev and test-only demo values**. Beta and
+> prod must use Secrets Manager with freshly generated credentials (tables below).
+
 It answers the spec open item: *“Zitadel deploy target for cloud — ECS service
 alongside Propel, or its own task?”*
 
