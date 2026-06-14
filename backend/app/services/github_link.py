@@ -27,7 +27,8 @@ from app.auth.github_oauth import github_oauth_client
 from app.config import get_settings
 from app.models.enums import IntegrationProvider
 from app.models.external_identity import ExternalIdentity
-from app.models.oauth_account import OAuthAccount, User
+from app.models.oauth_account import OAuthAccount
+from app.models.user import User
 from app.services import github_identity
 
 logger = logging.getLogger("propel.auth")

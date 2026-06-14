@@ -32,8 +32,9 @@ from app.models.enums import (
 )
 from app.models.external_identity import ExternalIdentity
 from app.models.membership import TenantMembership
-from app.models.oauth_account import OAuthAccount, User
+from app.models.oauth_account import OAuthAccount
 from app.models.raw_record import RawRecord
+from app.models.user import User
 from app.services import members as member_service
 
 logger = logging.getLogger("propel.ingestion")

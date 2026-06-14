@@ -22,6 +22,7 @@ dependencies = [
     "python-dotenv",
     "email-validator",
     "posthog",
+    "pyjwt[crypto]>=2.13.0",
 ]
 
 [dependency-groups]
