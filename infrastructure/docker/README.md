@@ -27,6 +27,9 @@ cp .env.example .env
 docker compose up
 ```
 
+See the [self-hosting guide](../../docs/self-hosting.md) for integration setup and
+the full environment variable reference.
+
 | Service  | Port | Notes |
 |----------|------|-------|
 | postgres | 5432 | Postgres 18.3, named volume `pgdata` |

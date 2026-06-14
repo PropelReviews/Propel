@@ -11,10 +11,10 @@ FastAPI application and data extraction for Propel.
 
 ## Purpose
 
-The backend serves the Propel API and orchestrates data extraction from your toolchain (GitHub, Linear, Cursor) into Postgres via Meltano.
+The backend serves the Propel API and orchestrates data extraction from your toolchain (GitHub and Linear) into Postgres via Meltano.
 
 ```
-Your tools (GitHub, Linear, Cursor)
+Your tools (GitHub, Linear)
         │
         ▼
    meltano/          ← extraction
@@ -53,6 +53,10 @@ backend/
 Entity relationships are documented in [docs/backend/data-model.md](../docs/backend/data-model.md).
 
 ## Setup
+
+See the [self-hosting guide](../docs/self-hosting.md) for the full Docker Compose
+workflow, environment variables, and GitHub / Linear integration setup. Quick
+start:
 
 ```bash
 cd backend

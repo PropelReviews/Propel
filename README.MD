@@ -2,7 +2,7 @@
 
 Transparent analytics for engineering teams. Fully open source and self-hostable.
 
-Your work in GitHub, Linear, and Cursor, turned into metrics you can read, trace, and trust. Built first for the developers doing the work, open to everyone who depends on it.
+Your work in GitHub and Linear, turned into metrics you can read, trace, and trust. Built first for the developers doing the work, open to everyone who depends on it.
 
 ## Analytics shouldn't feel like surveillance
 
@@ -55,7 +55,7 @@ The exact set evolves with the project. What never changes is that every number 
 ## How it works
 
 ```
-Your tools (GitHub, Linear, Cursor)
+Your tools (GitHub, Linear)
         │
         ▼
    Meltano          ← data extraction
@@ -99,16 +99,19 @@ Run the open source core in your own infrastructure. Your data never leaves your
 git clone https://github.com/PropelReviews/Propel
 cd Propel
 cp .env.example .env
-docker-compose up
+docker compose up
 ```
 
 No account required. No API keys phoning home. No telemetry unless you opt in.
 
 Best if you have compliance requirements, want to run on private infrastructure, or prefer to operate the stack yourself.
 
+See the **[self-hosting guide](docs/self-hosting.md)** for the full setup: environment variables, GitHub App and Linear OAuth configuration, and a production checklist.
+
 ## Documentation
 
-Full documentation lives in [`docs/`](docs/README.md), including the AWS
+Full documentation lives in [`docs/`](docs/README.md), including the
+[self-hosting guide](docs/self-hosting.md), AWS
 [deployment bootstrap runbook](docs/deployment/bootstrap.md),
 [CI/CD](docs/deployment/cicd.md), and [local AWS SSO](docs/deployment/aws-sso.md).
 

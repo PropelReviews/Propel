@@ -240,6 +240,7 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | `POSTHOG_PERSONAL_API_KEY` | `phx_...` | SPA build (source map upload; keep secret) |
    | `AUTH_REGISTRATION_ENABLED` | `true` | API (allow signup when ready) |
    | `GITHUB_APP_CLIENT_ID` | `Iv1...` | API (GitHub login/link; the ingestion App's user-OAuth client id; pair with the `GH_APP_CLIENT_SECRET` secret) |
+   | `OAUTH_LINEAR_CLIENT_ID` | `...` | API (Linear data connection; pair with `OAUTH_LINEAR_CLIENT_SECRET` secret) |
    | `OAUTH_CALLBACK_BASE_URL` | `https://api.beta.propel.ninja` | API origin GitHub returns the OAuth code to |
    | `FRONTEND_BASE_URL` | `https://app.beta.propel.ninja` | SPA origin OAuth callbacks redirect the browser back to |
 
@@ -262,6 +263,12 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    | `OAUTH_GOOGLE_CLIENT_SECRET` | No | When Google login is enabled |
    | `GH_APP_CLIENT_SECRET` | No | GitHub App user-OAuth secret — enables Sign in / Connect with GitHub by reusing the ingestion App (pair with the `GITHUB_APP_CLIENT_ID` variable) |
    | `OAUTH_GITHUB_CLIENT_SECRET` | No | Only if using a **standalone** GitHub OAuth app instead of the App above |
+   | `OAUTH_LINEAR_CLIENT_SECRET` | No | Linear OAuth app client secret (data connection) |
+   | `TOKEN_ENCRYPTION_KEY` | No | Fernet key for encrypting OAuth tool tokens at rest (required for Linear) |
+   | `GITHUB_APP_ID` | No | Ingestion GitHub App numeric ID |
+   | `GITHUB_APP_PRIVATE_KEY` | No | Ingestion GitHub App PEM private key |
+   | `GITHUB_APP_WEBHOOK_SECRET` | No | GitHub App webhook signing secret |
+   | `GITHUB_APP_SLUG` | No | GitHub App URL slug |
 
    **`JWT_SECRET` is not stored in GitHub.** Terraform generates a 64-character
    secret on first apply and stores it in Secrets Manager (same pattern as the

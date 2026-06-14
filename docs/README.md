@@ -4,11 +4,17 @@ Central index for Propel's documentation. Component-level details live in each
 component's own README (linked below); cross-cutting deployment and operations
 docs live here under `docs/`.
 
+## Self-hosting
+
+| Doc | What it covers |
+|-----|----------------|
+| [self-hosting.md](self-hosting.md) | **Self-host guide** — Docker Compose setup, every env var, GitHub App + Linear OAuth integration setup, production checklist. |
+
 ## Deployment & operations
 
 | Doc | What it covers |
 |-----|----------------|
-| [deployment/bootstrap.md](deployment/bootstrap.md) | **One-time AWS setup runbook** — state buckets, OIDC, IAM roles, hosted zones, first apply. Start here for a fresh account. |
+| [deployment/bootstrap.md](deployment/bootstrap.md) | **One-time AWS setup runbook** — state buckets, OIDC, IAM roles, hosted zones, first apply. Start here for a fresh AWS account. |
 | [deployment/cicd.md](deployment/cicd.md) | GitHub Actions workflows: PR checks and beta/prod deploys. |
 | [deployment/aws-sso.md](deployment/aws-sso.md) | Local AWS access via SSO profiles in the dev container. |
 
@@ -31,6 +37,7 @@ docs live here under `docs/`.
 
 ## Quick links
 
+- Self-host with Docker Compose → [self-hosting guide](self-hosting.md)
 - New AWS account → [bootstrap runbook](deployment/bootstrap.md)
 - Can't `aws sso login` → [AWS SSO troubleshooting](deployment/aws-sso.md#troubleshooting)
 - How a deploy happens → [CI/CD](deployment/cicd.md)
