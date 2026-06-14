@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from tests.conftest import auth_headers, login_user, register_user
 
-from app.auth.oauth import github_oauth_client
+from app.auth.github_oauth import github_oauth_client
 from app.db.session import async_session_maker
 from app.models.connected_account import ConnectedAccount
 from app.models.enums import (
@@ -20,8 +20,9 @@ from app.models.enums import (
 )
 from app.models.external_identity import ExternalIdentity
 from app.models.membership import TenantMembership
+from app.models.oauth_account import OAuthAccount
 from app.models.tenant import Tenant
-from app.models.user import OAuthAccount, User
+from app.models.user import User
 from app.services import github_link
 
 _GITHUB = IntegrationProvider.github.value
