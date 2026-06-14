@@ -65,9 +65,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "UPDATE tenant_invites SET role = 'member' WHERE role::text = 'member'"
-    )
+    op.execute("UPDATE tenant_invites SET role = 'member' WHERE role::text = 'member'")
     op.execute(
         "UPDATE tenant_role_permissions SET permission = 'invites:role:individual' "
         "WHERE permission = 'invites:role:member'"
@@ -79,9 +77,7 @@ def downgrade() -> None:
     op.execute(
         "UPDATE tenant_role_permissions SET role = 'individual' WHERE role = 'member'"
     )
-    op.execute(
-        "UPDATE tenant_role_permissions SET role = 'admin' WHERE role = 'owner'"
-    )
+    op.execute("UPDATE tenant_role_permissions SET role = 'admin' WHERE role = 'owner'")
 
     # Cannot remove 'admin' enum value in Postgres; rename back what we can.
     op.execute("ALTER TYPE role RENAME VALUE 'member' TO 'individual'")

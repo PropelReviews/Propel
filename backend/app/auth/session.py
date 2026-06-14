@@ -15,9 +15,10 @@ SESSION_USER_ID_KEY = "user_id"
 
 def get_session_secret() -> str:
     settings = get_settings()
-    if settings.app_env.lower() in {"production", "prod", "beta"} and len(
-        settings.session_secret
-    ) < 32:
+    if (
+        settings.app_env.lower() in {"production", "prod", "beta"}
+        and len(settings.session_secret) < 32
+    ):
         raise RuntimeError("SESSION_SECRET must be at least 32 characters")
     return settings.session_secret
 

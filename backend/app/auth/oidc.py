@@ -19,8 +19,7 @@ def register_oidc_client() -> None:
         server_metadata_url=_settings.zitadel_oidc_metadata_url,
         client_kwargs={
             "scope": (
-                "openid email profile "
-                "urn:zitadel:iam:org:id: urn:zitadel:iam:org:name:"
+                "openid email profile urn:zitadel:iam:org:id: urn:zitadel:iam:org:name:"
             ),
             "token_endpoint_auth_method": "client_secret_basic",
         },

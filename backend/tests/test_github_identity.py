@@ -142,9 +142,7 @@ async def test_org_admin_provisions_as_propel_admin(clean_db):
 async def test_links_existing_user_by_email(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
-        user = User(
-            email="dev@acme.com", is_active=True, email_verified=True
-        )
+        user = User(email="dev@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         await _add_raw(
@@ -169,9 +167,7 @@ async def test_links_existing_user_by_email(clean_db):
 async def test_links_existing_user_by_oauth_id(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
-        user = User(
-            email="gh@acme.com", is_active=True, email_verified=True
-        )
+        user = User(email="gh@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         session.add(
@@ -251,9 +247,7 @@ async def test_resync_is_idempotent(clean_db):
 async def test_last_admin_is_not_demoted(clean_db):
     async with async_session_maker() as session:
         account = await _seed_account(session)
-        user = User(
-            email="boss@acme.com", is_active=True, email_verified=True
-        )
+        user = User(email="boss@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         session.add(
@@ -306,9 +300,7 @@ async def test_retroactive_oauth_link_claims_pending_identity(clean_db):
                 github_org_role=GitHubOrgRole.member.value,
             )
         )
-        user = User(
-            email="late@acme.com", is_active=True, email_verified=True
-        )
+        user = User(email="late@acme.com", is_active=True, email_verified=True)
         session.add(user)
         await session.flush()
         await session.commit()
