@@ -142,6 +142,7 @@ export async function joinWaitlist(input: { email: string }): Promise<{
 }> {
   const response = await fetch(`${API_BASE}/api/v1/waitlist`, {
     method: "POST",
+    credentials: fetchCredentials,
     headers: apiHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ email: input.email }),
   });

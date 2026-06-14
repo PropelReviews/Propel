@@ -38,7 +38,7 @@ function mountAt(path: string): HTMLElement {
 
 describe("RequireAuth", () => {
   it("redirects anonymous users to the sign-in page", async () => {
-    mockApi({});
+    mockApi({ user: null });
     const container = mountAt("/private");
 
     await waitFor(() => container.textContent!.includes("Sign in page"));

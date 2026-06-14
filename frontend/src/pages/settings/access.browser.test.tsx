@@ -23,7 +23,7 @@ const selfAdmin = makeMember({
   user_id: TEST_USER.id,
   email: TEST_USER.email,
   name: "Sam Self",
-  role: "admin",
+  role: "owner",
   github_login: "sam-self",
 });
 
@@ -31,7 +31,7 @@ const otherAdmin = makeMember({
   user_id: "user-2",
   email: "ada@example.com",
   name: "Ada Admin",
-  role: "admin",
+  role: "owner",
 });
 
 const manager = makeMember({
@@ -78,6 +78,16 @@ const CATALOG: PermissionDefinition[] = [
 ];
 
 const ROLE_PERMS: RolePermissions[] = [
+  {
+    role: "owner",
+    permissions: [
+      "tenant:update",
+      "members:assign_role",
+      "members:remove",
+      "invites:read",
+      "roles:manage",
+    ],
+  },
   {
     role: "admin",
     permissions: [
@@ -150,20 +160,20 @@ describe("AccessPage members tab", () => {
     expect(findRow(container, "Max Manager").textContent).toContain("—");
   });
 
-  it("shows a locked role badge instead of a select for the last admin", async () => {
+  it("shows a locked role badge instead of a select for the last owner", async () => {
     const { container } = await mountAccess(
       ["members:read", "members:assign_role", "members:remove"],
       { members: [selfAdmin, manager] },
     );
     await waitFor(() => container.textContent!.includes("Sam Self"));
 
-    // Sole admin: no role select, outline badge with the role label instead.
-    const adminRow = findRow(container, "Sam Self");
-    expect(adminRow.querySelector('[data-slot="select-trigger"]')).toBeNull();
-    const badges = [...adminRow.querySelectorAll('[data-slot="badge"]')].map(
+    // Sole owner: no role select, outline badge with the role label instead.
+    const ownerRow = findRow(container, "Sam Self");
+    expect(ownerRow.querySelector('[data-slot="select-trigger"]')).toBeNull();
+    const badges = [...ownerRow.querySelectorAll('[data-slot="badge"]')].map(
       (b) => b.textContent,
     );
-    expect(badges).toContain("Admin");
+    expect(badges).toContain("Owner");
 
     // Other members keep an editable role select.
     const managerRow = findRow(container, "Max Manager");
@@ -179,7 +189,7 @@ describe("AccessPage members tab", () => {
     );
     await waitFor(() => container.textContent!.includes("Ada Admin"));
 
-    // Two admins, so neither is the last admin; self still can't remove self.
+    // Two owners, so neither is the last owner; self still can't remove self.
     expect(findButton(findRow(container, "Sam Self"), "Remove")).toBeUndefined();
     expect(findButton(findRow(container, "Ada Admin"), "Remove")).not.toBeUndefined();
   });
@@ -254,11 +264,11 @@ describe("AccessPage invites tab", () => {
     await openTab(container, "Invites");
     await waitFor(() => container.textContent!.includes("Invite someone"));
 
-    // Default role is Individual when invitable.
+    // Default role is Member when invitable.
     const trigger = container.querySelector<HTMLButtonElement>(
       '[data-slot="select-trigger"]',
     )!;
-    expect(trigger.textContent).toContain("Individual");
+    expect(trigger.textContent).toContain("Member");
 
     await userEvent.click(trigger);
     await waitFor(
@@ -267,7 +277,7 @@ describe("AccessPage invites tab", () => {
     const options = [
       ...document.body.querySelectorAll('[data-slot="select-item"]'),
     ].map((o) => o.textContent);
-    expect(options).toEqual(["Manager", "Individual"]);
+    expect(options).toEqual(["Manager", "Member"]);
     await userEvent.keyboard("{Escape}");
 
     // The pending invites table renders with a revoke action.
@@ -324,11 +334,11 @@ describe("AccessPage roles tab", () => {
     }
     // One switch per role per permission.
     expect(container.querySelectorAll('[data-slot="switch"]').length).toBe(
-      CATALOG.length * 3,
+      CATALOG.length * 4,
     );
   });
 
-  it("disables locked admin switches but not other cells", async () => {
+  it("disables locked owner switches but not other cells", async () => {
     const { container } = await mountAccess(ROLES_TAB_PERMS, {
       members: [selfAdmin],
       catalog: CATALOG,
@@ -342,11 +352,11 @@ describe("AccessPage roles tab", () => {
         `[data-slot="switch"][aria-label="${label}"]`,
       )!;
 
-    // tenant:update and members:assign_role are locked for admin.
-    expect(switchFor("Admin: Update workspace").disabled).toBe(true);
-    expect(switchFor("Admin: Assign roles").disabled).toBe(true);
+    // tenant:update and members:assign_role are locked for owner.
+    expect(switchFor("Owner: Update workspace").disabled).toBe(true);
+    expect(switchFor("Owner: Assign roles").disabled).toBe(true);
     // members:remove is not locked, and other roles are always editable.
-    expect(switchFor("Admin: Remove members").disabled).toBe(false);
+    expect(switchFor("Owner: Remove members").disabled).toBe(false);
     expect(switchFor("Manager: Update workspace").disabled).toBe(false);
     // Granted state reflects the fetched role permissions.
     expect(switchFor("Admin: Remove members").dataset.state).toBe("checked");

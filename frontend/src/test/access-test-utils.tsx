@@ -73,7 +73,8 @@ export type RecordedCall = {
 };
 
 export type MockApiOptions = {
-  user?: AuthUser;
+  /** When `null`, `/api/v1/auth/me` returns 401. Defaults to TEST_USER. */
+  user?: AuthUser | null;
   tenants?: Tenant[];
   members?: Member[];
   invites?: Invite[];
@@ -90,7 +91,7 @@ export type MockApiOptions = {
  */
 export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] } {
   const {
-    user = TEST_USER,
+    user: userOption,
     tenants = [],
     members = [],
     invites = [],
@@ -98,6 +99,7 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
     rolePermissions = [],
     hang,
   } = options;
+  const user = userOption === undefined ? TEST_USER : userOption;
   const calls: RecordedCall[] = [];
 
   const json = (data: unknown, status = 200) =>
@@ -126,6 +128,9 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
       }
 
       if (method === "GET" && path === "/api/v1/auth/me") {
+        if (user === null) {
+          return Promise.resolve(json({ detail: "Not authenticated" }, 401));
+        }
         return Promise.resolve(json(user));
       }
       if (method === "GET" && path === "/api/v1/tenants/") {

@@ -152,8 +152,8 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
     };
   }, [token, tenantId]);
 
-  const adminCount = useMemo(
-    () => (members ?? []).filter((m) => m.role === "admin").length,
+  const ownerCount = useMemo(
+    () => (members ?? []).filter((m) => m.role === "owner").length,
     [members],
   );
 
@@ -216,7 +216,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
           <TableBody>
             {members.map((member) => {
               const isSelf = member.user_id === user?.id;
-              const isLastAdmin = member.role === "admin" && adminCount === 1;
+              const isLastOwner = member.role === "owner" && ownerCount === 1;
               return (
                 <TableRow key={member.user_id}>
                   <TableCell>
@@ -239,7 +239,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
                     {formatDate(member.created_at)}
                   </TableCell>
                   <TableCell>
-                    {canAssign && !isLastAdmin ? (
+                    {canAssign && !isLastOwner ? (
                       <Select
                         value={member.role}
                         disabled={busyUserId === member.user_id}
@@ -262,7 +262,7 @@ function MembersTab({ token, tenantId }: { token: string; tenantId: string }) {
                   </TableCell>
                   {canRemove && (
                     <TableCell className="text-right">
-                      {!isSelf && !isLastAdmin && (
+                      {!isSelf && !isLastOwner && (
                         <RemoveMemberDialog
                           member={member}
                           busy={busyUserId === member.user_id}
@@ -557,7 +557,10 @@ function RolesTab({
         if (cancelled) return;
         setCatalog(defs);
         const next = Object.fromEntries(
-          rolePerms.map((rp) => [rp.role, new Set(rp.permissions)]),
+          ROLES.map((role) => [
+            role,
+            new Set(rolePerms.find((rp) => rp.role === role)?.permissions ?? []),
+          ]),
         ) as RoleGrants;
         setGrants(next);
         setDirtyRoles(new Set());
@@ -705,7 +708,7 @@ function GroupRows({
           </TableCell>
           {ROLES.map((role) => {
             const locked =
-              role === "admin" && LOCKED_ADMIN_PERMISSIONS.includes(def.key);
+              role === "owner" && LOCKED_ADMIN_PERMISSIONS.includes(def.key);
             return (
               <TableCell key={role} className="text-center">
                 <Switch
