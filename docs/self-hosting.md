@@ -34,7 +34,9 @@ Browser (React SPA)
 
 | Service | Default port | Role |
 |---------|--------------|------|
-| `postgres` | 5432 | Application database |
+| `postgres` | 5432 | Application database (+ dedicated `zitadel` database) |
+| `zitadel` | 8080 | Self-hosted identity provider (OIDC) |
+| `zitadel-login` | 3002 | Zitadel hosted login UI |
 | `backend` | 8000 | FastAPI API, auth, webhooks, connection management |
 | `frontend` | 5173 | React dashboard (Vite dev server in Compose; static build in production) |
 | `ingestion` | 3001 | Dagster webserver + daemon (hourly data extraction) |
@@ -61,11 +63,10 @@ cd Propel
 cp .env.example .env
 ```
 
-Edit `.env` — at minimum set a strong `JWT_SECRET` before exposing the stack
-beyond localhost:
+Edit `.env` — for anything beyond localhost, set a strong `SESSION_SECRET`:
 
 ```bash
-openssl rand -hex 32   # paste into JWT_SECRET=
+openssl rand -hex 32   # paste into SESSION_SECRET= after bootstrap (or let setup script generate it)
 ```
 
 ### 2. Start the stack
@@ -81,21 +82,52 @@ container installs Meltano plugins on first boot (can take several minutes).
 |-----|---------|
 | <http://localhost:5173> | Dashboard |
 | <http://localhost:8000/health> | API health check |
+| <http://localhost:8080> | Zitadel console |
+| <http://localhost:3002/ui/v2/login> | Zitadel login UI |
 | <http://localhost:3001> | Dagster UI |
 
-### 3. Create your first user
+### 3. Bootstrap auth (Zitadel OIDC)
 
-With `AUTH_REGISTRATION_ENABLED=true` (the `.env.example` default), register at
-the sign-up screen or via the API:
+Propel uses **Zitadel** as the identity provider. Email sign-up, password reset,
+MFA, and optional GitHub login are handled on Zitadel's hosted login UI — the
+SPA redirects to the FastAPI BFF, which sets an httpOnly session cookie.
+
+`docker compose up` runs the **`zitadel-oidc-init`** one-shot service after
+Zitadel is healthy. It writes `ZITADEL_CLIENT_ID`, `ZITADEL_CLIENT_SECRET`, and
+`SESSION_SECRET` into `.env` when those keys are missing (idempotent skip
+otherwise). The backend starts only after init completes.
+
+To re-run manually:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"your-secure-password"}'
+./scripts/setup-zitadel-oidc.sh
+docker compose restart backend
 ```
 
-When PostHog is not configured, also set `VITE_AUTH_ENABLED=true` in `.env` and
-restart the frontend so the auth UI is visible.
+The script creates the Propel OIDC application in Zitadel and optionally
+registers GitHub as an external IdP when `GITHUB_APP_CLIENT_ID` /
+`GITHUB_APP_CLIENT_SECRET` are set. GitHub sign-in disables IdP auto-create
+(because many GitHub profiles lack a first name); first-time GitHub users
+complete a short registration step on the Zitadel login UI instead.
+
+If bootstrap fails with "No Zitadel PAT found", recreate the Zitadel database and
+bootstrap volume (required once after adding `ZITADEL_FIRSTINSTANCE_PATPATH` to
+`docker-compose.yml`):
+
+```bash
+docker compose stop zitadel zitadel-login backend
+docker compose exec postgres psql -U propel -c 'DROP DATABASE IF EXISTS zitadel WITH (FORCE);'
+docker compose exec postgres psql -U propel -c 'CREATE DATABASE zitadel;'
+docker compose rm -sf zitadel zitadel-login
+docker volume rm propel_zitadel-bootstrap
+docker compose up -d zitadel zitadel-login
+./scripts/setup-zitadel-oidc.sh
+docker compose restart backend
+```
+
+When PostHog is not configured, set `VITE_AUTH_ENABLED=true` in `.env` and
+restart the frontend so the auth UI is visible. Then sign in at
+<http://localhost:5173/signin>.
 
 ### 4. Configure integrations
 
@@ -120,8 +152,8 @@ public-facing install you will need:
 3. **Matching env vars** — set `OAUTH_CALLBACK_BASE_URL`,
    `FRONTEND_BASE_URL`, `CORS_ALLOWED_ORIGINS`, and `VITE_API_URL` to your
    public URLs.
-4. **`APP_ENV=production`** — the API rejects weak `JWT_SECRET` values in
-   production.
+4. **`APP_ENV=production`** — the API rejects weak `SESSION_SECRET` values and
+   requires Zitadel OIDC credentials in production.
 
 ### Building the frontend for production
 
@@ -169,16 +201,19 @@ backend and ingestion containers; frontend build-time vars are noted separately.
 | `POSTGRES_PASSWORD` | **Yes** | Postgres password |
 | `POSTGRES_DB` | No | Database name (default `propel`) |
 | `DATABASE_URL` | **Yes** | SQLAlchemy URL. Compose overrides this for container networking; use `postgresql://user:pass@postgres:5432/propel` inside Compose, `localhost` when running the API on the host |
-| `JWT_SECRET` | **Yes** | Signs session JWTs and GitHub install-state HMACs. Generate with `openssl rand -hex 32`. Must be ≥ 32 characters when `APP_ENV` is `production` or `beta` |
+| `SESSION_SECRET` | **Yes** | Signs the BFF session cookie and GitHub install-state HMACs. Generate with `openssl rand -hex 32`. Must be ≥ 32 characters when `APP_ENV` is `production` or `beta` |
 | `APP_ENV` | No | `development` (default), `beta`, or `production`. Controls startup validation |
 
-### Auth and signup
+### Auth (Zitadel OIDC)
 
 | Variable | Secret? | Default | Description |
 |----------|---------|---------|-------------|
-| `AUTH_REGISTRATION_ENABLED` | No | `false` | Allow `POST /api/v1/auth/register`. Set `true` for open signup |
-| `JWT_LIFETIME_SECONDS` | No | `3600` | Session token lifetime |
-| `AUTH_RATE_LIMIT_MAX_REQUESTS` | No | `10` | Per-IP login/register rate limit |
+| `ZITADEL_ISSUER` | No | `http://localhost:8080` | Public OIDC issuer (browser redirects) |
+| `ZITADEL_INTERNAL_ISSUER` | No | same as issuer | Server-side OIDC metadata/token URL inside Compose (`http://zitadel:8080`) |
+| `ZITADEL_CLIENT_ID` | No | — | OIDC client ID (written by `./scripts/setup-zitadel-oidc.sh`) |
+| `ZITADEL_CLIENT_SECRET` | **Yes** | — | OIDC client secret |
+| `ZITADEL_MGMT_TOKEN` | **Yes** | — | Zitadel service-user PAT for org/user provisioning (optional in local dev) |
+| `AUTH_RATE_LIMIT_MAX_REQUESTS` | No | `10` | Per-IP login rate limit |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | No | `60` | Rate-limit window |
 
 ### URLs and CORS
@@ -245,6 +280,18 @@ Register these redirect URLs on the **API** origin:
 | Sign in / sign up | `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/login/callback` |
 | Connect with GitHub (profile) | `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/link/callback` |
 | fastapi-users built-in | `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/callback` |
+
+**Sign in with GitHub via Zitadel** (hosted login UI) uses a **Zitadel** callback,
+not Propel. Register this on the same GitHub OAuth client configured as Zitadel's
+GitHub IdP:
+
+| Flow | Redirect URL (local) |
+|------|----------------------|
+| GitHub → Zitadel IdP (Login v2) | `http://localhost/idps/callback` **or** `http://localhost:8080/idps/callback` |
+
+Local Zitadel often emits `http://localhost/idps/callback` (port 80, no `:8080`).
+`docker-compose.yml` maps `127.0.0.1:80 → zitadel:8080` so that redirect works.
+Register **both** URLs on GitHub if unsure which your instance sends.
 
 When using the GitHub App for login, also add the sign-in and link callback URLs
 to the App's **User authorization callback URL** list.

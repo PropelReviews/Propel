@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Self
+from urllib.parse import urlparse
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,9 +22,13 @@ class Settings(BaseSettings):
     # Zitadel OIDC (identity provider). When disabled (e.g. unit tests), use
     # POST /api/v1/auth/test/login instead.
     zitadel_issuer: str = "http://localhost:8080"
+    # Server-side OIDC discovery/token calls (defaults to public issuer).
+    zitadel_internal_issuer: str = ""
     zitadel_client_id: str = ""
     zitadel_client_secret: str = ""
     zitadel_mgmt_token: str = ""
+    # Default Zitadel org for org-scoped OIDC claims (local bootstrap writes this).
+    zitadel_org_id: str = ""
 
     auth_rate_limit_max_requests: int = 10
     auth_rate_limit_window_seconds: int = 60
@@ -114,9 +119,23 @@ class Settings(BaseSettings):
         return bool(self.zitadel_client_id and self.zitadel_client_secret)
 
     @property
+    def zitadel_host_header(self) -> str:
+        return urlparse(self.zitadel_issuer).hostname or "localhost"
+
+    @property
+    def zitadel_internal_issuer_url(self) -> str:
+        return (self.zitadel_internal_issuer or self.zitadel_issuer).rstrip("/")
+
+    @property
     def zitadel_oidc_metadata_url(self) -> str:
-        issuer = self.zitadel_issuer.rstrip("/")
-        return f"{issuer}/.well-known/openid-configuration"
+        return f"{self.zitadel_internal_issuer_url}/.well-known/openid-configuration"
+
+    @property
+    def zitadel_oidc_scopes(self) -> str:
+        scopes = ["openid", "email", "profile"]
+        if self.zitadel_org_id:
+            scopes.append(f"urn:zitadel:iam:org:id:{self.zitadel_org_id}")
+        return " ".join(scopes)
 
     @property
     def is_test_env(self) -> bool:

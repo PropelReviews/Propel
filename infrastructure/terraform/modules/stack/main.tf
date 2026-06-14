@@ -42,9 +42,30 @@ locals {
     ["http://localhost:5173", "http://localhost:3000"],
   )))
 
-  api_app_environment = merge(var.app_environment, {
-    CORS_ALLOWED_ORIGINS = local.cors_allowed_origins
-  })
+  # ZITADEL_CLIENT_ID/SECRET are managed as Secrets Manager entries by the api
+  # module (zitadel.tf) and injected as container *secrets*. Strip any stale
+  # copies that arrive via Actions variables so they don't collide (ECS rejects
+  # the same key in both `environment` and `secrets`).
+  app_environment_clean = {
+    for k, v in var.app_environment :
+    k => v if !contains(["ZITADEL_CLIENT_ID", "ZITADEL_CLIENT_SECRET"], k)
+  }
+
+  api_app_environment = merge(
+    local.app_environment_clean,
+    {
+      CORS_ALLOWED_ORIGINS = local.cors_allowed_origins
+    },
+    # The API talks to a single shared Zitadel instance (hosted in prod).
+    # zitadel_issuer_url is that public URL — prod points at its own auth.<zone>,
+    # beta points cross-account at the prod instance. Both issuer values are the
+    # public URL (no internal Cloud Map across accounts). The OIDC client
+    # id/secret are provisioned into this account's Secrets Manager by bootstrap.
+    var.zitadel_issuer_url != "" ? {
+      ZITADEL_ISSUER          = var.zitadel_issuer_url
+      ZITADEL_INTERNAL_ISSUER = var.zitadel_issuer_url
+    } : {},
+  )
 }
 
 module "network" {
@@ -74,6 +95,7 @@ module "dns" {
   api_fqdn      = var.api_fqdn
   app_fqdn      = var.app_fqdn
   dagster_fqdn  = var.ingestion_enabled ? var.dagster_fqdn : ""
+  auth_fqdn     = var.zitadel_enabled ? var.auth_fqdn : ""
   landing_fqdns = var.landing_fqdns
   tags          = var.tags
 }
@@ -100,6 +122,13 @@ module "api" {
 
   dask_enabled          = var.dask_enabled
   dask_worker_max_count = var.dask_worker_max_count
+
+  zitadel_enabled     = var.zitadel_enabled
+  zitadel_issuer_url  = var.zitadel_issuer_url
+  auth_fqdn           = var.auth_fqdn
+  db_cluster_endpoint = module.database.cluster_endpoint
+  db_master_username  = module.database.master_username
+  db_master_password  = module.database.master_password
 
   tags = var.tags
 }
@@ -140,6 +169,20 @@ resource "aws_route53_record" "dagster" {
   count   = var.ingestion_enabled ? 1 : 0
   zone_id = var.zone_id
   name    = var.dagster_fqdn
+  type    = "A"
+
+  alias {
+    name                   = module.api.alb_dns_name
+    zone_id                = module.api.alb_zone_id
+    evaluate_target_health = true
+  }
+}
+
+# auth.<zone> -> ALB (host-based routing to the Zitadel target groups)
+resource "aws_route53_record" "auth" {
+  count   = var.zitadel_enabled ? 1 : 0
+  zone_id = var.zone_id
+  name    = var.auth_fqdn
   type    = "A"
 
   alias {

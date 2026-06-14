@@ -15,7 +15,7 @@ from app.auth.session import (
 from app.config import get_settings
 from app.db.session import get_async_session
 from app.models.user import User
-from app.schemas.user import GitHubConnection, GitHubLinkURL, UserMeRead
+from app.schemas.user import AuthConfigRead, GitHubConnection, GitHubLinkURL, UserMeRead
 from app.services import github_identity, github_link
 
 logger = logging.getLogger("propel.auth")
@@ -29,6 +29,16 @@ def _callback_url(request: Request) -> str:
 
 def _post_login_redirect(request: Request) -> str:
     return request.session.pop("post_login_redirect", settings.frontend_base_url)
+
+
+@router.get("/config", response_model=AuthConfigRead)
+async def auth_config(request: Request):
+    """Public auth configuration for the SPA sign-in flow."""
+    login_url = str(request.url_for("login"))
+    return AuthConfigRead(
+        oidc_enabled=settings.zitadel_oidc_enabled,
+        login_url=login_url,
+    )
 
 
 @router.get("/login")
@@ -58,6 +68,16 @@ async def oidc_callback(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OIDC_NOT_CONFIGURED",
         )
+    if request.query_params.get("error"):
+        logger.warning(
+            "OIDC provider returned error: %s",
+            request.query_params.get("error_description")
+            or request.query_params.get("error"),
+        )
+        return RedirectResponse(
+            url=f"{settings.frontend_base_url}/signin?error=oidc_failed",
+            status_code=303,
+        )
     try:
         token = await oauth.zitadel.authorize_access_token(request)
         userinfo = token.get("userinfo") or await oauth.zitadel.parse_id_token(
@@ -86,6 +106,7 @@ async def oidc_callback(
         org_id=userinfo.get("urn:zitadel:iam:org:id"),
         org_name=userinfo.get("urn:zitadel:iam:org:name"),
         name=userinfo.get("name") or userinfo.get("preferred_username"),
+        roles=userinfo.get("urn:zitadel:iam:org:project:roles"),
     )
     establish_session(request, user)
     return RedirectResponse(url=_post_login_redirect(request), status_code=303)

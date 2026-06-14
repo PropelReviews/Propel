@@ -25,6 +25,31 @@ async def test_oidc_login_503_when_not_configured(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_auth_config_reports_oidc_disabled(client: AsyncClient):
+    response = await client.get("/api/v1/auth/config")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["oidc_enabled"] is False
+    assert payload["login_url"].endswith("/api/v1/auth/login")
+
+
+@pytest.mark.asyncio
+async def test_auth_config_reports_oidc_enabled(client: AsyncClient, monkeypatch):
+    import app.routers.auth as auth_router
+
+    monkeypatch.setattr(auth_router.settings, "zitadel_client_id", "local-dev-client")
+    monkeypatch.setattr(
+        auth_router.settings, "zitadel_client_secret", "local-dev-secret"
+    )
+
+    response = await client.get("/api/v1/auth/config")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["oidc_enabled"] is True
+    assert payload["login_url"].endswith("/api/v1/auth/login")
+
+
+@pytest.mark.asyncio
 async def test_oidc_login_redirects_when_configured(client: AsyncClient, monkeypatch):
     from fastapi.responses import RedirectResponse
 

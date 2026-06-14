@@ -32,6 +32,12 @@ variable "dagster_subdomain" {
   description = "Subdomain label for the Dagster ingestion UI."
 }
 
+variable "auth_subdomain" {
+  type        = string
+  default     = "auth"
+  description = "Subdomain label for the Zitadel identity provider."
+}
+
 variable "beta_zone_name" {
   type        = string
   default     = "beta.propel.ninja"
@@ -88,4 +94,10 @@ variable "dagster_allowed_cidrs" {
   type        = list(string)
   default     = []
   description = "Source IP CIDRs allowed to reach the Dagster UI. Empty = open (no auth)."
+}
+
+variable "zitadel_enabled" {
+  type        = bool
+  default     = false
+  description = "Host the single shared Zitadel instance behind auth.<zone> (prod owns it). Default false until the first apply that stands it up; set true to provision."
 }

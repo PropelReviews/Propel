@@ -18,6 +18,14 @@ output "dask_worker_service_name" {
   value = local.dask_enabled ? aws_ecs_service.dask_workers[0].name : null
 }
 
+output "zitadel_service_name" {
+  value = local.zitadel_enabled ? aws_ecs_service.zitadel[0].name : null
+}
+
+output "zitadel_login_service_name" {
+  value = local.zitadel_enabled ? aws_ecs_service.zitadel_login[0].name : null
+}
+
 output "alb_dns_name" {
   value = aws_lb.this.dns_name
 }

@@ -5,7 +5,7 @@ description: Conventions and commands for the Propel FastAPI backend — adding 
 
 # Propel Backend
 
-FastAPI + SQLAlchemy 2.0 async (asyncpg) + Alembic + fastapi-users. Python 3.12, managed with `uv`. All commands run from `backend/`.
+FastAPI + SQLAlchemy 2.0 async (asyncpg) + Alembic + Zitadel OIDC BFF. Python 3.12, managed with `uv`. All commands run from `backend/`.
 
 ## Commands
 
@@ -16,7 +16,7 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "description"
 
 # Tests (test DB is propel_test; create once: docker compose exec postgres createdb -U propel propel_test)
-DATABASE_URL=postgresql://propel:propel@localhost:5432/propel_test JWT_SECRET=test-secret uv run pytest
+DATABASE_URL=postgresql://propel:propel@localhost:5432/propel_test APP_ENV=test uv run pytest
 ```
 
 DB host is `localhost` from the host/dev container, `postgres` inside compose services.
@@ -30,18 +30,18 @@ DB host is `localhost` from the host/dev container, `postgres` inside compose se
 - `schemas/` — Pydantic DTOs: `*Create` / `*Update` / `*Read` (reads use `ConfigDict(from_attributes=True)`)
 - `routers/` — thin HTTP layer, prefix `/api/v1/...`
 - `services/` — business logic; services own `session.commit()` / `rollback()` and map errors to `HTTPException` (e.g. `IntegrityError` → 409)
-- `auth/` — fastapi-users, JWT, OAuth, RBAC deps, rate-limit middleware
+- `auth/` — Zitadel OIDC BFF session cookie, JIT reconcile, RBAC deps, rate-limit middleware
 - `ingestion/` — Meltano orchestrator + CLI (see `propel-data-pipeline` skill)
 
 ## Auth & multi-tenancy (critical)
 
 - **No Postgres RLS.** Tenancy is enforced in Python only: every tenant-scoped query must filter by `tenant_id`, and tenant routes must use the deps in `app/auth/dependencies.py` (`require_member`, `require_admin`, `require_invite_manager` → yields `TenantContext(tenant, membership)`).
 - Non-members get **404** (not 403) — never reveal a tenant's existence.
-- Roles: `admin` / `manager` / `individual` (`Role` Postgres enum); permission matrix in `auth/permissions.py`.
+- Roles: `owner` / `admin` / `manager` / `member` (`Role` Postgres enum); permission matrix in `auth/permissions.py`.
 - User-only (non-tenant) routes use `Depends(current_active_user)`.
-- `oauth_accounts` = sign-in identity; `connected_accounts` = tenant-scoped tool installs (GitHub App). Different things — see `docs/backend/data-model.md`.
-- Login is fastapi-users OAuth2 password flow: form-encoded with field `username` (the email).
-- Registration is gated by `AUTH_REGISTRATION_ENABLED` env / PostHog flag, fail-closed.
+- `oauth_accounts` = GitHub link identity; `connected_accounts` = tenant-scoped tool installs (GitHub App). Different things — see `docs/backend/data-model.md`.
+- Login: `GET /api/v1/auth/login` → Zitadel hosted UI → `GET /api/v1/auth/callback` sets httpOnly `propel_session` cookie. Local bootstrap: `./scripts/setup-zitadel-oidc.sh`.
+- Tests use `POST /api/v1/auth/test/login` when `APP_ENV=test` (see `tests/conftest.py`).
 
 ## Adding an endpoint
 
@@ -64,7 +64,7 @@ DB host is `localhost` from the host/dev container, `postgres` inside compose se
 
 - After `uv add`, run `docker compose restart backend` (container venv `/opt/venv` is separate from `backend/.venv`).
 - In-memory per-IP rate limiter on login/register; tests reset it via an autouse fixture.
-- `JWT_SECRET` must be ≥32 chars when `APP_ENV` is production/beta.
+- `SESSION_SECRET` must be ≥32 chars when `APP_ENV` is production/beta; Zitadel OIDC credentials required in prod/beta.
 - Ingestion integration tests are a separate suite: `uv pip install -e meltano/target-propel`, migrate manually, then `uv run --no-sync pytest meltano/target-propel/tests -v`.
 - Dagster keeps its own `dagster` Postgres schema — not managed by Alembic; leave it alone.
 - `backend/cron/` is legacy (superseded by Dagster); don't extend it.

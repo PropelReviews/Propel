@@ -43,23 +43,38 @@ resource "aws_ecr_lifecycle_policy" "api" {
 }
 
 # ------------------------------------------------------------------------------
-# JWT signing secret — generated on first apply (same pattern as the DB password).
-# Stored in Secrets Manager; never passed through CI.
+# BFF session cookie signing secret — generated on first apply (same pattern as
+# the DB password). Stored in Secrets Manager; never passed through CI.
 # ------------------------------------------------------------------------------
-resource "random_password" "jwt_secret" {
+moved {
+  from = random_password.jwt_secret
+  to   = random_password.session_secret
+}
+
+moved {
+  from = aws_secretsmanager_secret.jwt_secret
+  to   = aws_secretsmanager_secret.session_secret
+}
+
+moved {
+  from = aws_secretsmanager_secret_version.jwt_secret
+  to   = aws_secretsmanager_secret_version.session_secret
+}
+
+resource "random_password" "session_secret" {
   length  = 64
   special = false
 }
 
-resource "aws_secretsmanager_secret" "jwt_secret" {
-  name        = "${var.name_prefix}/app/JWT_SECRET"
-  description = "JWT signing secret for the ${var.name_prefix} API."
+resource "aws_secretsmanager_secret" "session_secret" {
+  name        = "${var.name_prefix}/app/SESSION_SECRET"
+  description = "BFF session cookie signing secret for the ${var.name_prefix} API."
   tags        = var.tags
 }
 
-resource "aws_secretsmanager_secret_version" "jwt_secret" {
-  secret_id     = aws_secretsmanager_secret.jwt_secret.id
-  secret_string = random_password.jwt_secret.result
+resource "aws_secretsmanager_secret_version" "session_secret" {
+  secret_id     = aws_secretsmanager_secret.session_secret.id
+  secret_string = random_password.session_secret.result
 
   lifecycle {
     ignore_changes = [secret_string]
@@ -67,21 +82,29 @@ resource "aws_secretsmanager_secret_version" "jwt_secret" {
 }
 
 # ------------------------------------------------------------------------------
-# External application secrets (OAuth client secrets, etc.). Each entry in
-# var.app_secrets becomes a Secrets Manager secret injected into the task.
-# JWT_SECRET is managed separately above — do not pass it here.
+# External application secrets (OAuth client secrets, Zitadel OIDC, etc.). Each
+# entry in var.app_secrets becomes a Secrets Manager secret injected into the
+# task. SESSION_SECRET is managed separately above — do not pass it here.
 # ------------------------------------------------------------------------------
 locals {
   external_app_secrets = {
-    for key, value in var.app_secrets : key => value if key != "JWT_SECRET"
+    for key, value in var.app_secrets : key => value
+    if !contains(["JWT_SECRET", "SESSION_SECRET"], key)
   }
 
   # Secrets injected into every task that runs the app (API service + the
   # scheduled ingestion task), so both share one source of truth.
   container_secrets = concat(
     [{ name = "DATABASE_URL", valueFrom = var.database_url_secret_arn }],
-    [{ name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn }],
+    [{ name = "SESSION_SECRET", valueFrom = aws_secretsmanager_secret.session_secret.arn }],
     [for k in nonsensitive(keys(local.external_app_secrets)) : { name = k, valueFrom = aws_secretsmanager_secret.app[k].arn }],
+    # OIDC client id/secret are Terraform-managed placeholders overwritten by the
+    # Zitadel bootstrap step (see zitadel.tf); injected in every environment that
+    # consumes Zitadel (beta consumes the shared prod instance).
+    local.zitadel_consumer ? [
+      { name = "ZITADEL_CLIENT_ID", valueFrom = aws_secretsmanager_secret.zitadel_client_id[0].arn },
+      { name = "ZITADEL_CLIENT_SECRET", valueFrom = aws_secretsmanager_secret.zitadel_client_secret[0].arn },
+    ] : [],
   )
 }
 
@@ -139,7 +162,7 @@ data "aws_iam_policy_document" "execution" {
     actions = ["secretsmanager:GetSecretValue"]
     resources = concat(
       [var.database_url_secret_arn],
-      [aws_secretsmanager_secret.jwt_secret.arn],
+      [aws_secretsmanager_secret.session_secret.arn],
       [for s in aws_secretsmanager_secret.app : s.arn],
     )
   }
@@ -222,6 +245,14 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener.https]
+
+  # Task definition revisions are registered by Terraform (env/cpu/secrets) but
+  # rolled out by scripts/deploy-api.sh, which runs only after the Zitadel
+  # bootstrap step has populated the OIDC client secrets. Without this, a plain
+  # terraform apply would roll the API onto placeholder OIDC creds.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 
   tags = var.tags
 }

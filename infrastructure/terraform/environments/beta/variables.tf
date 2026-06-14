@@ -34,6 +34,18 @@ variable "dagster_subdomain" {
   description = "Subdomain label for the Dagster ingestion UI."
 }
 
+variable "zitadel_issuer_url" {
+  type        = string
+  default     = "https://auth.propel.ninja"
+  description = "Public OIDC issuer beta consumes — the single shared Zitadel instance hosted in prod."
+}
+
+variable "auth_subdomain" {
+  type        = string
+  default     = "auth"
+  description = "Subdomain label for the Zitadel identity provider."
+}
+
 variable "db_min_acu" {
   type    = number
   default = 0.5
@@ -78,4 +90,10 @@ variable "dagster_allowed_cidrs" {
   type        = list(string)
   default     = []
   description = "Source IP CIDRs allowed to reach the Dagster UI. Empty = open (no auth)."
+}
+
+variable "zitadel_enabled" {
+  type        = bool
+  default     = false
+  description = "Deprecated/unused in beta: beta never hosts Zitadel — it consumes the shared prod instance via zitadel_issuer_url. Kept only to tolerate any pre-existing tfvar."
 }

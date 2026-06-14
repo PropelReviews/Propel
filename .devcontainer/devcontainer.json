@@ -3,7 +3,7 @@
   "dockerComposeFile": "../docker-compose.yml",
   "service": "dev",
   "composeProfiles": ["devcontainer"],
-  "runServices": ["postgres", "backend", "frontend"],
+  "runServices": ["postgres", "zitadel", "zitadel-login", "backend", "frontend"],
   "workspaceFolder": "/workspaces/Propel",
   "remoteUser": "vscode",
   "shutdownAction": "stopCompose",
@@ -20,6 +20,8 @@
   // breaks localhost:5173 / :8000 (ERR_EMPTY_RESPONSE) and can drop after a few minutes.
   "forwardPorts": [6006],
   "portsAttributes": {
+    "8080": { "label": "Zitadel API", "onAutoForward": "ignore" },
+    "3002": { "label": "Zitadel Login UI", "onAutoForward": "ignore" },
     "5173": { "label": "Frontend (Vite)", "onAutoForward": "ignore" },
     "8000": { "label": "Backend", "onAutoForward": "ignore" },
     "5432": { "label": "Postgres", "onAutoForward": "ignore" },

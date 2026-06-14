@@ -39,17 +39,36 @@ services:
       # PG 18+ stores data under /var/lib/postgresql/<major>/data; mount the parent dir.
       - pgdata:/var/lib/postgresql
       # Creates the `zitadel` database on first boot (no-op on existing volumes).
-      - ./infrastructure/docker/zitadel-init-db.sql:/docker-entrypoint-initdb.d/02-zitadel-init-db.sql:ro
+      - ./infrastructure/docker/zitadel-init-db.sh:/docker-entrypoint-initdb.d/02-zitadel-init-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-propel} -d ${POSTGRES_DB:-propel}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # Ensures the `zitadel` database exists before Zitadel starts. The postgres
+  # entrypoint init script only runs on first volume boot; this one-shot job is
+  # idempotent for existing dev volumes.
+  zitadel-db-init:
+    image: postgres:18.3
+    container_name: propel-zitadel-db-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-propel}
+      POSTGRES_DB: ${POSTGRES_DB:-propel}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-propel}
+    volumes:
+      - ./infrastructure/docker/zitadel-init-db.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    restart: "no"
+
   # Zitadel identity provider (OIDC). Shares the Propel Postgres instance with a
   # dedicated `zitadel` database. Login UI v2 runs in a separate container.
   zitadel:
-    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v2.71.10}
+    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.13.0}
     container_name: propel-zitadel
     restart: unless-stopped
     user: "0"
@@ -64,6 +83,11 @@ services:
       ZITADEL_TLS_ENABLED: false
       ZITADEL_DATABASE_POSTGRES_DSN: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/zitadel?sslmode=disable
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: false
+      # IAM_OWNER machine user PAT for automated OIDC app provisioning (local dev).
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel/bootstrap/admin.pat
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: propel-admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Propel Bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: ${LOGIN_CLIENT_PAT_EXPIRATION:-2099-01-01T00:00:00Z}
       ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Propel Login Client
@@ -84,12 +108,17 @@ services:
       - zitadel-bootstrap:/zitadel/bootstrap:rw
     ports:
       - "${ZITADEL_PORT:-8080}:8080"
+      # GitHub/external IdP callbacks use http://localhost/idps/callback (port 80)
+      # when Zitadel's public URL omits :8080. Map 80 → 8080 so that redirect works.
+      - "127.0.0.1:80:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      zitadel-db-init:
+        condition: service_completed_successfully
 
   zitadel-login:
-    image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v2.71.10}
+    image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v4.13.0}
     container_name: propel-zitadel-login
     restart: unless-stopped
     user: "0"
@@ -114,6 +143,33 @@ services:
       zitadel:
         condition: service_healthy
 
+  # One-shot OIDC bootstrap: creates the Propel BFF app and writes .env when
+  # credentials are missing. Idempotent — skips when ZITADEL_CLIENT_* already set.
+  zitadel-oidc-init:
+    image: python:3.12-slim
+    container_name: propel-zitadel-oidc-init
+    restart: "no"
+    depends_on:
+      zitadel:
+        condition: service_healthy
+      zitadel-login:
+        condition: service_healthy
+    volumes:
+      - ${PROPEL_HOST_DIR:-.}:/workspaces/Propel
+      - zitadel-bootstrap:/zitadel/bootstrap:ro
+    working_dir: /workspaces/Propel
+    env_file:
+      - path: .env.ingestion.local
+        required: false
+    environment:
+      ZITADEL_INTERNAL_ISSUER: http://zitadel:8080
+      ZITADEL_ISSUER: http://localhost:${ZITADEL_PORT:-8080}
+      ZITADEL_HOST_HEADER: localhost
+      OAUTH_CALLBACK_BASE_URL: http://localhost:${BACKEND_PORT:-8000}
+      FRONTEND_BASE_URL: http://localhost:${FRONTEND_PORT:-5173}
+      ZITADEL_LOGIN_PORT: ${ZITADEL_LOGIN_PORT:-3002}
+    command: ["python3", "scripts/zitadel_bootstrap.py", "--env", "local"]
+
   backend:
     build:
       context: .
@@ -123,8 +179,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      zitadel:
-        condition: service_healthy
+      zitadel-oidc-init:
+        condition: service_completed_successfully
     env_file:
       - .env
       # Shared dev ingestion creds (GitHub App), pulled from AWS Secrets Manager
@@ -135,6 +191,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-propel-backend}
+      # Server-side OIDC metadata/token calls use the compose service name.
+      ZITADEL_INTERNAL_ISSUER: http://zitadel:8080
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

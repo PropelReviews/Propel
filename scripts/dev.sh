@@ -37,10 +37,20 @@ tcp_check() {
 
 http_check "Backend"  "http://backend:8000/health"
 http_check "Frontend" "http://frontend:5173/"
+http_check "Zitadel"  "http://zitadel:8080/debug/ready"
+http_check "Zitadel login" "http://zitadel-login:3000/ui/v2/login/healthy"
 tcp_check  "Postgres" "postgres" "5432"
+
+if [ -f .env ] && ! grep -q '^ZITADEL_CLIENT_ID=.\+' .env 2>/dev/null; then
+  echo
+  echo "Auth: OIDC is not configured in .env yet."
+  echo "      Run: docker compose up zitadel-oidc-init"
+  echo "      Or:  ./scripts/setup-zitadel-oidc.sh && docker compose restart backend"
+fi
 
 echo
 echo "Host URLs:  backend http://localhost:8000  |  frontend http://localhost:5173"
+echo "           zitadel http://localhost:8080  |  login http://localhost:3002"
 echo "           (published by docker-compose — do not auto-forward these ports in the devcontainer)"
 echo
 echo "Backend deps: edit in dev (uv add), then:  docker compose restart backend"

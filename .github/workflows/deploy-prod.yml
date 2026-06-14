@@ -48,6 +48,7 @@ jobs:
           GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.GH_APP_WEBHOOK_SECRET }}
           GITHUB_APP_SLUG: ${{ secrets.GH_APP_SLUG }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.GH_APP_CLIENT_SECRET }}
+          ZITADEL_MGMT_TOKEN: ${{ secrets.ZITADEL_MGMT_TOKEN }}
           POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
           DAGSTER_ALLOWED_CIDRS: ${{ vars.DAGSTER_ALLOWED_CIDRS }}
         run: ./scripts/generate-app-tfvars.sh terraform-app-config.json
@@ -98,6 +99,19 @@ jobs:
         run: |
           terraform init -input=false
           terraform apply -input=false -auto-approve
+
+      # Provision/refresh the shared Zitadel instance: the "Propel Prod" OIDC
+      # app, GitHub IdP, login branding, and the human super-admin; then publish
+      # the client id/secret into prod's Secrets Manager before the API rolls.
+      # Opt-in via the ZITADEL_ENABLED Actions variable.
+      - name: Provision Zitadel OIDC app + instance config
+        if: vars.ZITADEL_ENABLED == 'true'
+        env:
+          ZITADEL_MGMT_TOKEN: ${{ secrets.ZITADEL_MGMT_TOKEN }}
+          GITHUB_APP_CLIENT_ID: ${{ vars.GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.GH_APP_CLIENT_SECRET }}
+          ZITADEL_ADMIN_EMAIL: ${{ vars.ZITADEL_ADMIN_EMAIL }}
+        run: ./scripts/deploy-zitadel.sh prod
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

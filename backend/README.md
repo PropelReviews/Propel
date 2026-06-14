@@ -6,7 +6,7 @@ FastAPI application and data extraction for Propel.
 
 - **API:** FastAPI (Python 3.12)
 - **ORM:** SQLAlchemy 2.0 (async) + Alembic + asyncpg
-- **Auth:** fastapi-users (MIT) + httpx-oauth — email/password, JWT, Google/GitHub login OAuth
+- **Auth:** Zitadel OIDC via BFF session cookie (Authlib) — email/GitHub sign-in on hosted login UI
 - **Extraction:** Meltano (co-located in `meltano/` for shared Python environment)
 
 ## Purpose
@@ -33,11 +33,11 @@ backend/
 ├── alembic/              # database migrations
 ├── app/
 │   ├── main.py           # FastAPI application
-│   ├── config.py         # pydantic-settings (DATABASE_URL, JWT, OAuth)
+│   ├── config.py         # pydantic-settings (DATABASE_URL, SESSION_SECRET, Zitadel OIDC)
 │   ├── db/               # async SQLAlchemy session
 │   ├── models/           # User, Tenant, Membership, Invite, ingestion entities
 │   ├── schemas/          # Pydantic request/response DTOs
-│   ├── auth/             # fastapi-users, JWT, OAuth, RBAC dependencies
+│   ├── auth/             # OIDC BFF session, RBAC dependencies, reconcile
 │   ├── routers/          # auth, tenants, members, invites, connections
 │   ├── services/         # tenant + connection domain logic
 │   ├── integrations/     # GitHub App auth (JWT → installation token)
@@ -61,7 +61,7 @@ start:
 ```bash
 cd backend
 uv sync
-cp ../.env.example ../.env   # set DATABASE_URL, JWT_SECRET, optional OAuth vars
+cp ../.env.example ../.env   # set DATABASE_URL, run setup-zitadel-oidc.sh for auth
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
@@ -123,43 +123,34 @@ docker compose exec backend alembic -c /app/alembic.ini upgrade head
 
 ### Local auth
 
-1. Set `JWT_SECRET` in `.env` for local dev (use `openssl rand -hex 32`; the
-   default `change-me` is fine when `APP_ENV=development`). In AWS, Terraform
-   generates and stores `JWT_SECRET` in Secrets Manager on first apply.
-2. Set `AUTH_REGISTRATION_ENABLED=true` to allow email/password signup at the API (off by default).
-3. Register via `POST /api/v1/auth/register` with email and password (minimum 8 characters, enforced server-side).
-4. Login via `POST /api/v1/auth/login` (form fields `username`, `password`) to receive a JWT.
-5. Pass `Authorization: Bearer <token>` on protected routes.
+1. Start the stack: `docker compose up -d` (includes Zitadel + login UI).
+2. Bootstrap OIDC: `./scripts/setup-zitadel-oidc.sh` then `docker compose restart backend`.
+3. Sign in at <http://localhost:5173/signin> — the SPA redirects to Zitadel hosted login.
+4. The BFF sets an httpOnly `propel_session` cookie; the browser never sees OIDC tokens.
 
-Login and register are rate-limited per client IP (`AUTH_RATE_LIMIT_*` env vars). OAuth providers do not auto-link to existing email/password accounts until email verification is implemented.
+Login is rate-limited per client IP (`AUTH_RATE_LIMIT_*` env vars). GitHub org
+roles sync when a connected GitHub org imports its roster and the member signs
+in with a matching email (or links GitHub on their profile).
 
-Optional Google/GitHub login. Register these provider redirect URLs (under the
-**API** origin):
+Optional GitHub sign-in: when `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET`
+are set, the bootstrap script registers GitHub as a Zitadel external IdP. Users
+can also link GitHub after email sign-in via **Connect with GitHub** on the profile
+(`GET /api/v1/auth/github/link/authorize`).
 
-- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/google/callback`
-- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/callback` (fastapi-users built-in)
-- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/login/callback` (SPA sign in / sign up)
-- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/link/callback` (Connect with GitHub on the profile)
+Register this callback on the GitHub App (profile linking):
+
+- `{OAUTH_CALLBACK_BASE_URL}/api/v1/auth/github/link/callback`
 
 `OAUTH_CALLBACK_BASE_URL` is the **API** origin (where the provider returns the
-code). The SPA sign-in/link flows then redirect the browser to the **frontend**
-origin set by `FRONTEND_BASE_URL` (e.g. `https://app.<zone>` in AWS;
-`http://localhost:5173` locally). The two are distinct because the API
-(`api.<zone>`) and SPA (`app.<zone>`) are separate origins.
+code). Post-login redirects use `FRONTEND_BASE_URL` (the SPA origin).
 
-**GitHub credentials** — the login/link client resolves to, in order:
+**GitHub credentials** — the link client resolves to, in order:
 
-1. `GITHUB_APP_CLIENT_ID` + `GITHUB_APP_CLIENT_SECRET` — **reuse the ingestion
-   GitHub App** for user login. These are the App's user-OAuth Client ID
-   (`Iv1...`) and a generated client secret, distinct from `GITHUB_APP_ID`
-   (numeric, app JWT) and `GITHUB_APP_PRIVATE_KEY`. To use the App for login you
-   must, on the GitHub App settings: add the two `github/{login,link}/callback`
-   URLs above to the **User authorization callback URL** (GitHub Apps allow
-   multiple), generate a **client secret**, and grant **Account permissions →
-   Email addresses: Read-only** (needed so first-time sign-up can read the
-   user's email when it isn't public).
-2. `OAUTH_GITHUB_CLIENT_ID` + `OAUTH_GITHUB_CLIENT_SECRET` — a standalone GitHub
-   OAuth app (fallback when the App vars are unset).
+1. `GITHUB_APP_CLIENT_ID` + `GITHUB_APP_CLIENT_SECRET` — reuse the ingestion
+   GitHub App for user linking. Grant **Account permissions → Email addresses:
+   Read-only** on the App.
+2. `OAUTH_GITHUB_CLIENT_ID` + `OAUTH_GITHUB_CLIENT_SECRET` — standalone OAuth app
+   (fallback when the App vars are unset).
 
 ### Linear OAuth (data connection)
 
@@ -213,15 +204,11 @@ Auth (`/api/v1/auth`):
 
 | Method | Route | Description |
 |---|---|---|
-| POST | `/register` | Email + password signup |
-| POST | `/login` | Email + password sign-in → JWT |
-| GET | `/me` | Current user profile |
-| GET | `/google/authorize` | Start Google OAuth (when configured) |
-| GET | `/google/callback` | Complete Google OAuth |
-| GET | `/github/authorize` | Start GitHub OAuth (when configured) |
-| GET | `/github/callback` | Complete GitHub OAuth (fastapi-users built-in, JSON) |
-| GET | `/github/login/authorize` | Start GitHub sign in / sign up for the SPA |
-| GET | `/github/login/callback` | Complete sign-in; redirect to SPA with session token |
+| GET | `/config` | OIDC enabled flag + BFF login URL |
+| GET | `/login` | Start Zitadel OIDC redirect |
+| GET | `/callback` | OIDC callback — sets session cookie |
+| GET | `/logout` | Clear session + Zitadel end-session |
+| GET | `/me` | Current user profile + GitHub link status |
 | GET | `/github/link/authorize` | Start linking GitHub to the signed-in account |
 | GET | `/github/link/callback` | Complete linking; redirect to SPA profile |
 

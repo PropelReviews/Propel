@@ -14,7 +14,8 @@ from app.models.user import User
 
 
 @pytest.mark.asyncio
-async def test_reconcile_creates_user_and_owner_membership_for_new_org(clean_db):
+async def test_reconcile_creates_tenant_and_owner_for_new_org(clean_db):
+    """Model B: the first user of a granted org mints its tenant as owner."""
     org_id = str(uuid.uuid4())
     async with async_session_maker() as session:
         user = await reconcile_user_from_claims(
@@ -36,17 +37,82 @@ async def test_reconcile_creates_user_and_owner_membership_for_new_org(clean_db)
         )
         assert tenant is not None
         assert tenant.name == "Acme Corp"
-        assert tenant.slug == "acme-corp"
 
         membership = await session.scalar(
-            select(TenantMembership).where(
-                TenantMembership.tenant_id == tenant.id,
-                TenantMembership.user_id == user.id,
-            )
+            select(TenantMembership).where(TenantMembership.user_id == user.id)
         )
         assert membership is not None
+        assert membership.tenant_id == tenant.id
         assert membership.role == Role.owner
         assert membership.status == MembershipStatus.active
+
+
+@pytest.mark.asyncio
+async def test_reconcile_maps_project_role_for_subsequent_member(clean_db):
+    """A second user joins an existing org-tenant with the granted project role."""
+    org_id = str(uuid.uuid4())
+    async with async_session_maker() as session:
+        await reconcile_user_from_claims(
+            session,
+            sub="zitadel-owner",
+            email="owner@beta.com",
+            email_verified=True,
+            org_id=org_id,
+            org_name="Beta LLC",
+        )
+
+        member = await reconcile_user_from_claims(
+            session,
+            sub="zitadel-member",
+            email="member@beta.com",
+            email_verified=True,
+            org_id=org_id,
+            org_name="Beta LLC",
+            roles={"admin": {org_id: "beta.com"}},
+        )
+
+        membership = await session.scalar(
+            select(TenantMembership).where(TenantMembership.user_id == member.id)
+        )
+        assert membership is not None
+        assert membership.role == Role.admin
+        assert membership.status == MembershipStatus.active
+
+        # Exactly one tenant for the org (the second login reused it).
+        tenants = (
+            await session.scalars(select(Tenant).where(Tenant.zitadel_org_id == org_id))
+        ).all()
+        assert len(tenants) == 1
+
+
+@pytest.mark.asyncio
+async def test_reconcile_defaults_to_member_without_role_claim(clean_db):
+    """A subsequent user with no project-role claim falls back to member."""
+    org_id = str(uuid.uuid4())
+    async with async_session_maker() as session:
+        await reconcile_user_from_claims(
+            session,
+            sub="zitadel-owner-2",
+            email="owner@gamma.com",
+            email_verified=True,
+            org_id=org_id,
+            org_name="Gamma",
+        )
+
+        member = await reconcile_user_from_claims(
+            session,
+            sub="zitadel-member-2",
+            email="member@gamma.com",
+            email_verified=True,
+            org_id=org_id,
+            org_name="Gamma",
+        )
+
+        membership = await session.scalar(
+            select(TenantMembership).where(TenantMembership.user_id == member.id)
+        )
+        assert membership is not None
+        assert membership.role == Role.member
 
 
 @pytest.mark.asyncio
@@ -105,23 +171,88 @@ async def test_reconcile_activates_invited_membership(clean_db):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_picks_unique_slug_when_taken(clean_db):
-    org_a = str(uuid.uuid4())
-    org_b = str(uuid.uuid4())
+async def test_reconcile_attaches_membership_to_existing_org_tenant(clean_db):
+    """An org provisioned for enterprise SSO (tenant has zitadel_org_id) gets the
+    logging-in user attached as a member; first member becomes owner."""
+    org_id = str(uuid.uuid4())
     async with async_session_maker() as session:
-        session.add(Tenant(name="Acme", slug="acme", zitadel_org_id=org_a))
+        tenant = Tenant(name="Acme", slug="acme-sso", zitadel_org_id=org_id)
+        session.add(tenant)
         await session.commit()
 
-        await reconcile_user_from_claims(
+        user = await reconcile_user_from_claims(
             session,
             sub="zitadel-sub-4",
-            email="second@acme.com",
+            email="first@acme.com",
             email_verified=True,
-            org_id=org_b,
+            org_id=org_id,
             org_name="Acme",
         )
 
-        tenant = await session.scalar(
-            select(Tenant).where(Tenant.zitadel_org_id == org_b)
+        membership = await session.scalar(
+            select(TenantMembership).where(
+                TenantMembership.tenant_id == tenant.id,
+                TenantMembership.user_id == user.id,
+            )
         )
-        assert tenant.slug == "acme-1"
+        assert membership is not None
+        assert membership.role == Role.owner
+        assert membership.status == MembershipStatus.active
+
+
+@pytest.mark.asyncio
+async def test_reconcile_links_pending_github_identity_by_email(clean_db):
+    from app.models.connected_account import ConnectedAccount
+    from app.models.enums import (
+        AuthType,
+        GitHubOrgRole,
+        IdentityStatus,
+        IntegrationProvider,
+    )
+    from app.models.external_identity import ExternalIdentity
+
+    org_id = str(uuid.uuid4())
+    async with async_session_maker() as session:
+        tenant = Tenant(name="Acme", slug="acme-github", zitadel_org_id=org_id)
+        session.add(tenant)
+        await session.flush()
+        account = ConnectedAccount(
+            tenant_id=tenant.id,
+            provider=IntegrationProvider.github.value,
+            auth_type=AuthType.github_app_installation.value,
+            external_account_id="123",
+            external_account_name="acme",
+        )
+        session.add(account)
+        await session.flush()
+        session.add(
+            ExternalIdentity(
+                tenant_id=tenant.id,
+                connected_account_id=account.id,
+                provider=IntegrationProvider.github.value,
+                external_user_id="42",
+                external_login="dev",
+                external_email="dev@acme.com",
+                github_org_role=GitHubOrgRole.admin.value,
+                status=IdentityStatus.pending_email.value,
+            )
+        )
+        await session.commit()
+
+        user = await reconcile_user_from_claims(
+            session,
+            sub="zitadel-sub-github",
+            email="dev@acme.com",
+            email_verified=True,
+            org_id=org_id,
+            org_name="Acme",
+        )
+
+        membership = await session.scalar(
+            select(TenantMembership).where(
+                TenantMembership.tenant_id == tenant.id,
+                TenantMembership.user_id == user.id,
+            )
+        )
+        assert membership is not None
+        assert membership.role == Role.owner

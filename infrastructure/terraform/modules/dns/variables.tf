@@ -19,6 +19,12 @@ variable "dagster_fqdn" {
   default     = ""
 }
 
+variable "auth_fqdn" {
+  type        = string
+  description = "Zitadel FQDN added as a certificate SAN, e.g. auth.beta.propel.ninja. Empty to omit."
+  default     = ""
+}
+
 variable "landing_fqdns" {
   type        = list(string)
   description = "Landing site FQDNs (apex + www) added as certificate SANs, e.g. [\"propel.ninja\", \"www.propel.ninja\"]."

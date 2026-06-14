@@ -15,6 +15,11 @@ class GitHubLinkURL(BaseModel):
     authorization_url: str
 
 
+class AuthConfigRead(BaseModel):
+    oidc_enabled: bool
+    login_url: str
+
+
 class UserMeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

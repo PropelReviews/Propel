@@ -36,6 +36,11 @@ export type AuthUser = {
   github?: GitHubConnection;
 };
 
+export type AuthConfig = {
+  oidc_enabled: boolean;
+  login_url: string;
+};
+
 /**
  * Error thrown by the API client. `code` is the backend's machine-readable
  * detail string when available; `message` is a human-friendly string.
@@ -126,13 +131,23 @@ export async function authedRequest<T>(
 }
 
 /** Redirect the browser to Zitadel hosted login (Auth Code + PKCE via BFF). */
-export function redirectToLogin(): void {
-  window.location.href = `${API_BASE}/api/v1/auth/login`;
+export function redirectToLogin(loginUrl?: string): void {
+  window.location.href = loginUrl ?? `${API_BASE}/api/v1/auth/login`;
 }
 
 /** Redirect through the BFF logout endpoint (clears session + Zitadel). */
 export function redirectToLogout(): void {
   window.location.href = `${API_BASE}/api/v1/auth/logout`;
+}
+
+export async function getAuthConfig(): Promise<AuthConfig> {
+  const response = await fetch(`${API_BASE}/api/v1/auth/config`, {
+    credentials: fetchCredentials,
+    headers: apiHeaders(),
+  });
+  const body = await parseJson(response);
+  if (!response.ok) throw extractError(response.status, body);
+  return body as AuthConfig;
 }
 
 export async function joinWaitlist(input: { email: string }): Promise<{
