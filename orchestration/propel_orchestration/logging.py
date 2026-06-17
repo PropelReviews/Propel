@@ -37,6 +37,22 @@ def configure_logging() -> None:
             exc_info=True,
         )
 
+    # Initialise the shared PostHog client so unhandled exceptions and Dagster op
+    # failures land in PostHog error tracking under `service = propel-ingestion`,
+    # with the same release metadata as the API. No-op when PostHog is unset.
+    try:
+        from app.posthog_client import init_posthog
+
+        init_posthog(
+            service_name=_INGESTION_SERVICE_NAME,
+            in_app_modules=["app", "propel_orchestration"],
+        )
+    except Exception:  # noqa: BLE001 — never let error-tracking setup crash the service
+        logging.getLogger("propel.ingestion.dagster").warning(
+            "PostHog error-tracking setup failed; continuing without it",
+            exc_info=True,
+        )
+
     # Ensure the ingestion loggers propagate at INFO to the root OTLP handler.
     logging.getLogger("propel").setLevel(logging.INFO)
     _configured = True

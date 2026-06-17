@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     posthog_host: str = "https://us.i.posthog.com"
     posthog_personal_api_key: str = ""
 
+    # Release metadata attached to every PostHog event (incl. captured exceptions)
+    # so errors are attributable to a commit and version, mirroring the SPA build.
+    # GIT_SHA is baked into the production image at build time (see
+    # infrastructure/docker/backend.prod.Dockerfile); APP_VERSION defaults here.
+    git_sha: str = "dev"
+    app_version: str = "0.1.0"
+
     # Base URL of the API itself — where OIDC providers send the callback.
     oauth_callback_base_url: str = "http://localhost:8000"
     # Base URL of the browser SPA.

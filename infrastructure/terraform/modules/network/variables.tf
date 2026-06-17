@@ -38,3 +38,18 @@ variable "tags" {
   description = "Tags applied to all resources."
   default     = {}
 }
+
+# PostHog data-warehouse Postgres connector egress IPs (US + EU). Propel uses the
+# US PostHog project; EU CIDRs are included so the allowlist matches PostHog docs.
+variable "posthog_warehouse_cidrs" {
+  type        = list(string)
+  description = "PostHog warehouse connector source IPs (/32) allowed to reach Aurora on 5432."
+  default = [
+    "44.205.89.55/32",
+    "44.208.188.173/32",
+    "52.4.194.122/32",
+    "3.75.65.221/32",
+    "18.197.246.42/32",
+    "3.120.223.253/32",
+  ]
+}

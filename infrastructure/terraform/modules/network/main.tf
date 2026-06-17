@@ -113,6 +113,14 @@ resource "aws_security_group" "rds" {
     security_groups = [aws_security_group.ecs.id]
   }
 
+  ingress {
+    description = "Postgres from PostHog data warehouse"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = var.posthog_warehouse_cidrs
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

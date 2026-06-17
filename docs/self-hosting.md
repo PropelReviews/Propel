@@ -106,9 +106,12 @@ docker compose restart backend
 
 The script creates the Propel OIDC application in Zitadel and optionally
 registers GitHub as an external IdP when `GITHUB_APP_CLIENT_ID` /
-`GITHUB_APP_CLIENT_SECRET` are set. GitHub sign-in disables IdP auto-create
-(because many GitHub profiles lack a first name); first-time GitHub users
-complete a short registration step on the Zitadel login UI instead.
+`GITHUB_APP_CLIENT_SECRET` are set. GitHub sign-in uses one-click auto-create:
+because many GitHub profiles lack a first name, the bootstrap registers a Zitadel
+Actions V2 hook (`/api/v1/zitadel/actions/idp-intent`) that fills in the missing
+profile fields, so first-time GitHub users are provisioned without a separate
+registration step. Each bootstrap run purges any existing GitHub IdPs and
+recreates exactly one, so re-runs never leave duplicate GitHub buttons behind.
 
 If bootstrap fails with "No Zitadel PAT found", recreate the Zitadel database and
 bootstrap volume (required once after adding `ZITADEL_FIRSTINSTANCE_PATPATH` to

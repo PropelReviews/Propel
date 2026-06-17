@@ -54,6 +54,11 @@ output "alb_dns_name" {
   value = module.stack.alb_dns_name
 }
 
+output "posthog_warehouse_secret_name" {
+  value       = module.stack.posthog_warehouse_secret_name
+  description = "Secrets Manager secret with PostHog warehouse Postgres credentials."
+}
+
 output "beta_delegation_name_servers" {
   value       = data.aws_route53_zone.beta.name_servers
   description = "NS records delegated to the beta account for beta.propel.ninja."

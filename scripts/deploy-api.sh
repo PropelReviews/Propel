@@ -79,21 +79,21 @@ aws ecr get-login-password --region "$REGION" |
 
 # Build context is the repo root: the image bundles backend/ + orchestration/ so
 # the same image serves the API and the Dagster ingestion service.
-echo "==> Building $IMAGE"
+# GIT_SHA is baked in as PostHog release metadata (mirrors deploy-frontend.sh).
+GIT_SHA="${GITHUB_SHA:-$(git -C "$REPO_ROOT" rev-parse HEAD)}"
+echo "==> Building $IMAGE (git $GIT_SHA)"
 docker build \
   -f "$REPO_ROOT/infrastructure/docker/backend.prod.Dockerfile" \
+  --build-arg GIT_SHA="$GIT_SHA" \
   -t "$IMAGE" \
   "$REPO_ROOT"
 
 echo "==> Pushing image"
 docker push "$IMAGE"
 
-echo "==> Forcing new ECS deployment ($CLUSTER/$SERVICE)"
-aws ecs update-service \
-  --cluster "$CLUSTER" \
-  --service "$SERVICE" \
-  --force-new-deployment \
-  --region "$REGION" >/dev/null
+API_FAMILY="${SERVICE}"
+echo "==> Rolling API service ($CLUSTER/$SERVICE)"
+roll_ecs_service_to_image "$CLUSTER" "$SERVICE" "$API_FAMILY" "$IMAGE"
 
 # Ingestion: one rollout (new revision + image). Terraform owns the task def
 # template but ignores service.task_definition so apply does not deploy.

@@ -82,6 +82,13 @@ RUN sed -i 's/\r$//' /usr/local/bin/propel-ingestion \
 
 EXPOSE 8000 3000
 
+# Release metadata for PostHog (super properties on every event, incl. captured
+# exceptions). GIT_SHA is passed by scripts/deploy-api.sh at build time; placed
+# last so the per-commit value does not bust the dependency-install cache.
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA \
+    APP_VERSION=0.1.0
+
 # ECS has no logConfiguration (no CloudWatch); stdout is not collected.
 # Observability is exported to PostHog by the app (OpenTelemetry traces + logs).
 ENTRYPOINT ["/entrypoint.sh"]

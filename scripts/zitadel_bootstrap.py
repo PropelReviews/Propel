@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+import string
 import subprocess
 import sys
 import time
@@ -49,6 +50,7 @@ PROJECT_ROLES = [
 # management console at <issuer>/ui/console. Configured via env; skipped if unset.
 ADMIN_EMAIL_ENV = "ZITADEL_ADMIN_EMAIL"
 ADMIN_NAME_ENV = "ZITADEL_ADMIN_NAME"
+ADMIN_PASSWORD_ENV = "ZITADEL_ADMIN_PASSWORD"
 # Auto-create GitHub users so login is one click. GitHub often omits given_name,
 # which would otherwise fail Zitadel profile validation and show a registration
 # screen — the v2 Actions idp_mapping (see _ensure_github_idp_mapping_v2)
@@ -522,94 +524,93 @@ def _create_oidc_app(
     return client_id, client_secret, True
 
 
+def _warn_or_raise(message: str, *, strict: bool) -> None:
+    """Strict mode (instance-owning envs like prod) turns best-effort instance
+    config warnings into hard failures so a deploy never silently ships broken
+    auth; otherwise we keep the historical best-effort behaviour."""
+    if strict:
+        raise RuntimeError(message)
+    print(f"WARNING: {message}", file=sys.stderr)
+
+
+def _is_github_idp(idp: dict) -> bool:
+    name = str(idp.get("name") or "").strip()
+    idp_type = str(idp.get("type") or idp.get("idpType") or "").upper()
+    return name == GITHUB_IDP_NAME or "GITHUB" in idp_type
+
+
 def _find_all_github_idps(
     base: str, host_header: str, pat: str,
 ) -> list[dict]:
-    seen: dict[str, dict] = {}
-    for search_path in ("/admin/v1/idps/_search", "/management/v1/idps/_search"):
-        try:
-            payload = _request(
-                base,
-                host_header,
-                pat,
-                "POST",
-                search_path,
-                {"queries": []},
-            )
-        except RuntimeError:
-            continue
-        for idp in payload.get("result") or []:
-            idp_id = str(idp.get("id") or "")
-            if not idp_id:
-                continue
-            name = str(idp.get("name") or "").strip()
-            idp_type = str(idp.get("type") or idp.get("idpType") or "").upper()
-            if name == GITHUB_IDP_NAME or "GITHUB" in idp_type:
-                seen[idp_id] = idp
-    return list(seen.values())
+    """Every instance-level GitHub IdP. Instance IdPs live on the admin API only;
+    the management (org-scoped) API was previously consulted as a fallback but
+    could miss instance IdPs and make the bootstrap create yet another one."""
+    payload = _request(
+        base, host_header, pat, "POST", "/admin/v1/idps/_search", {"queries": []}
+    )
+    out: dict[str, dict] = {}
+    for idp in payload.get("result") or []:
+        idp_id = str(idp.get("id") or "")
+        if idp_id and _is_github_idp(idp):
+            out[idp_id] = idp
+    return list(out.values())
 
 
 def _list_login_policy_idps(
     base: str, host_header: str, pat: str,
 ) -> list[dict]:
-    for path in (
-        "/admin/v1/policies/login/idps/_search",
-        "/management/v1/policies/login/idps/_search",
-    ):
-        try:
-            payload = _request(base, host_header, pat, "POST", path, {})
-            return payload.get("result") or []
-        except RuntimeError:
-            continue
-    return []
+    payload = _request(
+        base, host_header, pat, "POST", "/admin/v1/policies/login/idps/_search", {}
+    )
+    return payload.get("result") or []
 
 
 def _remove_idp_from_login_policy(
     base: str, host_header: str, pat: str, idp_id: str,
-) -> bool:
-    for path in (
-        f"/admin/v1/policies/login/idps/{idp_id}",
-        f"/management/v1/policies/login/idps/{idp_id}",
-    ):
-        try:
-            _request(base, host_header, pat, "DELETE", path)
-            return True
-        except RuntimeError:
-            continue
-    return False
-
-
-def _delete_idp(base: str, host_header: str, pat: str, idp_id: str) -> bool:
-    for path in (f"/admin/v1/idps/{idp_id}", f"/management/v1/idps/{idp_id}"):
-        try:
-            _request(base, host_header, pat, "DELETE", path)
-            return True
-        except RuntimeError:
-            continue
-    return False
-
-
-def _dedupe_github_idps(
-    base: str, host_header: str, pat: str, canonical_id: str,
-) -> int:
-    removed = 0
-    for idp in _find_all_github_idps(base, host_header, pat):
-        idp_id = str(idp.get("id") or "")
-        if not idp_id or idp_id == canonical_id:
-            continue
-        _remove_idp_from_login_policy(base, host_header, pat, idp_id)
-        if _delete_idp(base, host_header, pat, idp_id):
-            removed += 1
-    return removed
-
-
-def _is_idp_on_login_policy(login_idps: list[dict], idp_id: str) -> bool:
-    return any(
-        str(entry.get("idpId") or entry.get("id")) == idp_id for entry in login_idps
+) -> None:
+    _request(
+        base, host_header, pat, "DELETE", f"/admin/v1/policies/login/idps/{idp_id}"
     )
 
 
-def _ensure_login_policy(base: str, host_header: str, pat: str) -> None:
+def _delete_idp(base: str, host_header: str, pat: str, idp_id: str) -> None:
+    _request(base, host_header, pat, "DELETE", f"/admin/v1/idps/{idp_id}")
+
+
+def _purge_all_github_idps(base: str, host_header: str, pat: str) -> int:
+    """Remove every GitHub IdP from the login policy and delete it.
+
+    Duplicate instance-level GitHub IdPs accumulated across deploys are the known
+    cause of multiple GitHub buttons and broken Login V2. Rather than try to keep
+    a "canonical" one, we purge them all and recreate exactly one. Raises if any
+    IdP cannot be deleted so a broken state is never silently left behind."""
+    github_idps = _find_all_github_idps(base, host_header, pat)
+    if not github_idps:
+        return 0
+    on_policy = {
+        str(entry.get("idpId") or entry.get("id") or "")
+        for entry in _list_login_policy_idps(base, host_header, pat)
+    }
+    removed = 0
+    for idp in github_idps:
+        idp_id = str(idp.get("id") or "")
+        if not idp_id:
+            continue
+        if idp_id in on_policy:
+            try:
+                _remove_idp_from_login_policy(base, host_header, pat, idp_id)
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"could not remove GitHub IdP {idp_id} from the login policy: {exc}"
+                ) from exc
+        _delete_idp(base, host_header, pat, idp_id)
+        removed += 1
+    return removed
+
+
+def _ensure_login_policy(
+    base: str, host_header: str, pat: str, *, strict: bool = False
+) -> None:
     """Login V2 external IdP user creation requires allowRegister + allowExternalIdp."""
     try:
         _request(
@@ -630,7 +631,7 @@ def _ensure_login_policy(base: str, host_header: str, pat: str) -> None:
         )
         print("==> Login policy updated (allowRegister + allowExternalIdp)")
     except RuntimeError as exc:
-        print(f"WARNING: could not update login policy: {exc}", file=sys.stderr)
+        _warn_or_raise(f"could not update login policy: {exc}", strict=strict)
 
 
 def _ensure_github_idp_mapping_v2(
@@ -638,6 +639,8 @@ def _ensure_github_idp_mapping_v2(
     host_header: str,
     pat: str,
     callback_base_url: str,
+    *,
+    strict: bool = False,
 ) -> str | None:
     """Register Actions V2 response hook so Login V2 can auto-create GitHub users."""
     endpoint = (
@@ -719,111 +722,102 @@ def _ensure_github_idp_mapping_v2(
         print(f"==> Actions V2 GitHub IdP mapping target → {endpoint}")
         return str(signing_key or "") or None
     except RuntimeError as exc:
-        print(
-            f"WARNING: Actions V2 IdP mapping setup failed: {exc}",
-            file=sys.stderr,
-        )
+        _warn_or_raise(f"Actions V2 IdP mapping setup failed: {exc}", strict=strict)
         return None
-
-
-def _find_github_idp_id(base: str, host_header: str, pat: str) -> str | None:
-    idps = _find_all_github_idps(base, host_header, pat)
-    if not idps:
-        return None
-    return str(idps[0].get("id") or "") or None
 
 
 def _ensure_github_idp(
-    base: str, host_header: str, pat: str, callback_base_url: str,
+    base: str,
+    host_header: str,
+    pat: str,
+    callback_base_url: str,
+    *,
+    strict: bool = False,
 ) -> str | None:
     client_id = _env("GITHUB_APP_CLIENT_ID")
     client_secret = _env("GITHUB_APP_CLIENT_SECRET")
     if not client_id or not client_secret:
-        print("==> Skipping GitHub IdP (GITHUB_APP_CLIENT_ID/SECRET not set)")
+        _warn_or_raise(
+            "GitHub IdP not configured (GITHUB_APP_CLIENT_ID/SECRET not set)",
+            strict=strict,
+        )
         return None
 
-    _ensure_login_policy(base, host_header, pat)
+    _ensure_login_policy(base, host_header, pat, strict=strict)
 
-    body = {
-        "name": GITHUB_IDP_NAME,
-        "clientId": client_id,
-        "clientSecret": client_secret,
-        "scopes": ["read:user", "user:email"],
-        "providerOptions": GITHUB_IDP_PROVIDER_OPTIONS,
-    }
+    # Purge-then-create: a single deterministic GitHub IdP on every run. This is
+    # the fix for the prod state where re-runs accumulated duplicate IdPs and
+    # broke the hosted Login UI.
+    removed = _purge_all_github_idps(base, host_header, pat)
+    if removed:
+        print(f"==> Removed {removed} existing GitHub IdP(s) before recreating")
 
-    github_idps = _find_all_github_idps(base, host_header, pat)
-    login_idps = _list_login_policy_idps(base, host_header, pat)
-    canonical_id = None
-    if github_idps:
-        on_policy = [
-            str(idp.get("id") or "")
-            for idp in github_idps
-            if _is_idp_on_login_policy(login_idps, str(idp.get("id") or ""))
-        ]
-        canonical_id = (
-            on_policy[0] if on_policy else str(github_idps[0].get("id") or "")
-        )
+    created = _request(
+        base,
+        host_header,
+        pat,
+        "POST",
+        "/admin/v1/idps/github",
+        {
+            "name": GITHUB_IDP_NAME,
+            "clientId": client_id,
+            "clientSecret": client_secret,
+            "scopes": ["read:user", "user:email"],
+            "providerOptions": GITHUB_IDP_PROVIDER_OPTIONS,
+        },
+    )
+    idp_id = str(created.get("id") or "")
+    if not idp_id:
+        raise RuntimeError(f"Unexpected GitHub IdP response: {created}")
+    print("==> GitHub IdP created (auto-create enabled)")
 
-    if canonical_id:
-        removed = _dedupe_github_idps(base, host_header, pat, canonical_id)
-        if removed:
-            print(f"==> Removed {removed} duplicate GitHub IdP(s)")
-        updated = False
-        for prefix in ("/admin/v1/idps/github", "/management/v1/idps/github"):
-            try:
-                _request(
-                    base, host_header, pat, "PUT", f"{prefix}/{canonical_id}", body
-                )
-                updated = True
-                break
-            except RuntimeError:
-                continue
-        if not updated:
-            raise RuntimeError(
-                f"Found GitHub IdP {canonical_id} but could not update provider options"
-            )
-        print("==> GitHub IdP updated (auto-create enabled)")
-    else:
-        created = _request(
-            base,
-            host_header,
-            pat,
-            "POST",
-            "/admin/v1/idps/github",
-            body,
-        )
-        canonical_id = str(created.get("id") or "")
-        if not canonical_id:
-            raise RuntimeError(f"Unexpected GitHub IdP response: {created}")
-        print("==> GitHub IdP created")
+    _request(
+        base,
+        host_header,
+        pat,
+        "POST",
+        "/admin/v1/policies/login/idps",
+        {"idpId": idp_id},
+    )
+    print("==> GitHub IdP activated on login policy")
 
-    login_idps = _list_login_policy_idps(base, host_header, pat)
-    if not _is_idp_on_login_policy(login_idps, canonical_id):
-        _request(
-            base,
-            host_header,
-            pat,
-            "POST",
-            "/admin/v1/policies/login/idps",
-            {"idpId": canonical_id},
-        )
-        print("==> GitHub IdP activated on login policy")
-
-    return _ensure_github_idp_mapping_v2(base, host_header, pat, callback_base_url)
+    return _ensure_github_idp_mapping_v2(
+        base, host_header, pat, callback_base_url, strict=strict
+    )
 
 
-def _ensure_super_admin(base: str, host_header: str, pat: str) -> None:
+def _resolve_admin_password() -> tuple[str, bool]:
+    """Return (password, generated?). Uses ZITADEL_ADMIN_PASSWORD when set, else a
+    strong random password that satisfies Zitadel's default complexity policy."""
+    configured = _env(ADMIN_PASSWORD_ENV)
+    if configured:
+        return configured, False
+    body = "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(20)
+    )
+    # Guarantee the upper/lower/digit/symbol classes the default policy expects.
+    return f"Aa1!{body}", True
+
+
+def _ensure_super_admin(
+    base: str, host_header: str, pat: str, *, strict: bool = False
+) -> None:
     """Grant a human user IAM_OWNER so they can run the management console.
 
-    Configured via ZITADEL_ADMIN_EMAIL (skipped if unset). The user is created
-    with a verified email if missing — they sign in through the GitHub IdP
-    (auto-linked by email) or an init mail. Best-effort: failures never block the
-    OIDC/IdP bootstrap.
+    Configured via ZITADEL_ADMIN_EMAIL (skipped if unset). If the user does not
+    yet exist it is created with a verified email *and* an initial password, so
+    the console stays reachable with username/password even when the GitHub IdP
+    is unavailable — the previous passwordless user could only sign in via the
+    GitHub IdP, which is exactly what breaks when the IdP state is bad. The
+    password comes from ZITADEL_ADMIN_PASSWORD or is generated and printed once;
+    the user can still sign in via GitHub (auto-linked by email). In strict mode
+    (prod) failing to provision the admin aborts the deploy.
     """
     email = _env(ADMIN_EMAIL_ENV)
     if not email:
-        print(f"==> Skipping super-admin grant ({ADMIN_EMAIL_ENV} not set)")
+        _warn_or_raise(
+            f"super-admin not granted ({ADMIN_EMAIL_ENV} not set)", strict=strict
+        )
         return
 
     local_part = email.split("@")[0]
@@ -835,6 +829,7 @@ def _ensure_super_admin(base: str, host_header: str, pat: str) -> None:
     try:
         user_id = _find_user_id_by_email(base, host_header, pat, email)
         if user_id is None:
+            password, generated = _resolve_admin_password()
             created = _request(
                 base,
                 host_header,
@@ -845,12 +840,18 @@ def _ensure_super_admin(base: str, host_header: str, pat: str) -> None:
                     "userName": email,
                     "profile": {"firstName": first, "lastName": last},
                     "email": {"email": email, "isEmailVerified": True},
+                    "initialPassword": password,
                 },
             )
             user_id = str(created.get("userId") or created.get("id") or "")
             if not user_id:
                 raise RuntimeError(f"unexpected create-user response: {created}")
             print(f"==> Created admin user {email}")
+            if generated:
+                print(
+                    f"==> Generated console password for {email}: {password}\n"
+                    "    Save it now and set ZITADEL_ADMIN_PASSWORD to keep it stable."
+                )
 
         _request(
             base,
@@ -863,14 +864,11 @@ def _ensure_super_admin(base: str, host_header: str, pat: str) -> None:
         print(f"==> Granted IAM_OWNER to {email} (management console super-admin)")
     except RuntimeError as exc:
         detail = str(exc)
-        # Already-a-member is success; everything else is a best-effort warning.
+        # Already-a-member is success; everything else is fatal in strict mode.
         if "already" in detail.lower():
             print(f"==> {email} is already an instance admin")
             return
-        print(
-            f"WARNING: could not grant super-admin to {email}: {exc}",
-            file=sys.stderr,
-        )
+        _warn_or_raise(f"could not grant super-admin to {email}: {exc}", strict=strict)
 
 
 def _find_user_id_by_email(
@@ -903,17 +901,16 @@ def _find_user_id_by_email(
     return None
 
 
-def _ensure_branding(base: str, host_header: str, pat: str) -> None:
-    """Apply Propel branding to the hosted Login UI v2 (instance label policy).
-
-    Best-effort: a failure never blocks the OIDC/IdP bootstrap.
-    """
+def _ensure_branding(
+    base: str, host_header: str, pat: str, *, strict: bool = False
+) -> None:
+    """Apply Propel branding to the hosted Login UI v2 (instance label policy)."""
     try:
         _request(
             base, host_header, pat, "PUT", "/admin/v1/policies/label", LABEL_POLICY
         )
     except RuntimeError as exc:
-        print(f"WARNING: could not set login branding colors: {exc}", file=sys.stderr)
+        _warn_or_raise(f"could not set login branding colors: {exc}", strict=strict)
         return
 
     uploaded = _upload_label_assets(base, host_header, pat)
@@ -923,7 +920,7 @@ def _ensure_branding(base: str, host_header: str, pat: str) -> None:
             base, host_header, pat, "POST", "/admin/v1/policies/label/_activate", {}
         )
     except RuntimeError as exc:
-        print(f"WARNING: could not activate login branding: {exc}", file=sys.stderr)
+        _warn_or_raise(f"could not activate login branding: {exc}", strict=strict)
         return
 
     print(f"==> Login UI branding applied{' + assets' if uploaded else ''}")
@@ -1049,32 +1046,51 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Re-run bootstrap even when .env already has OIDC credentials (local)",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Treat instance-level config failures (GitHub IdP, Actions V2 hook, "
+            "branding, super-admin) as fatal instead of warnings. Auto-enabled "
+            "for --env prod so a deploy never silently ships broken auth."
+        ),
+    )
     return parser.parse_args()
 
 
 def _ensure_instance_config(
-    base: str, host_header: str, pat: str, *, instance_owner: bool
+    base: str,
+    host_header: str,
+    pat: str,
+    *,
+    instance_owner: bool,
+    strict: bool = False,
 ) -> str | None:
     """Instance-wide setup shared by all projects: GitHub IdP, login branding,
     and the human super-admin. Only the instance-owning environment (local or
     prod) runs these — beta consumes the shared prod instance and must not redo
-    them."""
+    them. In strict mode (prod) any failure here aborts the deploy instead of
+    silently shipping broken auth.
+
+    The Actions V2 webhook URL is taken from OAUTH_CALLBACK_BASE_URL, which the
+    env preset pins for cloud envs (prod → https://api.propel.ninja), so the
+    hook target stays stable regardless of the operator's shell environment."""
     if not instance_owner:
         print(
             "==> Skipping instance-level config "
             "(GitHub IdP / branding / super-admin owned by prod)"
         )
         return None
+    callback_base = _env("OAUTH_CALLBACK_BASE_URL", "http://localhost:8000")
     actions_signing_key: str | None = None
     try:
-        callback_base = _env("OAUTH_CALLBACK_BASE_URL", "http://localhost:8000")
         actions_signing_key = _ensure_github_idp(
-            base, host_header, pat, callback_base
+            base, host_header, pat, callback_base, strict=strict
         )
     except RuntimeError as exc:
-        print(f"WARNING: GitHub IdP setup failed: {exc}", file=sys.stderr)
-    _ensure_branding(base, host_header, pat)
-    _ensure_super_admin(base, host_header, pat)
+        _warn_or_raise(f"GitHub IdP setup failed: {exc}", strict=strict)
+    _ensure_branding(base, host_header, pat, strict=strict)
+    _ensure_super_admin(base, host_header, pat, strict=strict)
     return actions_signing_key
 
 
@@ -1082,6 +1098,7 @@ def main() -> int:
     args = _parse_args()
     _apply_env_preset(args.env)
     instance_owner = args.env in INSTANCE_OWNER_ENVS
+    strict = args.strict or args.env == "prod"
     project_name = PROJECT_NAMES.get(args.env, "Propel")
 
     if args.env == "local" and not args.force and _already_configured_local():
@@ -1090,7 +1107,9 @@ def main() -> int:
         _wait_for_zitadel(base, host_header)
         try:
             pat = _load_pat()
-            _ensure_instance_config(base, host_header, pat, instance_owner=True)
+            _ensure_instance_config(
+                base, host_header, pat, instance_owner=True, strict=strict
+            )
         except RuntimeError as exc:
             print(f"WARNING: instance config failed: {exc}", file=sys.stderr)
         return 0
@@ -1132,7 +1151,7 @@ def main() -> int:
 
     if cloud or args.emit_json:
         actions_signing_key = _ensure_instance_config(
-            base, host_header, pat, instance_owner=instance_owner
+            base, host_header, pat, instance_owner=instance_owner, strict=strict
         )
         if args.emit_json:
             _write_secrets_json(
@@ -1171,7 +1190,7 @@ def main() -> int:
 
     try:
         actions_signing_key = _ensure_instance_config(
-            base, host_header, pat, instance_owner=instance_owner
+            base, host_header, pat, instance_owner=instance_owner, strict=strict
         )
         if actions_signing_key:
             _merge_env(ENV_FILE, {"ZITADEL_ACTIONS_SIGNING_KEY": actions_signing_key})

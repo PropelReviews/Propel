@@ -61,3 +61,8 @@ output "cloudfront_distribution_id" {
 output "alb_dns_name" {
   value = module.stack.alb_dns_name
 }
+
+output "posthog_warehouse_secret_name" {
+  value       = module.stack.posthog_warehouse_secret_name
+  description = "Secrets Manager secret with PostHog warehouse Postgres credentials."
+}

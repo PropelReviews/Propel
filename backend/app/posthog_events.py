@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from app.feature_flags import get_client
+from app.posthog_client import get_client
 
 logger = logging.getLogger("propel.posthog_events")
 

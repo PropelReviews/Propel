@@ -454,6 +454,37 @@ long-running ECS service. It is the **scheduler only**: it calls the same
 `target-propel` stay here unchanged. See the
 [orchestration README](../orchestration/README.md) for details.
 
+## Observability
+
+Traces and logs export to PostHog via OpenTelemetry ([`app/tracing.py`](app/tracing.py),
+[`app/otel_logging.py`](app/otel_logging.py)); everything is gated on `POSTHOG_TOKEN`
+and is a no-op when unset.
+
+### Error tracking
+
+The shared PostHog client ([`app/posthog_client.py`](app/posthog_client.py)) enables
+exception autocapture for both the API (`service = propel-backend`) and the Dagster
+ingestion service (`service = propel-ingestion`).
+
+- **API:** each request runs inside a PostHog context ([`app/posthog_middleware.py`](app/posthog_middleware.py))
+  so captured exceptions carry the route and, when the SPA forwards them, the
+  person's distinct id and session id. A catch-all handler in [`app/main.py`](app/main.py)
+  captures any unexpected 500.
+- **Ingestion:** `configure_logging()` initialises the client; Dagster catches op
+  exceptions itself, so [`orchestration/.../jobs.py`](../orchestration/propel_orchestration/jobs.py)
+  captures run failures explicitly.
+
+**No source-map upload is needed.** Unlike the frontend (minified JS), Python stack
+traces and code context are resolved by the SDK at runtime — there is no
+`posthog-cli sourcemap upload` step for the backend. Instead, every event carries
+release metadata (`git_sha`, `app_version`, `app_environment`, `service`) as super
+properties. `GIT_SHA` is baked into the production image by
+[`scripts/deploy-api.sh`](../scripts/deploy-api.sh), mirroring the SPA build.
+
+To get **"View commit" source links** on stack frames, connect the GitHub repo in
+PostHog's project settings (Error tracking → integrations); this is a one-time
+PostHog configuration, not a code change.
+
 ## Related
 
 - [Data model](../docs/backend/data-model.md) — entity relationships

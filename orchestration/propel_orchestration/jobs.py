@@ -71,6 +71,12 @@ from dagster import (
 
 from propel_orchestration import worker_scaling
 from propel_orchestration.dask_resource import build_dask_executor
+from propel_orchestration.logging import configure_logging
+
+# Dask workers load the job ops from this module directly (they never import
+# `definitions`), so configure logging + PostHog error tracking here too. The
+# call is idempotent, so the daemon/webserver importing both is harmless.
+configure_logging()
 
 logger = logging.getLogger("propel.ingestion.dagster")
 
@@ -110,6 +116,18 @@ def _run(coro):
         _event_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_event_loop)
     return _event_loop.run_until_complete(coro)
+
+
+def _capture_exception(exc: BaseException, properties: dict | None = None) -> None:
+    """Send a handled exception to PostHog error tracking (best-effort, no-op
+    when PostHog isn't configured)."""
+    from app.posthog_client import get_client
+
+    client = get_client()
+    if client is None:
+        return
+    with contextlib.suppress(Exception):
+        client.capture_exception(exc, properties=properties)
 
 
 def _run_tags(context: OpExecutionContext) -> dict[str, str]:
@@ -207,6 +225,9 @@ def _run_resource(context: OpExecutionContext, job_name: str) -> None:
             "Ingestion resource failed",
             extra={**run_extra, "dagster.status": "error", "error.message": str(exc)},
         )
+        # Dagster catches op exceptions to mark the run failed, so PostHog's
+        # autocapture (sys.excepthook) never sees them — capture explicitly.
+        _capture_exception(exc, run_extra)
         raise
 
     asset_key = _ASSET_KEYS.get(job_name)

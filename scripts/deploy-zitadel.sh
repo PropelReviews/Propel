@@ -91,13 +91,21 @@ fi
 if [[ -n "$_sm_client_secret" && "$_sm_client_secret" != "pending-bootstrap" && "$_sm_client_secret" != "None" ]]; then
   : "${ZITADEL_CLIENT_SECRET:=$_sm_client_secret}"
 fi
+# Prod owns the shared instance config, so a broken GitHub IdP / super-admin must
+# fail the deploy loudly rather than ship silently — run the bootstrap in --strict.
+STRICT_FLAG=()
+if [[ "$ENV" == "prod" ]]; then
+  STRICT_FLAG=(--strict)
+fi
 ZITADEL_MGMT_TOKEN="$TOKEN" \
   ZITADEL_CLIENT_ID="${ZITADEL_CLIENT_ID:-}" \
   ZITADEL_CLIENT_SECRET="${ZITADEL_CLIENT_SECRET:-}" \
   GITHUB_APP_CLIENT_ID="${GITHUB_APP_CLIENT_ID:-}" \
   GITHUB_APP_CLIENT_SECRET="${GITHUB_APP_CLIENT_SECRET:-}" \
   ZITADEL_ADMIN_EMAIL="${ZITADEL_ADMIN_EMAIL:-}" \
-  python3 "$REPO_ROOT/scripts/zitadel_bootstrap.py" --env "$ENV" --emit-json "$TMP_JSON"
+  ZITADEL_ADMIN_PASSWORD="${ZITADEL_ADMIN_PASSWORD:-}" \
+  python3 "$REPO_ROOT/scripts/zitadel_bootstrap.py" --env "$ENV" \
+    "${STRICT_FLAG[@]}" --emit-json "$TMP_JSON"
 
 CLIENT_ID="$(jq -r '.client_id' "$TMP_JSON")"
 CLIENT_SECRET="$(jq -r '.client_secret' "$TMP_JSON")"

@@ -162,14 +162,61 @@ V2 auto-creation fails without an Actions V2 response hook. The bootstrap
 registers `propelGitHubIdpMapping` pointing at
 `https://api.<env>.propel.ninja/api/v1/zitadel/actions/idp-intent` and stores
 the signing key in `<prefix>/zitadel/ACTIONS_SIGNING_KEY` for the API task.
-Re-runs also dedupe duplicate GitHub IdPs on the login policy (a common cause of
-multiple GitHub buttons).
+
+**One GitHub IdP, always:** every bootstrap run purges *all* existing GitHub IdPs
+(login-policy detach + delete via the admin API) and recreates exactly one. This
+replaces the older keep-one-and-dedupe approach, which could leave duplicates
+behind when a delete silently failed — the cause of multiple GitHub buttons and
+the broken hosted login. All instance IdP calls use the admin API only (the
+org-scoped management API could miss instance IdPs and create yet another).
 
 ## Management console & super-admin
 
 The console ships at `https://auth.propel.ninja/ui/console`. The bootstrap grants
-`IAM_OWNER` to the `ZITADEL_ADMIN_EMAIL` human user (created if missing; signs in
-via GitHub SSO by matching email, or an init mail). Re-runs are idempotent.
+`IAM_OWNER` to the `ZITADEL_ADMIN_EMAIL` human user. If that user does not yet
+exist it is created with a verified email **and an initial password** (from
+`ZITADEL_ADMIN_PASSWORD`, or generated and printed once), so the console is
+reachable with username/password even when the GitHub IdP is unavailable. The
+admin can still sign in via GitHub (auto-linked by email). Re-runs are idempotent.
+
+Set `ZITADEL_ADMIN_PASSWORD` as a prod GitHub environment secret to keep the
+password stable across deploys; otherwise a fresh one is generated only when the
+user is first created.
+
+## Strict mode (prod)
+
+`zitadel_bootstrap.py --strict` (auto-enabled for `--env prod`, and passed by
+`deploy-zitadel.sh prod`) turns instance-level config failures — GitHub IdP,
+Actions V2 hook, login branding, and the super-admin grant — into hard errors
+instead of warnings. A prod deploy now fails loudly rather than silently shipping
+broken auth. Local and beta keep the historical best-effort behaviour.
+
+## Recovery
+
+Two operator scripts, lightest first:
+
+| Script | Touches DB? | Use when |
+|--------|-------------|----------|
+| `scripts/zitadel-repair-instance.sh prod` | No | Instance config is wrong (e.g. duplicate GitHub IdPs, missing super-admin). Re-runs the bootstrap in `--strict`, purging + recreating the GitHub IdP and re-granting the admin. Reuses the existing OIDC app creds so the client secret is not rotated. |
+| `scripts/reset-zitadel-cloud.sh prod` | **Yes — drops `zitadel`** | First-boot chicken-and-egg, or a corrupt instance with no customer orgs worth keeping. Drops the DB, restarts ECS to re-seed the EFS PATs, copies the new IAM_OWNER PAT into `propel-prod/zitadel/MGMT_TOKEN`. |
+
+**Full prod reset (no customer orgs to preserve):**
+
+```bash
+scripts/reset-zitadel-cloud.sh prod
+# Copy the new PAT it prints into the ZITADEL_MGMT_TOKEN GitHub env secret, then:
+scripts/deploy-zitadel.sh prod && scripts/deploy-api.sh prod
+```
+
+Before redeploying, confirm the prod GitHub environment has `ZITADEL_ADMIN_EMAIL`
+(and ideally `ZITADEL_ADMIN_PASSWORD`) set, and that the GitHub App's
+Authorization callback URLs include
+`https://auth.propel.ninja/ui/login/login/externalidp/callback`.
+
+After recovery, verify: the hosted Login UI shows a **single** GitHub button,
+console login works via both email/password and GitHub, and
+`POST /api/v1/zitadel/actions/idp-intent` returns 200 (not 503) once the Actions
+signing key is in Secrets Manager.
 
 ## Onboarding a customer
 

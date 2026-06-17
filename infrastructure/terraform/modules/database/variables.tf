@@ -66,3 +66,21 @@ variable "tags" {
   description = "Tags applied to all resources."
   default     = {}
 }
+
+variable "posthog_warehouse_enabled" {
+  type        = bool
+  description = "Enable Aurora logical replication, a public writer endpoint, and a PostHog CDC login secret."
+  default     = true
+}
+
+variable "posthog_warehouse_username" {
+  type        = string
+  description = "Postgres role name for the PostHog data-warehouse connector."
+  default     = "posthog"
+}
+
+variable "posthog_warehouse_publication" {
+  type        = string
+  description = "Logical-replication publication name (self-managed CDC mode in PostHog)."
+  default     = "posthog"
+}

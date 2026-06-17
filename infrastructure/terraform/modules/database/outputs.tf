@@ -21,3 +21,13 @@ output "master_password" {
   description = "Aurora master password."
   sensitive   = true
 }
+
+output "posthog_warehouse_secret_arn" {
+  value       = try(aws_secretsmanager_secret.posthog_warehouse[0].arn, null)
+  description = "Secrets Manager ARN for PostHog warehouse Postgres credentials (null when disabled)."
+}
+
+output "posthog_warehouse_secret_name" {
+  value       = try(aws_secretsmanager_secret.posthog_warehouse[0].name, null)
+  description = "Secrets Manager name for PostHog warehouse Postgres credentials (null when disabled)."
+}

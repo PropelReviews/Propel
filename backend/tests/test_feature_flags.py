@@ -13,27 +13,32 @@ class _FakeClient:
         return self._result
 
 
+def _use_client(monkeypatch, client):
+    """Point feature_flags at a fake shared client."""
+    monkeypatch.setattr(ff, "get_client", lambda: client)
+
+
 def test_unconfigured_falls_back_to_default(monkeypatch):
     # No PostHog client -> the static default governs (local/dev/test).
-    monkeypatch.setattr(ff, "_client", None)
+    _use_client(monkeypatch, None)
     assert ff.is_enabled("any-flag", "ip", default=True) is True
     assert ff.is_enabled("any-flag", "ip", default=False) is False
 
 
 def test_configured_uses_flag_value(monkeypatch):
-    monkeypatch.setattr(ff, "_client", _FakeClient(True))
+    _use_client(monkeypatch, _FakeClient(True))
     assert ff.is_enabled("flag", "ip", default=False) is True
 
-    monkeypatch.setattr(ff, "_client", _FakeClient(False))
+    _use_client(monkeypatch, _FakeClient(False))
     assert ff.is_enabled("flag", "ip", default=True) is False
 
 
 def test_configured_fails_closed_on_missing_flag(monkeypatch):
     # Flag not found -> feature_enabled returns None -> blocked, despite default.
-    monkeypatch.setattr(ff, "_client", _FakeClient(None))
+    _use_client(monkeypatch, _FakeClient(None))
     assert ff.is_enabled("flag", "ip", default=True) is False
 
 
 def test_configured_fails_closed_on_error(monkeypatch):
-    monkeypatch.setattr(ff, "_client", _FakeClient(RuntimeError("boom")))
+    _use_client(monkeypatch, _FakeClient(RuntimeError("boom")))
     assert ff.is_enabled("flag", "ip", default=True) is False

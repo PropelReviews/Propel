@@ -15,6 +15,12 @@ resource "aws_db_subnet_group" "this" {
   name       = "${var.name_prefix}-db"
   subnet_ids = var.subnet_ids
   tags       = var.tags
+
+  lifecycle {
+    # PostHog CDC adds public subnets so Aurora can take a public IP; in-place
+    # updates are supported without replacing the subnet group.
+    create_before_destroy = true
+  }
 }
 
 # Master password generated and kept in Terraform state + Secrets Manager.
@@ -40,6 +46,12 @@ resource "aws_rds_cluster" "this" {
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [var.rds_security_group_id]
 
+  db_cluster_parameter_group_name = (
+    var.posthog_warehouse_enabled
+    ? aws_rds_cluster_parameter_group.posthog[0].name
+    : null
+  )
+
   # Data API (query editor / ExecuteStatement) for debugging without VPC access.
   enable_http_endpoint = var.enable_data_api
 
@@ -62,7 +74,12 @@ resource "aws_rds_cluster_instance" "writer" {
   instance_class     = "db.serverless"
   engine             = aws_rds_cluster.this.engine
   engine_version     = aws_rds_cluster.this.engine_version
-  tags               = var.tags
+
+  # PostHog connects over the internet (sslmode=require) from fixed egress IPs.
+  publicly_accessible = var.posthog_warehouse_enabled
+  apply_immediately   = var.posthog_warehouse_enabled
+
+  tags = var.tags
 }
 
 locals {
