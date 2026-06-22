@@ -81,6 +81,10 @@ locals {
   container_secrets = concat(
     [{ name = "DATABASE_URL", valueFrom = var.database_url_secret_arn }],
     [{ name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn }],
+    var.posthog_warehouse_secret_arn != "" ? [{
+      name      = "POSTHOG_WAREHOUSE_DB_PASSWORD"
+      valueFrom = "${var.posthog_warehouse_secret_arn}:password::"
+    }] : [],
     [for k in nonsensitive(keys(local.external_app_secrets)) : { name = k, valueFrom = aws_secretsmanager_secret.app[k].arn }],
   )
 }
@@ -140,6 +144,7 @@ data "aws_iam_policy_document" "execution" {
     resources = concat(
       [var.database_url_secret_arn],
       [aws_secretsmanager_secret.jwt_secret.arn],
+      var.posthog_warehouse_secret_arn != "" ? [var.posthog_warehouse_secret_arn] : [],
       [for s in aws_secretsmanager_secret.app : s.arn],
     )
   }

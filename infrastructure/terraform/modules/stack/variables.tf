@@ -76,6 +76,18 @@ variable "db_enable_data_api" {
   description = "Enable the RDS Data API (HTTP endpoint) for debugging access."
 }
 
+variable "db_engine_version" {
+  type        = string
+  default     = "16.6"
+  description = "Aurora PostgreSQL engine version. Must match the live cluster major version."
+}
+
+variable "db_posthog_warehouse_enabled" {
+  type        = bool
+  default     = true
+  description = "Enable Aurora logical replication, public Postgres endpoint, and PostHog CDC credentials."
+}
+
 variable "app_environment" {
   type        = map(string)
   default     = {}

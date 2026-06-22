@@ -38,6 +38,12 @@ variable "database_url_secret_arn" {
   description = "Secrets Manager ARN holding the DATABASE_URL."
 }
 
+variable "posthog_warehouse_secret_arn" {
+  type        = string
+  description = "Secrets Manager ARN for PostHog warehouse Postgres credentials (empty when disabled)."
+  default     = ""
+}
+
 variable "app_environment" {
   type        = map(string)
   description = "Plain environment variables injected into the API container (e.g. forwarded from GitHub Actions variables: POSTHOG_TOKEN, POSTHOG_HOST, ...)."

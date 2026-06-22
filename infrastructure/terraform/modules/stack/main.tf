@@ -55,17 +55,23 @@ module "network" {
 }
 
 module "database" {
-  source                = "../database"
-  name_prefix           = var.name_prefix
-  subnet_ids            = module.network.private_subnet_ids
-  rds_security_group_id = module.network.rds_security_group_id
-  db_name               = var.db_name
-  min_acu               = var.db_min_acu
-  max_acu               = var.db_max_acu
-  skip_final_snapshot   = var.db_skip_final_snapshot
-  deletion_protection   = var.db_deletion_protection
-  enable_data_api       = var.db_enable_data_api
-  tags                  = var.tags
+  source      = "../database"
+  name_prefix = var.name_prefix
+  # PostHog's data-warehouse connector reaches Postgres from the public internet.
+  # The writer ENI must sit in IGW-routed (public) subnets — private subnets in
+  # the same group can leave traffic on NAT and time out even with
+  # publicly_accessible = true.
+  subnet_ids                = var.db_posthog_warehouse_enabled ? module.network.public_subnet_ids : module.network.private_subnet_ids
+  rds_security_group_id     = module.network.rds_security_group_id
+  db_name                   = var.db_name
+  engine_version            = var.db_engine_version
+  min_acu                   = var.db_min_acu
+  max_acu                   = var.db_max_acu
+  skip_final_snapshot       = var.db_skip_final_snapshot
+  deletion_protection       = var.db_deletion_protection
+  enable_data_api           = var.db_enable_data_api
+  posthog_warehouse_enabled = var.db_posthog_warehouse_enabled
+  tags                      = var.tags
 }
 
 module "dns" {
@@ -79,20 +85,21 @@ module "dns" {
 }
 
 module "api" {
-  source                  = "../api"
-  name_prefix             = var.name_prefix
-  vpc_id                  = module.network.vpc_id
-  public_subnet_ids       = module.network.public_subnet_ids
-  private_subnet_ids      = module.network.private_subnet_ids
-  alb_security_group_id   = module.network.alb_security_group_id
-  ecs_security_group_id   = module.network.ecs_security_group_id
-  acm_certificate_arn     = module.dns.certificate_arn
-  database_url_secret_arn = module.database.database_url_secret_arn
-  app_environment         = local.api_app_environment
-  app_secrets             = var.app_secrets
-  container_port          = var.container_port
-  image_tag               = var.api_image_tag
-  desired_count           = var.api_desired_count
+  source                       = "../api"
+  name_prefix                  = var.name_prefix
+  vpc_id                       = module.network.vpc_id
+  public_subnet_ids            = module.network.public_subnet_ids
+  private_subnet_ids           = module.network.private_subnet_ids
+  alb_security_group_id        = module.network.alb_security_group_id
+  ecs_security_group_id        = module.network.ecs_security_group_id
+  acm_certificate_arn          = module.dns.certificate_arn
+  database_url_secret_arn      = module.database.database_url_secret_arn
+  posthog_warehouse_secret_arn = module.database.posthog_warehouse_secret_arn
+  app_environment              = local.api_app_environment
+  app_secrets                  = var.app_secrets
+  container_port               = var.container_port
+  image_tag                    = var.api_image_tag
+  desired_count                = var.api_desired_count
 
   ingestion_enabled     = var.ingestion_enabled
   dagster_fqdn          = var.dagster_fqdn

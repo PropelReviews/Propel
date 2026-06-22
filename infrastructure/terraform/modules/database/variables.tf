@@ -5,7 +5,7 @@ variable "name_prefix" {
 
 variable "subnet_ids" {
   type        = list(string)
-  description = "Private subnet IDs for the DB subnet group."
+  description = "Subnet IDs for the DB subnet group (public subnets when PostHog CDC is enabled)."
 }
 
 variable "rds_security_group_id" {
@@ -28,7 +28,7 @@ variable "master_username" {
 variable "engine_version" {
   type        = string
   description = "Aurora PostgreSQL engine version (must support Serverless v2)."
-  default     = "18.3"
+  default     = "16.6"
 }
 
 variable "min_acu" {
@@ -59,6 +59,24 @@ variable "enable_data_api" {
   type        = bool
   description = "Enable the RDS Data API (HTTP endpoint) for query access without a VPC connection (debugging)."
   default     = false
+}
+
+variable "posthog_warehouse_enabled" {
+  type        = bool
+  description = "Enable Aurora logical replication, a public writer endpoint, and a PostHog CDC login secret."
+  default     = true
+}
+
+variable "posthog_warehouse_username" {
+  type        = string
+  description = "Postgres role name for the PostHog data-warehouse connector."
+  default     = "posthog"
+}
+
+variable "posthog_warehouse_publication" {
+  type        = string
+  description = "Logical-replication publication name (self-managed CDC mode in PostHog)."
+  default     = "posthog"
 }
 
 variable "tags" {
