@@ -78,7 +78,7 @@ variable "db_enable_data_api" {
 
 variable "db_engine_version" {
   type        = string
-  default     = "16.6"
+  default     = "18.3"
   description = "Aurora PostgreSQL engine version. Must match the live cluster major version."
 }
 

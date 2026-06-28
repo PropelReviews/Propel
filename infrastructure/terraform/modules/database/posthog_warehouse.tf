@@ -4,7 +4,7 @@
 # boot (same password as this secret).
 
 locals {
-  # Family must match the cluster major version (e.g. 16.6 → aurora-postgresql16).
+  # Family must match the cluster major version (e.g. 18.3 → aurora-postgresql18).
   # Uses var.engine_version (not aws_rds_cluster.this) — the cluster references this
   # parameter group, so reading the cluster here would create a Terraform cycle.
   posthog_parameter_group_family = "aurora-postgresql${split(".", var.engine_version)[0]}"

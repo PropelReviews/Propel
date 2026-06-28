@@ -13,4 +13,5 @@ dagster_subdomain = "dagster"
 
 db_min_acu        = 0.5
 db_max_acu        = 4
+db_engine_version = "18.3"
 api_desired_count = 2

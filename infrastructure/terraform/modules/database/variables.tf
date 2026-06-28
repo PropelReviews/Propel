@@ -28,7 +28,7 @@ variable "master_username" {
 variable "engine_version" {
   type        = string
   description = "Aurora PostgreSQL engine version (must support Serverless v2)."
-  default     = "16.6"
+  default     = "18.3"
 }
 
 variable "min_acu" {

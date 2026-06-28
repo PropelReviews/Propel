@@ -31,6 +31,7 @@ module "stack" {
 
   db_min_acu             = var.db_min_acu
   db_max_acu             = var.db_max_acu
+  db_engine_version      = var.db_engine_version
   db_skip_final_snapshot = false
   db_deletion_protection = true
 

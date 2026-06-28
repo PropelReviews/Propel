@@ -42,6 +42,12 @@ variable "db_max_acu" {
   default = 4
 }
 
+variable "db_engine_version" {
+  type        = string
+  default     = "18.3"
+  description = "Aurora PostgreSQL engine version. Must match the live cluster."
+}
+
 variable "api_image_tag" {
   type        = string
   default     = "latest"
