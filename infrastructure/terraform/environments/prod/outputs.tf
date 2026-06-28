@@ -53,8 +53,3 @@ output "cloudfront_distribution_id" {
 output "alb_dns_name" {
   value = module.stack.alb_dns_name
 }
-
-output "beta_delegation_name_servers" {
-  value       = data.aws_route53_zone.beta.name_servers
-  description = "NS records delegated to the beta account for beta.propel.ninja."
-}

@@ -42,17 +42,9 @@ long-running Dagster service). Ingestion logs ship to PostHog under
 (`propel-backend`). Note: Dagster OSS has no built-in auth — restrict the UI at
 the network layer if the URL should not be world-reachable.
 
-The prod config delegates `beta.propel.ninja` from the `propel.ninja` zone by
-reading the beta zone's name servers cross-account (read-only) and writing the
-NS record in the parent zone. Both hosted zones are **referenced** (never
-created/destroyed by Terraform).
-
-`www.beta.propel.ninja` is **not** a separate hosted zone and does **not** need
-its own NS record in the prod zone. Delegation at `beta.propel.ninja` already
-covers all child names; the beta stack creates a Route53 **A alias** for `www`
-in the `beta.propel.ninja` child zone pointing at the beta landing CloudFront
-distribution. Do not add a `www.beta.propel.ninja` NS record in prod — that
-breaks resolution and leaves clients seeing only NS/SOA responses.
+The prod and beta hosted zones are **referenced** by Terraform (never
+created/destroyed by Terraform). Beta was decommissioned in June 2026; prod no
+longer delegates `beta.propel.ninja`.
 
 ---
 
@@ -63,13 +55,11 @@ breaks resolution and leaves clients seeing only NS/SOA responses.
 
 Done once per account before the first `terraform init`:
 
-1. **Hosted zones** — `propel.ninja` (prod) and `beta.propel.ninja` (beta,
-   manually created). Terraform only reads them.
-2. **Remote state** — an S3 bucket + `propel-tf-locks` DynamoDB table per
-   account (names fixed in `environments/<env>/backend.tf`).
-3. **GitHub OIDC + `PropelTerraform` role** per account, with prod→beta
-   cross-account trust for the DNS delegation. Local runs instead use AWS SSO
-   ([aws-sso.md](../../docs/deployment/aws-sso.md)).
+1. **Hosted zone** — `propel.ninja` (prod). Terraform only reads it.
+2. **Remote state** — an S3 bucket + `propel-tf-locks` DynamoDB table in the
+   prod account (names fixed in `environments/prod/backend.tf`).
+3. **GitHub OIDC + `PropelTerraform` role** in the prod account. Local runs use
+   AWS SSO ([aws-sso.md](../../docs/deployment/aws-sso.md)).
 
 ### App config via GitHub Actions variables (generic)
 
@@ -96,7 +86,7 @@ expose as a variable):
 | `POSTHOG_TOKEN` | `phc_...` | API (OTEL -> PostHog) + SPA |
 | `POSTHOG_HOST` | `https://us.i.posthog.com` | API + SPA |
 
-For OAuth client secrets, add GitHub Environment **secrets** on `beta` / `prod`.
+For OAuth client secrets, add GitHub Environment **secrets** on `prod`.
 Deploy workflows map them into `app_secrets` automatically:
 
 | Secret | Required |
@@ -133,16 +123,15 @@ seeding the first API image + frontend.
 
 ### Ongoing (CI/CD)
 
-- Push to `main` -> `.github/workflows/deploy-beta.yml` deploys **beta**.
-- Push a `v*` tag -> `.github/workflows/deploy-prod.yml` deploys **prod**
-  (gated by the `production` GitHub Environment approval).
+- Push a `v*` tag or trigger manually -> `.github/workflows/deploy-prod.yml`
+  deploys **prod** (gated by the `prod` GitHub Environment approval).
 
 ### Verify
 
 ```bash
-curl https://api.beta.propel.ninja/health   # {"status":"ok"}
-open https://app.beta.propel.ninja           # app (dashboard)
-open https://beta.propel.ninja               # landing (www redirects here)
+curl https://api.propel.ninja/health   # {"status":"ok"}
+open https://app.propel.ninja           # app (dashboard)
+open https://propel.ninja               # landing (www redirects here)
 ```
 
 ---

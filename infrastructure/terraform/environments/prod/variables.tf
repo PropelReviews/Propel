@@ -32,18 +32,6 @@ variable "dagster_subdomain" {
   description = "Subdomain label for the Dagster ingestion UI."
 }
 
-variable "beta_zone_name" {
-  type        = string
-  default     = "beta.propel.ninja"
-  description = "Child zone delegated from the prod zone."
-}
-
-variable "beta_dns_role_arn" {
-  type        = string
-  default     = "arn:aws:iam::536270449640:role/PropelTerraform"
-  description = "Role in the beta account assumed (read-only) to read the beta zone NS."
-}
-
 variable "db_min_acu" {
   type    = number
   default = 0.5

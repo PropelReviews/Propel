@@ -3,28 +3,6 @@ data "aws_route53_zone" "this" {
   private_zone = false
 }
 
-# Cross-account read of the (manually created) beta hosted zone, so we can
-# delegate beta.propel.ninja from the prod parent zone.
-data "aws_route53_zone" "beta" {
-  provider     = aws.beta_dns
-  name         = var.beta_zone_name
-  private_zone = false
-}
-
-# Delegation: NS record for beta.propel.ninja in the propel.ninja zone, pointing
-# at the beta account's name servers. This is the only cross-account write.
-resource "aws_route53_record" "beta_delegation" {
-  zone_id = data.aws_route53_zone.this.zone_id
-  name    = var.beta_zone_name
-  type    = "NS"
-  ttl     = 172800
-  records = data.aws_route53_zone.beta.name_servers
-
-  # The beta.propel.ninja delegation may already exist (e.g. created manually
-  # during bootstrap). Adopt/overwrite it instead of failing on create.
-  allow_overwrite = true
-}
-
 locals {
   name_prefix  = "propel-${var.environment}"
   api_fqdn     = "${var.api_subdomain}.${var.zone_name}"

@@ -11,10 +11,6 @@ api_subdomain     = "api"
 app_subdomain     = "app"
 dagster_subdomain = "dagster"
 
-# Cross-account role assumed read-only to delegate beta.propel.ninja.
-beta_zone_name    = "beta.propel.ninja"
-beta_dns_role_arn = "arn:aws:iam::536270449640:role/PropelTerraform"
-
 db_min_acu        = 0.5
 db_max_acu        = 4
 api_desired_count = 2

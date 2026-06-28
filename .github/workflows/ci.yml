@@ -28,12 +28,6 @@ jobs:
         working-directory: infrastructure/terraform
         run: terraform fmt -check -recursive
 
-      - name: Validate beta
-        working-directory: infrastructure/terraform/environments/beta
-        run: |
-          terraform init -backend=false -input=false
-          terraform validate
-
       - name: Validate prod
         working-directory: infrastructure/terraform/environments/prod
         run: |

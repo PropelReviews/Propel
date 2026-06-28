@@ -340,8 +340,10 @@ For prod, swap to `api.propel.ninja` / `app.propel.ninja`.
 | Trigger | Workflow | Result |
 |---------|----------|--------|
 | PR / push to `main` | `ci.yml` | `terraform fmt`+`validate`, backend `pytest`, frontend `vitest` |
-| push to `main` | `deploy-beta.yml` | apply beta + deploy API + frontend |
-| push `v*` tag | `deploy-prod.yml` | (after approval) apply prod + deploy API + frontend |
+| push `v*` tag or manual | `deploy-prod.yml` | (after approval) apply prod + deploy API + frontend |
+
+> Beta was decommissioned in June 2026. The `deploy-beta.yml` workflow has been
+> removed and the beta AWS stack destroyed.
 
 ---
 
@@ -352,6 +354,9 @@ For prod, swap to `api.propel.ninja` / `app.propel.ninja`.
   decommissioning an account.
 - The state bucket has versioning on; empty all versions before deleting it.
 - Hosted zones are never touched by Terraform.
+- To rebuild beta later, re-run this bootstrap runbook for account `536270449640`,
+  recreate the hosted zone, restore prod beta DNS delegation in Terraform (if
+  needed), and re-enable a deploy workflow.
 
 ## Troubleshooting
 
@@ -363,7 +368,7 @@ For prod, swap to `api.propel.ninja` / `app.propel.ninja`.
 | Prod OIDC `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Stale prod role trust — re-apply `prod-trust.json` (Step 4b `update-assume-role-policy`). Common after renaming the GitHub Environment `production` → `prod`; the live IAM trust may still list `environment:production` while Actions mints `environment:prod`. |
 | `Backend initialization required` on `plan`/`apply` | Run `terraform init` first; ensure the state bucket + lock table from Step 3 exist. |
 | `BucketAlreadyOwnedByYou` | The state bucket is already created — safe to ignore. |
-| Prod apply can't read beta zone | Step 4c cross-account trust is missing or `beta_dns_role_arn` is wrong. |
+| Prod apply can't read beta zone | Beta decommissioned — remove cross-account beta DNS resources from prod Terraform if still present. |
 | `www.beta.propel.ninja` returns only NS / does not load | A stray `www.beta.propel.ninja` **NS** record in the **prod** zone overrides delegation — delete it. The www landing alias must be an **A** record named `www` in the **beta** `beta.propel.ninja` child zone (created by the beta stack). Re-apply beta after the landing module is merged. |
 | ALB target unhealthy / 0 tasks | No image pushed yet — run Step 7. |
 | ACM cert stuck `PENDING_VALIDATION` | DNS validation records propagating; wait a few minutes and re-apply. |
