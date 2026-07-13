@@ -25,6 +25,8 @@ from app.schemas.metrics import (
     ChangeFailureResponse,
     CycleTimePoint,
     CycleTimeResponse,
+    DeploymentFrequencyPoint,
+    DeploymentFrequencyResponse,
     Granularity,
     PullRequestActivityPoint,
     PullRequestActivityResponse,
@@ -48,6 +50,21 @@ _PR_ACTIVITY_QUERY = text(
         COALESCE(SUM(prs_merged), 0)::int AS merged,
         COALESCE(SUM(prs_closed), 0)::int AS closed
     FROM analytics.fct_pr_activity_daily
+    WHERE tenant_id = :tenant_id
+      AND activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+_DEPLOYMENT_FREQUENCY_QUERY = text(
+    """
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(releases_published), 0)::int AS releases_published,
+        COALESCE(SUM(production_releases), 0)::int AS production_releases
+    FROM analytics.fct_deployment_frequency_daily
     WHERE tenant_id = :tenant_id
       AND activity_date >= :start
       AND activity_date <= :end
@@ -168,6 +185,33 @@ async def pull_request_activity(
                 period_start=period_start, opened=opened, merged=merged, closed=closed
             )
             for period_start, opened, merged, closed in rows
+        ],
+    )
+
+
+async def deployment_frequency(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    granularity: Granularity,
+    start: date,
+    end: date,
+) -> DeploymentFrequencyResponse:
+    rows = await _safe_query(
+        session,
+        _DEPLOYMENT_FREQUENCY_QUERY,
+        _bind(granularity, tenant_id, start, end),
+        "analytics.fct_deployment_frequency_daily",
+    )
+    return DeploymentFrequencyResponse(
+        granularity=granularity,
+        points=[
+            DeploymentFrequencyPoint(
+                period_start=period_start,
+                releases_published=releases_published,
+                production_releases=production_releases,
+            )
+            for period_start, releases_published, production_releases in rows
         ],
     )
 

@@ -118,4 +118,32 @@ begin
     end if;
 
     raise notice 'fct_change_failure_daily matches expected fixture output';
+
+    -- Deployment frequency: REL_1 production on 2026-01-06; REL_2 prerelease on
+    -- 2026-01-07; draft excluded.
+    with expected (
+        activity_date, releases_published, production_releases
+    ) as (
+        values
+            ('2026-01-06'::date, 1, 1),
+            ('2026-01-07'::date, 1, 0)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join analytics.fct_deployment_frequency_daily f
+        on f.activity_date = e.activity_date
+        and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+    where
+        f.releases_published is distinct from e.releases_published
+        or f.production_releases is distinct from e.production_releases
+        or e.activity_date is null
+        or f.activity_date is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_deployment_frequency_daily does not match expected fixture output (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_deployment_frequency_daily matches expected fixture output';
 end $$;

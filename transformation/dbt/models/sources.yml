@@ -40,3 +40,12 @@ sources:
         meta:
           dagster:
             asset_key: ["github", "pull_requests"]
+
+      - name: github_releases
+        identifier: raw_record
+        description: >
+          GitHub Release payloads (resource_type = 'releases') from
+          tap-github-releases. Powers DORA deployment frequency.
+        meta:
+          dagster:
+            asset_key: ["github", "releases"]

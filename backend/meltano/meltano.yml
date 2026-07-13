@@ -63,6 +63,16 @@ plugins:
         - issues.*
         - issue_comments.*
 
+    # GitHub Releases (often published by Actions release workflows) — the
+    # DORA deployment-frequency signal. Separate job so release sync has its
+    # own watermark and failure boundary.
+    - name: tap-github-releases
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
+        - releases.*
+
     - name: tap-github-org
       inherit_from: tap-github
       config:
@@ -127,6 +137,9 @@ jobs:
   - name: github_issues_sync
     tasks:
       - tap-github-issues target-propel
+  - name: github_releases_sync
+    tasks:
+      - tap-github-releases target-propel
   - name: copilot_sync
     tasks:
       - tap-github-copilot target-propel

@@ -5,7 +5,8 @@ Granularity values match the frontend's `Granularity` type so query params map
 one-to-one onto the chart filters.
 
 DORA-aligned primitives currently exposed:
-  - pull-request activity  → deployment-frequency proxy (merge throughput)
+  - deployment frequency   → published GitHub Releases
+  - pull-request activity  → throughput (opened / merged / closed)
   - cycle time             → lead-time-for-changes proxy (PR open → merge)
   - review latency         → lead-time breakdown / review flow
   - change failure         → change-fail-rate proxy (revert-titled merges)
@@ -31,6 +32,19 @@ class PullRequestActivityPoint(BaseModel):
 class PullRequestActivityResponse(BaseModel):
     granularity: Granularity
     points: list[PullRequestActivityPoint]
+
+
+class DeploymentFrequencyPoint(BaseModel):
+    """GitHub Release deployment counts bucketed to one period."""
+
+    period_start: date
+    releases_published: int
+    production_releases: int
+
+
+class DeploymentFrequencyResponse(BaseModel):
+    granularity: Granularity
+    points: list[DeploymentFrequencyPoint]
 
 
 class CycleTimePoint(BaseModel):

@@ -4,10 +4,11 @@ Tenant-scoped, gated by the `metrics:read` permission (granted to every
 role by default), since these are views, not control surfaces.
 
 Endpoints map onto DORA-aligned primitives computed in transformation/dbt:
-  GET .../metrics/pull-requests     deployment-frequency proxy
-  GET .../metrics/cycle-time        lead-time-for-changes proxy
-  GET .../metrics/review-latency    review-flow / lead-time breakdown
-  GET .../metrics/change-failure    change-fail-rate proxy (reverts)
+  GET .../metrics/deployment-frequency  published GitHub Releases
+  GET .../metrics/pull-requests         PR throughput (opened/merged/closed)
+  GET .../metrics/cycle-time            lead-time-for-changes proxy
+  GET .../metrics/review-latency        review-flow / lead-time breakdown
+  GET .../metrics/change-failure        change-fail-rate proxy (reverts)
 """
 
 from datetime import UTC, datetime, timedelta
@@ -21,6 +22,7 @@ from app.db.session import get_async_session
 from app.schemas.metrics import (
     ChangeFailureResponse,
     CycleTimeResponse,
+    DeploymentFrequencyResponse,
     Granularity,
     PullRequestActivityResponse,
     ReviewLatencyResponse,
@@ -55,6 +57,27 @@ async def get_pull_request_activity(
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
     return await metrics_service.pull_request_activity(
+        session,
+        ctx.tenant.id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/deployment-frequency",
+    response_model=DeploymentFrequencyResponse,
+)
+async def get_deployment_frequency(
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved_start, resolved_end = _resolve_range(start, end)
+    return await metrics_service.deployment_frequency(
         session,
         ctx.tenant.id,
         granularity=granularity,

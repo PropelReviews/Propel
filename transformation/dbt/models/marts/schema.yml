@@ -5,9 +5,8 @@ models:
     description: >
       Daily pull-request activity per tenant: PRs opened (created_at), merged
       (merged_at), and closed without merging (closed_at with no merged_at).
-      Deployment-frequency proxy under DORA (merge throughput until deploys
-      are ingested). Served by the backend metrics API with day/week/month
-      bucketing.
+      Throughput signal — not DORA deployment frequency (see
+      fct_deployment_frequency_daily, which counts GitHub Releases).
     columns:
       - name: tenant_id
         description: Propel tenant that owns the activity.
@@ -24,6 +23,25 @@ models:
         data_tests:
           - not_null
       - name: prs_closed
+        data_tests:
+          - not_null
+
+  - name: fct_deployment_frequency_daily
+    description: >
+      Daily DORA deployment frequency from GitHub Releases: published
+      non-draft releases (releases_published) and non-prerelease production
+      releases (production_releases), bucketed by published_at.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: releases_published
+        data_tests:
+          - not_null
+      - name: production_releases
         data_tests:
           - not_null
 

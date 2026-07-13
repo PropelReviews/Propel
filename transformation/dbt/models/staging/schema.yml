@@ -26,3 +26,12 @@ models:
       - name: submitted_at
         data_tests:
           - not_null
+
+  - name: stg_github_releases
+    description: >
+      Latest snapshot of every GitHub Release (one row per release), including
+      drafts. Deployment-frequency marts filter to published non-drafts.
+    columns:
+      - name: release_node_id
+        data_tests:
+          - not_null

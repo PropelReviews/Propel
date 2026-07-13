@@ -20,6 +20,7 @@ _EVENT_STREAM_NAMES: dict[str, str] = {
     "issue_comments": "comment",
     "pull_request_review_comments": "comment",
     "reviews": "review",
+    "releases": "release",
 }
 
 _TOOL_GITHUB = "github"
@@ -84,6 +85,11 @@ def _occurred_at(stream: str, record: dict) -> datetime | None:
                         return parsed
     if stream == "reviews":
         return _parse_dt(record.get("submitted_at"))
+    if stream == "releases":
+        # Prefer published_at (drafts may lack it); fall back to created_at.
+        return _parse_dt(record.get("published_at")) or _parse_dt(
+            record.get("created_at")
+        )
     return _parse_dt(record.get("created_at"))
 
 
@@ -108,6 +114,10 @@ def _metadata(stream: str, record: dict) -> dict:
             meta[key] = record[key]
     if stream == "reviews" and record.get("pull_request_number") is not None:
         meta["pull_request_number"] = record["pull_request_number"]
+    if stream == "releases":
+        for key in ("tag_name", "name", "draft", "prerelease", "published_at"):
+            if record.get(key) is not None:
+                meta[key] = record[key]
     return meta
 
 

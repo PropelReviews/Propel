@@ -67,11 +67,21 @@ async def analytics_tables(db_engine):
                 "change_failure_rate float8 NOT NULL)"
             )
         )
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS analytics.fct_deployment_frequency_daily ("
+                "tenant_id uuid NOT NULL, "
+                "activity_date date NOT NULL, "
+                "releases_published int NOT NULL, "
+                "production_releases int NOT NULL)"
+            )
+        )
         for table in (
             "fct_pr_activity_daily",
             "fct_pr_cycle_time_daily",
             "fct_review_latency_daily",
             "fct_change_failure_daily",
+            "fct_deployment_frequency_daily",
         ):
             await conn.execute(text(f"TRUNCATE analytics.{table}"))
     yield
@@ -81,6 +91,7 @@ async def analytics_tables(db_engine):
             "fct_pr_cycle_time_daily",
             "fct_review_latency_daily",
             "fct_change_failure_daily",
+            "fct_deployment_frequency_daily",
         ):
             await conn.execute(text(f"DROP TABLE IF EXISTS analytics.{table}"))
         await conn.execute(text("DROP SCHEMA IF EXISTS analytics"))
@@ -191,6 +202,31 @@ async def _seed_change_failure(
                 "prs_merged": prs_merged,
                 "prs_reverted": prs_reverted,
                 "rate": rate,
+            },
+        )
+        await session.commit()
+
+
+async def _seed_deployment_frequency(
+    tenant_id: uuid.UUID,
+    activity_date: date,
+    *,
+    releases_published: int,
+    production_releases: int,
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO analytics.fct_deployment_frequency_daily "
+                "(tenant_id, activity_date, releases_published, production_releases) "
+                "VALUES (:tenant_id, :activity_date, :releases_published, "
+                " :production_releases)"
+            ),
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "releases_published": releases_published,
+                "production_releases": production_releases,
             },
         )
         await session.commit()
@@ -406,11 +442,41 @@ async def test_review_latency_and_change_failure(client: AsyncClient, analytics_
 
 
 @pytest.mark.asyncio
+async def test_deployment_frequency(client: AsyncClient, analytics_tables):
+    token, tenant = await _setup_tenant(client)
+    tenant_id = uuid.UUID(tenant["id"])
+
+    await _seed_deployment_frequency(
+        tenant_id, date(2026, 6, 1), releases_published=2, production_releases=1
+    )
+    await _seed_deployment_frequency(
+        tenant_id, date(2026, 6, 2), releases_published=1, production_releases=1
+    )
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/deployment-frequency",
+        params={"granularity": "weekly", "start": "2026-06-01", "end": "2026-06-30"},
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    points = resp.json()["points"]
+    assert len(points) == 1
+    assert points[0]["period_start"] == "2026-06-01"
+    assert points[0]["releases_published"] == 3
+    assert points[0]["production_releases"] == 2
+
+
+@pytest.mark.asyncio
 async def test_dora_endpoints_missing_tables_return_empty(client: AsyncClient):
     token, tenant = await _setup_tenant(client, email="empty@example.com")
     headers = auth_headers(token)
 
-    for path in ("cycle-time", "review-latency", "change-failure"):
+    for path in (
+        "cycle-time",
+        "review-latency",
+        "change-failure",
+        "deployment-frequency",
+    ):
         resp = await client.get(
             f"/api/v1/tenants/{tenant['id']}/metrics/{path}",
             headers=headers,

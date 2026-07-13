@@ -13,8 +13,9 @@ Every metric Propel surfaces is defined here as dbt models. This is the transpar
 
 Example metrics:
 
+- Deployment frequency — published GitHub Releases
 - Cycle time (PR open to merge) — DORA lead-time proxy
-- Throughput / merge frequency — DORA deployment-frequency proxy
+- Throughput — PR merge activity
 - Review latency (time to first review)
 - Change-failure proxy (revert-titled merges)
 - Tooling activity signals
@@ -38,10 +39,11 @@ transformation/
         │   ├── stg_github_issues.sql
         │   └── stg_linear_issues.sql
         └── marts/
-            ├── fct_pr_activity_daily.sql       # merge throughput
-            ├── fct_pr_cycle_time_daily.sql     # lead-time proxy
-            ├── fct_review_latency_daily.sql    # time to first review
-            ├── fct_change_failure_daily.sql    # CFR proxy via reverts
+            ├── fct_deployment_frequency_daily.sql  # GitHub Releases
+            ├── fct_pr_activity_daily.sql           # PR throughput
+            ├── fct_pr_cycle_time_daily.sql         # lead-time proxy
+            ├── fct_review_latency_daily.sql        # time to first review
+            ├── fct_change_failure_daily.sql        # CFR proxy via reverts
             ├── fct_tickets.sql
             └── schema.yml
 ```

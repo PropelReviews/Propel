@@ -6,6 +6,7 @@ import { ConnectTools } from "@/components/connect-tools";
 import {
   ChangeFailureChart,
   CycleTimeChart,
+  DeploymentFrequencyChart,
   ReviewLatencyChart,
 } from "@/components/dora-metric-charts";
 import { PrActivityChart } from "@/components/pr-activity-chart";
@@ -203,10 +204,14 @@ function Loaded({
       </section>
 
       <section>
+        <h2 className="mb-4 text-lg font-medium">Deployment frequency</h2>
+        <DeploymentFrequencyChart tenantId={tenantId} />
+      </section>
+
+      <section>
         <h2 className="mb-4 text-lg font-medium">Pull request activity</h2>
         <p className="text-muted-foreground mb-4 text-sm">
-          Merge throughput — DORA deployment-frequency proxy until production deploys
-          are ingested.
+          Throughput — PRs opened, merged, and closed without merging.
         </p>
         <PrActivityChart tenantId={tenantId} />
       </section>

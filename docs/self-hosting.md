@@ -343,7 +343,7 @@ Go to **GitHub → Settings → Developer settings → GitHub Apps → New GitHu
 
 | Permission | Access | Why |
 |------------|--------|-----|
-| **Contents** | Read-only | Commit history |
+| **Contents** | Read-only | Commit history and GitHub Releases (deployment frequency) |
 | **Issues** | Read-only | Issues and comments |
 | **Metadata** | Read-only | Required for repository access |
 | **Pull requests** | Read-only | PRs, reviews, review comments |

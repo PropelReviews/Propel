@@ -11,7 +11,7 @@ taps and lands records through the custom `target-propel` loader, which writes
 meltano/
 ├── meltano.yml          # plugins + jobs (github_org_sync, github_user_profiles_sync,
 │                        #   github_commits_sync, github_pull_requests_sync,
-│                        #   github_issues_sync, copilot_sync)
+│                        #   github_issues_sync, github_releases_sync, copilot_sync)
 ├── target-propel/       # custom Singer target → raw_record + datapoint
 └── tap-github-copilot/  # custom tap for Copilot usage metrics (measurement)
 ```
@@ -22,10 +22,10 @@ requires exactly one discovery mode per invocation, the base `tap-github`
 own stream selection. Repo activity is split per resource so each runs as its
 own granular Meltano job / Dagster op: `tap-github-commits` (`commits`),
 `tap-github-pull-requests` (`pull_requests`, `reviews`,
-`pull_request_review_comments`), and `tap-github-issues` (`issues`,
-`issue_comments`) — all over `repositories`. Org/user modes stay as
-`tap-github-org` (organizations → `organization_members`) and `tap-github-users`
-(`user_usernames` → `users`).
+`pull_request_review_comments`), `tap-github-issues` (`issues`,
+`issue_comments`), and `tap-github-releases` (`releases`) — all over
+`repositories`. Org/user modes stay as `tap-github-org` (organizations →
+`organization_members`) and `tap-github-users` (`user_usernames` → `users`).
 
 ## How it runs
 
@@ -39,6 +39,7 @@ meltano run github_user_profiles_sync  # member name/email profiles (users)
 meltano run github_commits_sync        # commits across the installation's repos
 meltano run github_pull_requests_sync  # PRs + reviews + review comments
 meltano run github_issues_sync         # issues + issue comments
+meltano run github_releases_sync       # GitHub Releases (deployment frequency)
 meltano run copilot_sync               # Copilot per-user-day usage (measurement)
 ```
 

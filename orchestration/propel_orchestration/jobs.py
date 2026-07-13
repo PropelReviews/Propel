@@ -90,6 +90,7 @@ _ASSET_KEYS: dict[str, AssetKey] = {
     "github_commits_sync": AssetKey(["github", "commits"]),
     "github_pull_requests_sync": AssetKey(["github", "pull_requests"]),
     "github_issues_sync": AssetKey(["github", "issues"]),
+    "github_releases_sync": AssetKey(["github", "releases"]),
     "copilot_sync": AssetKey(["github", "copilot_usage"]),
     "linear_issues_sync": AssetKey(["linear", "issues"]),
 }
@@ -311,6 +312,11 @@ get_issues = _resource_op(
     "github_issues_sync",
     "Pull issues and issue comments across the org's repos.",
 )
+get_releases = _resource_op(
+    "get_releases",
+    "github_releases_sync",
+    "Pull GitHub Releases (deployment-frequency signal) across the org's repos.",
+)
 get_copilot_usage = _resource_op(
     "get_copilot_usage",
     "copilot_sync",
@@ -367,8 +373,9 @@ def org_ingestion_job() -> None:
     commits = get_commits(start=started)
     pulls = get_pull_requests(start=started)
     issues = get_issues(start=started)
+    releases = get_releases(start=started)
     copilot = get_copilot_usage(start=started)
-    flush_logs(after=[profiles, commits, pulls, issues, copilot])
+    flush_logs(after=[profiles, commits, pulls, issues, releases, copilot])
 
 
 @job(

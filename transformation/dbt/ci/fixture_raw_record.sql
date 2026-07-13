@@ -89,6 +89,31 @@ values
       "user": {"login": "alice"}, "pull_request_number": 5, "org": "acme", "repo": "web"}',
     '2026-01-06T11:00:00Z'
 ),
+-- GitHub Releases (deployment frequency). Draft excluded from the mart.
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'releases', 'REL_1',
+    '{"node_id": "REL_1", "id": 1, "tag_name": "v1.0.0", "name": "1.0.0",
+      "draft": false, "prerelease": false,
+      "created_at": "2026-01-06T15:00:00Z", "published_at": "2026-01-06T16:00:00Z",
+      "author": {"login": "alice"}, "org": "acme", "repo": "api"}',
+    '2026-01-06T17:00:00Z'
+),
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'releases', 'REL_2',
+    '{"node_id": "REL_2", "id": 2, "tag_name": "v1.1.0-rc.1", "name": "1.1.0-rc.1",
+      "draft": false, "prerelease": true,
+      "created_at": "2026-01-07T09:00:00Z", "published_at": "2026-01-07T10:00:00Z",
+      "author": {"login": "bob"}, "org": "acme", "repo": "api"}',
+    '2026-01-07T11:00:00Z'
+),
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'releases', 'REL_DRAFT',
+    '{"node_id": "REL_DRAFT", "id": 3, "tag_name": "v2.0.0", "name": "2.0.0",
+      "draft": true, "prerelease": false,
+      "created_at": "2026-01-07T12:00:00Z", "published_at": null,
+      "author": {"login": "carol"}, "org": "acme", "repo": "web"}',
+    '2026-01-07T12:30:00Z'
+),
 -- GitHub issues (exclude PR-shaped rows via pull_request key in staging)
 (
     'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'issues', 'ISSUE_1',

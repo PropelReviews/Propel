@@ -54,6 +54,17 @@ export type ChangeFailureResponse = {
   points: ChangeFailurePoint[];
 };
 
+export type DeploymentFrequencyPoint = {
+  period_start: string;
+  releases_published: number;
+  production_releases: number;
+};
+
+export type DeploymentFrequencyResponse = {
+  granularity: Granularity;
+  points: DeploymentFrequencyPoint[];
+};
+
 type MetricRange = { granularity: Granularity; start: Date; end: Date };
 
 function rangeParams(options: MetricRange): URLSearchParams {
@@ -108,6 +119,18 @@ export function getChangeFailure(
   const params = rangeParams(options);
   return authedGet<ChangeFailureResponse>(
     `/api/v1/tenants/${tenantId}/metrics/change-failure?${params}`,
+    token,
+  );
+}
+
+export function getDeploymentFrequency(
+  token: string,
+  tenantId: string,
+  options: MetricRange,
+): Promise<DeploymentFrequencyResponse> {
+  const params = rangeParams(options);
+  return authedGet<DeploymentFrequencyResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/deployment-frequency?${params}`,
     token,
   );
 }

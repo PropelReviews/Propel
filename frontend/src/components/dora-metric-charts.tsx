@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import {
+  formatCount,
   formatDuration,
   formatPercent,
   formatWeekLabel,
@@ -12,7 +13,12 @@ import {
   type TimeSeriesPoint,
 } from "@/components/charts";
 import { ApiError } from "@/lib/api";
-import { getChangeFailure, getCycleTime, getReviewLatency } from "@/lib/metrics";
+import {
+  getChangeFailure,
+  getCycleTime,
+  getDeploymentFrequency,
+  getReviewLatency,
+} from "@/lib/metrics";
 import { useAuth } from "@/providers/auth-provider";
 
 type FetchState =
@@ -32,6 +38,89 @@ const REVIEW_SERIES: ChartSeries[] = [
 const CFR_SERIES: ChartSeries[] = [
   { key: "change_failure_rate_pct", label: "Change failure rate" },
 ];
+
+const DEPLOY_SERIES: ChartSeries[] = [
+  { key: "production_releases", label: "Production releases" },
+  { key: "releases_published", label: "All published releases" },
+];
+
+/**
+ * DORA deployment frequency from GitHub Releases
+ * (`analytics.fct_deployment_frequency_daily`).
+ */
+export function DeploymentFrequencyChart({ tenantId }: { tenantId: string }) {
+  return (
+    <MetricFiltersProvider initialRange="quarter">
+      <div className="mb-4">
+        <MetricFiltersBar />
+      </div>
+      <DeploymentFrequencyChartInner tenantId={tenantId} />
+    </MetricFiltersProvider>
+  );
+}
+
+function DeploymentFrequencyChartInner({ tenantId }: { tenantId: string }) {
+  const { token } = useAuth();
+  const { filters, dateRange } = useMetricFilters();
+  const [state, setState] = useState<FetchState>({ status: "loading" });
+
+  const { granularity } = filters;
+  const startMs = dateRange.start.getTime();
+  const endMs = dateRange.end.getTime();
+
+  useEffect(() => {
+    if (!token) return;
+
+    let cancelled = false;
+    (async () => {
+      setState({ status: "loading" });
+      try {
+        const response = await getDeploymentFrequency(token, tenantId, {
+          granularity,
+          start: new Date(startMs),
+          end: new Date(endMs),
+        });
+        if (cancelled) return;
+        setState({
+          status: "ready",
+          data: response.points.map((point) => ({
+            date: point.period_start,
+            production_releases: point.production_releases,
+            releases_published: point.releases_published,
+          })),
+        });
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : "Could not load deployment frequency.";
+        setState({ status: "error", message });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, tenantId, granularity, startMs, endMs]);
+
+  return (
+    <LineChartWidget
+      title="Deployment frequency"
+      description="Published GitHub Releases (non-draft); production excludes prereleases"
+      data={state.status === "ready" ? state.data : []}
+      series={DEPLOY_SERIES}
+      xFormatter={formatWeekLabel}
+      valueFormatter={formatCount}
+      isLoading={state.status === "loading"}
+      emptyMessage={
+        state.status === "error"
+          ? state.message
+          : "No GitHub Releases in this range yet."
+      }
+    />
+  );
+}
 
 /**
  * DORA lead-time proxy: median / p90 hours from PR open to merge

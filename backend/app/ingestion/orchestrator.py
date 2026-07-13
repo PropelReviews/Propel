@@ -88,6 +88,7 @@ JOBS: list[JobSpec] = [
     JobSpec("github_commits_sync", "github.commits", needs_repos=True),
     JobSpec("github_pull_requests_sync", "github.pull_requests", needs_repos=True),
     JobSpec("github_issues_sync", "github.issues", needs_repos=True),
+    JobSpec("github_releases_sync", "github.releases", needs_repos=True),
     JobSpec("copilot_sync", "copilot.usage", needs_org=True, org_mode="copilot"),
     JobSpec(
         "linear_issues_sync",

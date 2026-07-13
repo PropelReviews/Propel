@@ -28,6 +28,34 @@ def test_unmapped_stream_is_skipped():
     assert map_github_record("workflow_runs", {"id": 1}) is None
 
 
+def test_release_event():
+    env = map_github_record(
+        "releases",
+        {
+            "node_id": "REL_1",
+            "id": 42,
+            "tag_name": "v1.2.0",
+            "name": "1.2.0",
+            "draft": False,
+            "prerelease": False,
+            "created_at": "2026-06-01T09:00:00Z",
+            "published_at": "2026-06-01T10:00:00Z",
+            "author": {"login": "octocat"},
+            "org": "acme",
+            "repo": "web",
+        },
+    )
+    assert env is not None
+    assert env.kind == "event"
+    assert env.name == "release"
+    assert env.source_key == "REL_1"
+    assert env.subject_id == "octocat"
+    assert env.occurred_at.isoformat().startswith("2026-06-01T10:00:00")
+    assert env.metadata["tag_name"] == "v1.2.0"
+    assert env.metadata["draft"] is False
+    assert env.metadata["repo"] == "acme/web"
+
+
 def test_copilot_measurement():
     env = map_copilot_record(
         {"day": "2026-06-01", "user_login": "octocat", "suggestions": 10}

@@ -157,6 +157,11 @@ ingestion_asset_specs = [
         group_name="ingestion",
     ),
     AssetSpec(
+        key=["github", "releases"],
+        description="GitHub Releases used for DORA deployment frequency.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
         key=["github", "copilot_usage"],
         description="GitHub Copilot usage metrics for the org.",
         group_name="ingestion",

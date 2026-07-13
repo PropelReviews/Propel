@@ -22,6 +22,7 @@ start_org_ingestion ─┬─> get_org_members ──> get_user_profiles ─┐
                      ├─> get_commits ───────────────────────────┤
                      ├─> get_pull_requests ─────────────────────┤
                      ├─> get_issues ────────────────────────────┤
+                     ├─> get_releases ──────────────────────────┤
                      └─> get_copilot_usage ─────────────────────┴─> flush_logs
 ```
 
@@ -42,8 +43,8 @@ start_org_ingestion ─┬─> get_org_members ──> get_user_profiles ─┐
   member logins). `flush_logs` fans in last to drain the OTLP batch handler.
 - **Analytics (dbt assets).** `analytics.py` loads `transformation/dbt` via
   `dagster-dbt`, so every model is a software-defined asset with lineage from
-  the ingestion assets (`github/pull_requests` → `stg_github_pull_requests` →
-  `fct_pr_activity_daily`) and dbt tests as asset checks. Assets are
+  the ingestion assets (`github/releases` → `stg_github_releases` →
+  `fct_deployment_frequency_daily`, plus PR/review marts) and dbt tests as asset checks. Assets are
   partitioned by tenant (`DynamicPartitionsDefinition("tenant")`);
   `analytics_sensor` registers partitions and requests one tenant-scoped run
   (`dbt build --vars '{tenant_id: ...}'`) per successful org ingestion run.
