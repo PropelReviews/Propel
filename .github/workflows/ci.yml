@@ -316,17 +316,20 @@ jobs:
       - name: Import Dagster job modules
         env:
           PYTHONPATH: ${{ github.workspace }}/orchestration:${{ github.workspace }}/backend
-          # Definitions configure logging at import; keep PostHog optional.
           POSTHOG_API_KEY: ""
           POSTHOG_HOST: ""
           DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
           JWT_SECRET: test-secret
         run: |
           python - <<'PY'
-          from propel_orchestration import jobs, analytics
+          # Avoid importing analytics here — it runs ``dbt parse`` at module
+          # load (covered by the dedicated dbt job). Job graph imports are enough.
+          from propel_orchestration import jobs, worker_scaling
+
           assert jobs.discovery_job is not None
-          assert analytics.propel_dbt_assets is not None
-          print("orchestration modules import ok")
+          assert jobs.org_ingestion_job is not None
+          assert callable(worker_scaling.reconcile)
+          print("orchestration job modules import ok")
           PY
 
   docker-api:
