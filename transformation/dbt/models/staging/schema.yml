@@ -14,3 +14,15 @@ models:
       - name: issue_id
         data_tests:
           - not_null
+
+  - name: stg_github_reviews
+    description: >
+      Latest snapshot of every submitted GitHub pull-request review (one row
+      per review). Pending reviews are excluded.
+    columns:
+      - name: review_node_id
+        data_tests:
+          - not_null
+      - name: submitted_at
+        data_tests:
+          - not_null

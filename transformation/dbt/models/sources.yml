@@ -31,3 +31,12 @@ sources:
         meta:
           dagster:
             asset_key: ["linear", "issues"]
+
+      - name: github_reviews
+        identifier: raw_record
+        description: >
+          GitHub pull-request review payloads (resource_type = 'reviews') from
+          tap-github-pull-requests. Used for time-to-first-review primitives.
+        meta:
+          dagster:
+            asset_key: ["github", "pull_requests"]

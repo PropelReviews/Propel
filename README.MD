@@ -48,9 +48,10 @@ The team view defaults to aggregate signal. Drilling into one person is opt-in, 
 
 Propel pulls from your toolchain and surfaces the metrics that matter:
 
-- **Cycle time** — how long work takes from start to finish
-- **Throughput** — how much your team ships over time
-- **Review patterns** — how code review actually flows through your process
+- **Cycle time** — how long work takes from PR open to merge (DORA lead-time proxy)
+- **Throughput** — how much your team ships over time (DORA deployment-frequency proxy)
+- **Review latency** — time to first review and review flow
+- **Change failure** — revert rate as a DORA change-fail-rate proxy
 - **Tooling activity** — signal from the tools your team already uses
 
 The exact set evolves with the project. What never changes is that every number is inspectable, from dashboard to raw event.

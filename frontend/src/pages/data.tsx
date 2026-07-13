@@ -3,6 +3,11 @@ import { Link } from "react-router-dom";
 
 import { formatCount } from "@/components/charts";
 import { ConnectTools } from "@/components/connect-tools";
+import {
+  ChangeFailureChart,
+  CycleTimeChart,
+  ReviewLatencyChart,
+} from "@/components/dora-metric-charts";
 import { PrActivityChart } from "@/components/pr-activity-chart";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -199,7 +204,26 @@ function Loaded({
 
       <section>
         <h2 className="mb-4 text-lg font-medium">Pull request activity</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Merge throughput — DORA deployment-frequency proxy until production deploys
+          are ingested.
+        </p>
         <PrActivityChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Cycle time</h2>
+        <CycleTimeChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Review latency</h2>
+        <ReviewLatencyChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Change failure</h2>
+        <ChangeFailureChart tenantId={tenantId} />
       </section>
 
       {stats.by_kind.length > 0 && (

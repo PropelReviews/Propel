@@ -23,8 +23,13 @@ Only **GitHub** (+ Copilot metrics) is implemented. Linear/Cursor are roadmap-on
 - `backend/app/ingestion/cli.py` — manual runs (`--account-id`, `--job`, `--start-date`)
 - `orchestration/propel_orchestration/jobs.py` — `discovery_job` + hourly `discovery_schedule`, per-org `org_ingestion_job` (one op per resource), `org_fanout_sensor`
 - `orchestration/propel_orchestration/analytics.py` — dagster-dbt assets (tenant `DynamicPartitionsDefinition`), `analytics_assets_job`, `analytics_sensor`; derives `DBT_*` env from `DATABASE_URL`
-- `transformation/dbt/` — dbt project: `staging/stg_github_pull_requests` (latest PR snapshot from `raw_record`) → `marts/fct_pr_activity_daily` (incremental per tenant/day, `analytics` schema)
-- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the marts (`date_trunc` per granularity)
+- `transformation/dbt/` — dbt project: staging views (`stg_github_pull_requests`,
+  `stg_github_reviews`, issues) → DORA primitive marts in the `analytics` schema
+  (`fct_pr_activity_daily`, `fct_pr_cycle_time_daily`, `fct_review_latency_daily`,
+  `fct_change_failure_daily`; incremental per tenant/day)
+- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the
+  marts (`date_trunc` per granularity): pull-requests, cycle-time, review-latency,
+  change-failure
 
 ## Running it
 

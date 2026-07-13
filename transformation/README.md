@@ -13,9 +13,10 @@ Every metric Propel surfaces is defined here as dbt models. This is the transpar
 
 Example metrics:
 
-- Cycle time (PR open to merge)
-- Throughput (work shipped over time)
-- Review patterns
+- Cycle time (PR open to merge) — DORA lead-time proxy
+- Throughput / merge frequency — DORA deployment-frequency proxy
+- Review latency (time to first review)
+- Change-failure proxy (revert-titled merges)
 - Tooling activity signals
 
 ## Directory layout
@@ -27,14 +28,21 @@ transformation/
     ├── profiles.yml                        # postgres profile, DBT_* env vars
     ├── .sqlfluff                           # SQL lint rules (postgres dialect, jinja templater)
     ├── ci/
-    │   ├── fixture_raw_record.sql          # minimal raw_record + sample PRs for CI builds
+    │   ├── fixture_raw_record.sql          # minimal raw_record + sample PRs/reviews for CI
     │   └── smoke_check.sql                 # asserts mart output matches the fixture
     └── models/
-        ├── sources.yml                     # public.raw_record (lineage -> github/pull_requests asset)
+        ├── sources.yml                     # public.raw_record (+ github/linear source aliases)
         ├── staging/
-        │   └── stg_github_pull_requests.sql
+        │   ├── stg_github_pull_requests.sql
+        │   ├── stg_github_reviews.sql
+        │   ├── stg_github_issues.sql
+        │   └── stg_linear_issues.sql
         └── marts/
-            ├── fct_pr_activity_daily.sql   # incremental, delete+insert per tenant/day
+            ├── fct_pr_activity_daily.sql       # merge throughput
+            ├── fct_pr_cycle_time_daily.sql     # lead-time proxy
+            ├── fct_review_latency_daily.sql    # time to first review
+            ├── fct_change_failure_daily.sql    # CFR proxy via reverts
+            ├── fct_tickets.sql
             └── schema.yml
 ```
 
