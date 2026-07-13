@@ -8,6 +8,33 @@ if [ "${SKIP_UV_SYNC:-0}" != "1" ] && [ -f /app/pyproject.toml ] && [ -f /app/uv
   uv sync --frozen --no-install-project --no-dev --directory /app
 fi
 
+# Dagster ops import the backend `app` package in-process from this venv. Local
+# compose bind-mounts backend/ over /app and sets SKIP_UV_SYNC=1 on ingestion, so
+# the image-baked /opt/orchestration-venv can drift from pyproject.toml — refresh
+# it on start unless production opts out (SKIP_ORCH_UV_SYNC=1).
+_sync_orch_venv() {
+  if [ "${SKIP_ORCH_UV_SYNC:-0}" = "1" ]; then
+    return 0
+  fi
+  if [ ! -f /app/pyproject.toml ] || [ ! -d /opt/orchestration-venv ]; then
+    return 0
+  fi
+  orch_toml=/orchestration/pyproject.toml
+  if [ ! -f "$orch_toml" ]; then
+    orch_toml=/app/orchestration/pyproject.toml
+  fi
+  if [ ! -f "$orch_toml" ]; then
+    orch_toml=/tmp/orchestration/pyproject.toml
+  fi
+  if [ ! -f "$orch_toml" ]; then
+    echo "WARN: orchestration pyproject.toml not found; skipping orch venv sync"
+    return 0
+  fi
+  echo "==> Syncing orchestration venv (backend + Dagster deps)"
+  uv pip install --python /opt/orchestration-venv \
+    -r /app/pyproject.toml -r "$orch_toml"
+}
+
 # Deploys (the API service) own schema migrations. SKIP_MIGRATIONS=1 lets the
 # scheduled ingestion task run without touching the schema, so an hourly run can
 # never race an in-flight migration.
@@ -43,6 +70,7 @@ fi
 # exits. Must precede the dev `dagster` branch below, which also matches on $1.
 if [ "$1" = "dagster" ] && [ "$2" = "api" ]; then
   echo "==> Starting Dagster run worker"
+  _sync_orch_venv
   : "${DAGSTER_HOME:=/tmp/dagster}"
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"
@@ -70,6 +98,7 @@ fi
 # Parallelism comes from DASK_WORKER_PROCESSES (separate worker processes).
 if [ "$1" = "dask-worker" ]; then
   echo "==> Starting Dask worker -> ${DASK_SCHEDULER_ADDRESS:?DASK_SCHEDULER_ADDRESS must be set}"
+  _sync_orch_venv
   : "${DAGSTER_HOME:=/tmp/dagster}"
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"
@@ -103,6 +132,7 @@ fi
 # is lost whenever the container is recreated. Falls back to SQLite if the DB
 # prep fails (e.g. Postgres not reachable yet).
 if [ "$1" = "dagster" ]; then
+  _sync_orch_venv
   : "${DAGSTER_HOME:=/tmp/dagster}"
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"
@@ -139,6 +169,7 @@ fi
 # collides with the app's migrations (see orchestration/scripts/prepare_dagster_db.py).
 if [ "$1" = "dagster-service" ]; then
   echo "==> Starting Dagster ingestion service (daemon + webserver)"
+  _sync_orch_venv
   : "${DAGSTER_HOME:=/tmp/dagster}"
   export DAGSTER_HOME
   mkdir -p "$DAGSTER_HOME"

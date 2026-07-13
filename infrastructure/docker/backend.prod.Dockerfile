@@ -27,7 +27,8 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    SKIP_UV_SYNC=1
+    SKIP_UV_SYNC=1 \
+    SKIP_ORCH_UV_SYNC=1
 
 # Dagster (V2 ingestion scheduler) lives in its own venv so the API container's
 # frozen app venv stays pristine. Its ops import the `app` package from source

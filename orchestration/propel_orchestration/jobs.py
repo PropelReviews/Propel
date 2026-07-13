@@ -82,17 +82,21 @@ _START_DATE_TAG = "propel/start_date"
 # QueuedRunCoordinator serializes concurrent ingestion runs (see dagster.yaml).
 _INGESTION_CONCURRENCY_TAGS = {"dagster/concurrency_key": "ingestion"}
 
-# Asset key per Meltano job, so the Assets catalog has one node per GitHub
-# resource (materialized per org on every run).
-_ASSET_KEYS: dict[str, AssetKey] = {
-    "github_org_sync": AssetKey(["github", "org_members"]),
-    "github_user_profiles_sync": AssetKey(["github", "user_profiles"]),
-    "github_commits_sync": AssetKey(["github", "commits"]),
-    "github_pull_requests_sync": AssetKey(["github", "pull_requests"]),
-    "github_issues_sync": AssetKey(["github", "issues"]),
-    "github_releases_sync": AssetKey(["github", "releases"]),
-    "copilot_sync": AssetKey(["github", "copilot_usage"]),
-    "linear_issues_sync": AssetKey(["linear", "issues"]),
+# Asset key(s) per Meltano job, so the Assets catalog has one node per GitHub
+# resource (materialized per org on every run). pull_requests also lands
+# reviews in the same job, so that op materializes both keys.
+_ASSET_KEYS: dict[str, tuple[AssetKey, ...]] = {
+    "github_org_sync": (AssetKey(["github", "org_members"]),),
+    "github_user_profiles_sync": (AssetKey(["github", "user_profiles"]),),
+    "github_commits_sync": (AssetKey(["github", "commits"]),),
+    "github_pull_requests_sync": (
+        AssetKey(["github", "pull_requests"]),
+        AssetKey(["github", "reviews"]),
+    ),
+    "github_issues_sync": (AssetKey(["github", "issues"]),),
+    "github_releases_sync": (AssetKey(["github", "releases"]),),
+    "copilot_sync": (AssetKey(["github", "copilot_usage"]),),
+    "linear_issues_sync": (AssetKey(["linear", "issues"]),),
 }
 
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -212,9 +216,9 @@ def _run_resource(context: OpExecutionContext, job_name: str) -> None:
         )
         raise
 
-    asset_key = _ASSET_KEYS.get(job_name)
+    asset_keys = _ASSET_KEYS.get(job_name, ())
     for run in runs or []:
-        if asset_key is not None:
+        for asset_key in asset_keys:
             context.log_event(
                 AssetMaterialization(
                     asset_key=asset_key,

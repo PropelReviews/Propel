@@ -148,7 +148,12 @@ ingestion_asset_specs = [
     ),
     AssetSpec(
         key=["github", "pull_requests"],
-        description="Pull requests, reviews, and review comments (raw_record).",
+        description="Pull requests and review comments (raw_record).",
+        group_name="ingestion",
+    ),
+    AssetSpec(
+        key=["github", "reviews"],
+        description="Pull-request reviews (same Meltano job as pull_requests).",
         group_name="ingestion",
     ),
     AssetSpec(
