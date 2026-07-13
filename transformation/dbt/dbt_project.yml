@@ -22,3 +22,11 @@ models:
       +materialized: view
     marts:
       +materialized: table
+      # Incremental delete+insert issues DELETEs. When a Postgres publication
+      # publishes deletes (e.g. PostHog warehouse CDC), tables need a replica
+      # identity or the delete fails. Set FULL before/after each run so both
+      # existing tables and freshly created ones are covered.
+      +pre-hook:
+        - "{% if execute %}alter table if exists {{ this }} replica identity full;{% endif %}"
+      +post-hook:
+        - "alter table {{ this }} replica identity full"

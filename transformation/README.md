@@ -40,6 +40,8 @@ transformation/
 
 Models land in the `analytics` Postgres schema (raw landing tables stay in `public`). The `analytics` schema is dbt-owned — like Dagster's `dagster` schema, it is not managed by Alembic.
 
+Marts set `REPLICA IDENTITY FULL` via pre/post-hooks so incremental `delete+insert` works when a Postgres publication publishes deletes (PostHog warehouse CDC). The warehouse publication itself is scoped to `public` only.
+
 ## Running
 
 Dagster owns scheduled execution: every successful per-org ingestion run triggers a tenant-partitioned `dbt build --vars '{tenant_id: ...}'` (see `orchestration/propel_orchestration/analytics.py`). The incremental marts only recompute that tenant's rows.
