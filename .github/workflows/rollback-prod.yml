@@ -68,7 +68,13 @@ jobs:
         run: terraform init -input=false
 
       - name: Rollback to SHA
-        run: ./scripts/rollback.sh prod "${{ inputs.git_sha }}"
+        run: |
+          TARGET="${{ inputs.git_sha }}"
+          if [ "$TARGET" = "previous" ]; then
+            ./scripts/rollback.sh prod --previous
+          else
+            ./scripts/rollback.sh prod "$TARGET"
+          fi
 
       - name: Summarize
         run: |

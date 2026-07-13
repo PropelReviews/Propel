@@ -18,12 +18,48 @@ page. Each deploy job sets `environment.url` to `https://propel.ninja`.
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | Terraform `fmt -check` + `validate` (prod); backend Ruff lint/format + `pytest`; ingestion integration; dbt; frontend ESLint + Prettier + TypeScript + `vitest` + Vite builds |
+| [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | Full pre-merge suite (see below) ending in aggregate **`CI success`** |
 | [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | CI success on `main`, push `v*` tag, manual | OIDC → prod role → `terraform apply` → deploy API / frontend / landing (uses the `prod` Environment for vars + approval) |
 | [`rollback-prod.yml`](../../.github/workflows/rollback-prod.yml) | manual | Restore a previous git SHA (ECR image + S3 release archives); no Terraform apply |
 
+### CI jobs (all required)
+
+| Job | Checks |
+|-----|--------|
+| Terraform validate | `fmt -check`, `validate` for **prod** and **beta** |
+| Backend checks | `uv lock --check`, Ruff lint/format, `alembic upgrade head`, `pytest` |
+| Ingestion integration | Alembic + `target-propel` pytest suite |
+| dbt checks | sqlfluff, `dbt parse` / `dbt build` (full + tenant incremental), smoke SQL |
+| Frontend checks | ESLint, Prettier, `tsc`, Vitest (unit + Playwright browser), both Vite builds, `npm audit --audit-level=critical` |
+| Scripts tests | Zitadel bootstrap unit tests, `bash -n` on deploy/rollback scripts |
+| Workflow + repo lint | [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` |
+| Orchestration checks | Install Dagster + backend runtime, `compileall`, import job modules |
+| Docker API image | Build `backend.prod.Dockerfile` (no push) |
+| **CI success** | Aggregate gate — green only if every job above succeeded |
+
 > **Note:** Beta was decommissioned in June 2026. The `deploy-beta.yml` workflow
 > has been removed. Prod auto-deploys when CI passes on `main`.
+
+## Branch protection
+
+Merges to `main` must require the aggregate **`CI success`** check (not each
+individual job — that check already waits on all of them).
+
+Apply once (repo admin):
+
+```bash
+./scripts/configure-branch-protection.sh
+# or: REPO=PropelReviews/Propel ./scripts/configure-branch-protection.sh
+```
+
+That creates/updates a GitHub **ruleset** on `main` with:
+
+- Required status check: `CI success` (strict — branch must be up to date)
+- Pull request required (1 approving review, dismiss stale reviews, conversations resolved)
+- Block force-push and branch deletion
+
+Or configure the same manually: **Settings → Rules → Rulesets → New branch
+ruleset** targeting `main`.
 
 ## Deploy flow
 

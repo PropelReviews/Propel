@@ -46,10 +46,11 @@ Deploy scripts need `AWS_PROFILE=propel-prod` locally (CI uses OIDC).
 
 ## CI/CD (`.github/workflows/`)
 
-- `ci.yml` (PRs + main): `terraform` (fmt + validate prod), `backend` (ruff + pytest w/ Postgres service), `ingestion-integration` (alembic + target-propel tests), `dbt`, `frontend` (eslint, prettier, tsc, vitest w/ Playwright Chromium, both builds).
+- `ci.yml` (PRs + main): terraform (prod + beta), backend (lockfile, ruff, alembic, pytest), ingestion-integration, dbt, frontend (lint/format/tsc/vitest/builds + critical npm audit), scripts tests, actionlint, orchestration import checks, Docker API image build, aggregate **`CI success`** gate.
 - `deploy-prod.yml`: after CI succeeds on `main`, `v*` tag, or manual `workflow_dispatch` → terraform apply + deploy api/frontend/landing with `prod` environment approval gate. Releases are SHA-tagged in ECR and archived under S3 `releases/$SHA/`.
 - `rollback-prod.yml`: manual rollback to a previous deploy SHA (ECR + S3 archives; no terraform).
 - ECS metric rollback: circuit breaker + ALB CloudWatch alarms auto-roll the API task def mid-deploy; EventBridge + Lambda restore the previous SHA (ECS + S3) on `SERVICE_DEPLOYMENT_FAILED` or sustained unhealthy hosts. SNS topic `propel-*-deploy-rollback`.
+- Branch protection: require status check **`CI success`** on `main` via `./scripts/configure-branch-protection.sh`.
 
 Docs: `docs/deployment/bootstrap.md` (one-time setup), `docs/deployment/cicd.md`, `docs/deployment/aws-sso.md`.
 

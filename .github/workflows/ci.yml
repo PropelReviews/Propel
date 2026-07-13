@@ -1,6 +1,9 @@
 name: CI
 
-# Pre-merge checks: formatting, linting, tests, and builds.
+# Pre-merge checks: formatting, linting, tests, builds, and a single aggregate
+# ``CI success`` job. Require that job (and only that job) in branch protection
+# so PRs cannot merge to main until every check below is green.
+# See docs/deployment/cicd.md § Branch protection.
 on:
   pull_request:
   push:
@@ -30,6 +33,13 @@ jobs:
 
       - name: Validate prod
         working-directory: infrastructure/terraform/environments/prod
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      # Beta env is retained for rebuilds — keep it syntactically valid too.
+      - name: Validate beta
+        working-directory: infrastructure/terraform/environments/beta
         run: |
           terraform init -backend=false -input=false
           terraform validate
@@ -66,8 +76,11 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "backend/uv.lock"
 
+      - name: Lockfile up to date
+        run: uv lock --check
+
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Lint
         run: uv run ruff check .
@@ -75,8 +88,11 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
       - name: Run pytest
-        run: uv run pytest
+        run: uv run pytest -v --tb=short
 
   ingestion-integration:
     name: Ingestion integration
@@ -112,7 +128,7 @@ jobs:
           cache-dependency-glob: "backend/uv.lock"
 
       - name: Install API deps (for Alembic)
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Migrate ingestion schema
         run: uv run alembic upgrade head
@@ -126,7 +142,7 @@ jobs:
       # --no-sync so uv does not reconcile the venv back to the lockfile and drop
       # the editable target-propel install from the previous step.
       - name: Run target-propel tests
-        run: uv run --no-sync pytest meltano/target-propel/tests -v
+        run: uv run --no-sync pytest meltano/target-propel/tests -v --tb=short
 
   dbt:
     name: dbt checks
@@ -222,7 +238,7 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Run tests
+      - name: Run unit + browser tests
         run: npm test
 
       - name: Build app
@@ -230,3 +246,138 @@ jobs:
 
       - name: Build landing
         run: npm run build:landing
+
+      # Fail only on critical advisories so transitive noise does not block merges.
+      - name: Audit dependencies (critical)
+        run: npm audit --audit-level=critical
+
+  scripts:
+    name: Scripts tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zitadel bootstrap unit tests
+        run: python3 scripts/tests/test_zitadel_bootstrap_idp.py -v
+
+      - name: Shell syntax (deploy / rollback)
+        run: |
+          set -euo pipefail
+          for f in scripts/*.sh scripts/lib/*.sh; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+
+  lint-repo:
+    name: Workflow + repo lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          bash <(curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          sudo mv actionlint /usr/local/bin/actionlint
+          actionlint -version
+
+      - name: Lint GitHub Actions workflows
+        run: actionlint -color
+
+  orchestration:
+    name: Orchestration checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            orchestration/pyproject.toml
+            backend/uv.lock
+
+      - name: Install orchestration + backend runtime deps
+        working-directory: orchestration
+        run: |
+          uv venv .ci-venv
+          # Match the prod image: resolve orchestration pins together with the
+          # backend runtime so Dagster can import ``app`` modules.
+          uv pip install --python .ci-venv/bin/python \
+            -r pyproject.toml \
+            -r ../backend/pyproject.toml
+          echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Compile orchestration package
+        env:
+          PYTHONPATH: ${{ github.workspace }}/orchestration:${{ github.workspace }}/backend
+        run: python -m compileall -q orchestration/propel_orchestration
+
+      - name: Import Dagster job modules
+        env:
+          PYTHONPATH: ${{ github.workspace }}/orchestration:${{ github.workspace }}/backend
+          # Definitions configure logging at import; keep PostHog optional.
+          POSTHOG_API_KEY: ""
+          POSTHOG_HOST: ""
+          DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
+          JWT_SECRET: test-secret
+        run: |
+          python - <<'PY'
+          from propel_orchestration import jobs, analytics
+          assert jobs.discovery_job is not None
+          assert analytics.propel_dbt_assets is not None
+          print("orchestration modules import ok")
+          PY
+
+  docker-api:
+    name: Docker API image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build (no push) catches Dockerfile / lockfile breakage before merge.
+      - name: Build production API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/backend.prod.Dockerfile
+          push: false
+          tags: propel-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Single required status check for branch protection / rulesets.
+  # ---------------------------------------------------------------------------
+  ci-success:
+    name: CI success
+    if: always()
+    needs:
+      - terraform
+      - backend
+      - ingestion-integration
+      - dbt
+      - frontend
+      - scripts
+      - lint-repo
+      - orchestration
+      - docker-api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify every required job succeeded
+        run: |
+          set -euo pipefail
+          echo '${{ toJSON(needs) }}' | jq -e '
+            to_entries
+            | map({job: .key, result: .value.result})
+            | (map(.result) | unique) as $r
+            | if ($r == ["success"]) then
+                true
+              else
+                error("one or more CI jobs did not succeed: \(.)")
+              end
+          '
+          echo "All CI jobs passed."
