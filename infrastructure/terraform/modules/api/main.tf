@@ -28,17 +28,32 @@ resource "aws_ecr_repository" "api" {
 
 resource "aws_ecr_lifecycle_policy" "api" {
   repository = aws_ecr_repository.api.name
+  # Keep enough SHA-tagged images for clean rollbacks; expire untagged layers quickly.
   policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 10 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 10
-      }
-      action = { type = "expire" }
-    }]
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 30 tagged images (SHA releases)"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 30
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Expire untagged images after 1 day"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = { type = "expire" }
+      },
+    ]
   })
 }
 
@@ -227,6 +242,13 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener.https]
+
+  # Task definition revisions are registered by Terraform (env/cpu/secrets) and
+  # by deploy-api.sh / rollback.sh (image). Ignore service.task_definition so
+  # apply does not clobber a SHA pin or mid-rollback revision.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 
   tags = var.tags
 }

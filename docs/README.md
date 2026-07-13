@@ -15,7 +15,7 @@ docs live here under `docs/`.
 | Doc | What it covers |
 |-----|----------------|
 | [deployment/bootstrap.md](deployment/bootstrap.md) | **One-time AWS setup runbook** — state buckets, OIDC, IAM roles, hosted zones, first apply. Start here for a fresh AWS account. |
-| [deployment/cicd.md](deployment/cicd.md) | GitHub Actions workflows: PR checks and beta/prod deploys. |
+| [deployment/cicd.md](deployment/cicd.md) | GitHub Actions workflows: PR checks, auto-deploy on `main`, rollbacks. |
 | [deployment/aws-sso.md](deployment/aws-sso.md) | Local AWS access via SSO profiles in the dev container. |
 
 ## Infrastructure reference

@@ -36,8 +36,9 @@ terraform fmt -recursive                  # CI enforces fmt -check; TF version 1
 |---|---|
 | `setup.sh` / `dev.sh` | devcontainer postCreate (deps, AWS SSO config) / postAttach health checks |
 | `dev-ingestion-secrets.sh pull` | GitHub App dev creds from Secrets Manager → `.env.ingestion.local` |
-| `deploy-api.sh <beta\|prod>` | build prod image, push ECR, force ECS redeploy (API + ingestion) |
-| `deploy-frontend.sh` / `deploy-landing.sh <env>` | vite build → s3 sync → CloudFront invalidation |
+| `deploy-api.sh <beta\|prod>` | build prod image, push ECR (`$SHA` + `latest`), roll ECS (API + ingestion + Dask) |
+| `deploy-frontend.sh` / `deploy-landing.sh <env>` | vite build → S3 live + `releases/$SHA/` archive → CloudFront invalidation |
+| `rollback.sh <env> <sha>` | restore ECS image + S3 archives for a previous deploy SHA |
 | `restart-api.sh <env>` | ECS redeploy without rebuild |
 | `generate-app-tfvars.sh` | CI: GitHub vars/secrets → tfvars json |
 
@@ -45,8 +46,9 @@ Deploy scripts need `AWS_PROFILE=propel-prod` locally (CI uses OIDC).
 
 ## CI/CD (`.github/workflows/`)
 
-- `ci.yml` (PRs + main): `terraform` (fmt + validate prod), `backend` (ruff + pytest w/ Postgres service), `ingestion-integration` (alembic + target-propel tests), `frontend` (eslint, prettier, tsc, vitest w/ Playwright Chromium, both builds).
-- `deploy-prod.yml`: `v*` tag or manual `workflow_dispatch` → terraform apply + deploy api/frontend/landing with `prod` environment approval gate.
+- `ci.yml` (PRs + main): `terraform` (fmt + validate prod), `backend` (ruff + pytest w/ Postgres service), `ingestion-integration` (alembic + target-propel tests), `dbt`, `frontend` (eslint, prettier, tsc, vitest w/ Playwright Chromium, both builds).
+- `deploy-prod.yml`: after CI succeeds on `main`, `v*` tag, or manual `workflow_dispatch` → terraform apply + deploy api/frontend/landing with `prod` environment approval gate. Releases are SHA-tagged in ECR and archived under S3 `releases/$SHA/`.
+- `rollback-prod.yml`: manual rollback to a previous deploy SHA (ECR + S3 archives; no terraform).
 
 Docs: `docs/deployment/bootstrap.md` (one-time setup), `docs/deployment/cicd.md`, `docs/deployment/aws-sso.md`.
 

@@ -119,3 +119,22 @@ resource "aws_s3_bucket_policy" "site" {
   bucket = aws_s3_bucket.site.id
   policy = data.aws_iam_policy_document.site.json
 }
+
+# Versioned landing archives under releases/<sha>/ for rollback.sh. Expire after
+# 30 days so the bucket does not grow without bound (ECR keeps 30 SHA tags).
+resource "aws_s3_bucket_lifecycle_configuration" "site" {
+  bucket = aws_s3_bucket.site.id
+
+  rule {
+    id     = "expire-old-releases"
+    status = "Enabled"
+
+    filter {
+      prefix = "releases/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+}

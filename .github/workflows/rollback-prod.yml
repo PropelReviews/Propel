@@ -1,0 +1,79 @@
+name: Rollback Prod
+
+# Restore a previous production release (ECR image + S3 SPA/landing archives)
+# identified by git SHA. Does not run terraform apply.
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: "Full git SHA of a previously successful deploy"
+        required: true
+        type: string
+      confirm:
+        description: 'Type "rollback" to confirm'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  # Share the deploy lock so a rollback cannot race a forward deploy.
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: infrastructure/terraform/environments/prod
+  AWS_ROLE_ARN: arn:aws:iam::616938645090:role/PropelTerraform
+  PROD_URL: https://propel.ninja
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+      url: ${{ env.PROD_URL }}
+    steps:
+      - name: Confirm rollback
+        run: |
+          if [ "${{ inputs.confirm }}" != "rollback" ]; then
+            echo "Refusing to proceed: confirm input must be exactly 'rollback'" >&2
+            exit 1
+          fi
+          {
+            echo "## Production rollback"
+            echo ""
+            echo "- **Target SHA:** \`${{ inputs.git_sha }}\`"
+            echo "- **Site:** ${{ env.PROD_URL }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Terraform init (for outputs)
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Rollback to SHA
+        run: ./scripts/rollback.sh prod "${{ inputs.git_sha }}"
+
+      - name: Summarize
+        run: |
+          {
+            echo "## Rollback complete"
+            echo ""
+            echo "Prod is serving \`${{ inputs.git_sha }}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

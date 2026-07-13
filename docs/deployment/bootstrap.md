@@ -2,8 +2,8 @@
 
 This is the **authoritative, ordered checklist** for standing up Propel's AWS
 deployment from nothing. Everything here is done **once per account**; after it
-is complete, day-to-day deploys are fully automated by CI/CD (push to `main` for
-beta, push a `v*` tag for prod — see [`cicd.md`](cicd.md)).
+is complete, day-to-day deploys are fully automated by CI/CD (merge to `main`
+after CI is green, or push a `v*` tag — see [`cicd.md`](cicd.md)).
 
 These steps cannot cleanly create themselves with Terraform (chicken-and-egg:
 the state bucket must exist before Terraform can store state; the CI role must
@@ -279,8 +279,8 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    can be Actions **variables** in `app_environment`.
 
 2. **`prod` Environment** — add **required reviewers** so prod deploys pause for
-   manual approval. The prod workflow declares `environment: prod`. Prod also
-   auto-triggers after a successful beta deploy on `main` (see [`cicd.md`](cicd.md)).
+   manual approval. The prod workflow declares `environment: prod`. Prod
+   auto-deploys after CI succeeds on `main` (see [`cicd.md`](cicd.md)).
 
 ---
 
@@ -340,7 +340,8 @@ For prod, swap to `api.propel.ninja` / `app.propel.ninja`.
 | Trigger | Workflow | Result |
 |---------|----------|--------|
 | PR / push to `main` | `ci.yml` | `terraform fmt`+`validate`, backend `pytest`, frontend `vitest` |
-| push `v*` tag or manual | `deploy-prod.yml` | (after approval) apply prod + deploy API + frontend |
+| CI success on `main`, `v*` tag, or manual | `deploy-prod.yml` | (after approval) apply prod + deploy API + frontend + landing |
+| Manual (SHA + confirm) | `rollback-prod.yml` | restore previous ECR/S3 release (no Terraform) |
 
 > Beta was decommissioned in June 2026. The `deploy-beta.yml` workflow has been
 > removed and the beta AWS stack destroyed.
