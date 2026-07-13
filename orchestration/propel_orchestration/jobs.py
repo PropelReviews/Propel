@@ -79,6 +79,8 @@ logger = logging.getLogger("propel.ingestion.dagster")
 _ACCOUNT_TAG = "propel/account_id"
 _ORG_TAG = "propel/org"
 _START_DATE_TAG = "propel/start_date"
+# QueuedRunCoordinator serializes concurrent ingestion runs (see dagster.yaml).
+_INGESTION_CONCURRENCY_TAGS = {"dagster/concurrency_key": "ingestion"}
 
 # Asset key per Meltano job, so the Assets catalog has one node per GitHub
 # resource (materialized per org on every run).
@@ -352,6 +354,7 @@ def discovery_job() -> None:
 # no scheduler is configured (bare `dagster dev`).
 @job(
     executor_def=build_dask_executor(),
+    tags=_INGESTION_CONCURRENCY_TAGS,
     description=(
         "Pull one org's raw GitHub data (scoped by the propel/account_id tag; "
         "tag propel/start_date for a time-based backfill)."
@@ -370,6 +373,7 @@ def org_ingestion_job() -> None:
 
 @job(
     executor_def=build_dask_executor(),
+    tags=_INGESTION_CONCURRENCY_TAGS,
     description=(
         "Pull one Linear workspace's issues (scoped by the propel/account_id "
         "tag; tag propel/start_date for a time-based backfill)."
@@ -488,13 +492,12 @@ _ACTIVE_RUN_STATUSES = [
 
 
 @sensor(
-    job=org_ingestion_job,
     minimum_interval_seconds=60,
     default_status=DefaultSensorStatus.RUNNING,
     description=(
         "Reconcile the Dask worker ECS service against active ingestion runs: "
-        "scale up for queued/running org runs (incl. manual launches), scale "
-        "to zero when idle. Requests no runs itself."
+        "scale up for queued/running org/Linear runs (incl. manual launches), "
+        "scale to zero when idle. Requests no runs itself."
     ),
 )
 def dask_worker_scaling_sensor(context: SensorEvaluationContext):

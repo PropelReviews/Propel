@@ -48,7 +48,9 @@ start_org_ingestion ─┬─> get_org_members ──> get_user_profiles ─┐
   `analytics_sensor` registers partitions and requests one tenant-scoped run
   (`dbt build --vars '{tenant_id: ...}'`) per successful org ingestion run.
   Runs carry `dagster/concurrency_key: dbt` and queue (limit 1, see
-  `dagster.yaml`) so delete+insert never races. Backfill any subset of tenants
+  `dagster.yaml`) so delete+insert never races. Ingestion jobs carry
+  `dagster/concurrency_key: ingestion` (limit matches `DASK_WORKER_MAX`) so
+  EcsRunLauncher does not stampede Fargate at hourly fan-out. Backfill any subset of tenants
   from the UI's partition view.
 - **Ingestion assets.** Each resource op emits an `AssetMaterialization` per
   `ingestion_run` (asset keys `github/commits`, `github/issues`, …) with
@@ -58,7 +60,7 @@ start_org_ingestion ─┬─> get_org_members ──> get_user_profiles ─┐
 ```
 orchestration/
   pyproject.toml                      deps: dagster + dagster-dbt + dbt + backend runtime deps
-  dagster.yaml                        prod Postgres storage + dbt run concurrency
+  dagster.yaml                        prod Postgres storage + run concurrency + monitoring
   workspace.yaml                      code location -> propel_orchestration.definitions
   scripts/prepare_dagster_db.py       creates the `dagster` schema, prints DAGSTER_PG_URL
   propel_orchestration/
