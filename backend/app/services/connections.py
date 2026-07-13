@@ -14,6 +14,7 @@ import hmac
 import logging
 import time
 import uuid
+from datetime import UTC, datetime
 from hashlib import sha256
 
 from fastapi import HTTPException
@@ -25,9 +26,10 @@ from app.config import get_settings
 from app.integrations.github import app_auth
 from app.models.connected_account import ConnectedAccount
 from app.models.enums import AuthType, ConnectionStatus, IntegrationProvider, Role
+from app.models.ingestion_run import IngestionRun
 from app.models.membership import TenantMembership
 from app.models.tenant import Tenant
-from app.schemas.connection import ConnectionStatusUpdate
+from app.schemas.connection import ConnectionRead, ConnectionStatusUpdate
 from app.services import github_identity
 from app.services import role_permissions as role_permission_service
 
@@ -37,6 +39,8 @@ settings = get_settings()
 
 _STATE_TTL_SECONDS = 600
 _GITHUB_INSTALL_URL = "https://github.com/apps/{slug}/installations/new?state={state}"
+_AUTH_META_KEY = "auth"
+_SYNC_ERROR_CLEARED_AT_KEY = "sync_error_cleared_at"
 
 
 # --------------------------------------------------------------------------- #
@@ -106,6 +110,112 @@ async def list_connections(
     return list(result.scalars().all())
 
 
+def auth_error_message(account: ConnectedAccount) -> str | None:
+    auth = (account.meta or {}).get(_AUTH_META_KEY)
+    if not isinstance(auth, dict):
+        return None
+    message = auth.get("message")
+    return str(message) if message else None
+
+
+async def latest_sync_outcome(
+    session: AsyncSession, account: ConnectedAccount
+) -> tuple[str | None, str | None]:
+    """Return ``(status, error)`` for the newest ingestion run on this account.
+
+    Errors from before a reconnect (``meta.sync_error_cleared_at``) are ignored so
+    the workspace UI does not keep showing a stale failure after the user fixes
+    the connection.
+    """
+    run = await session.scalar(
+        select(IngestionRun)
+        .where(IngestionRun.connected_account_id == account.id)
+        .order_by(IngestionRun.started_at.desc())
+        .limit(1)
+    )
+    if run is None:
+        return None, None
+
+    if run.status == "error" and _sync_error_is_stale(account, run.started_at):
+        return None, None
+    return run.status, run.error
+
+
+def _sync_error_is_stale(
+    account: ConnectedAccount, started_at: datetime | None
+) -> bool:
+    if started_at is None:
+        return False
+    cleared_raw = (account.meta or {}).get(_SYNC_ERROR_CLEARED_AT_KEY)
+    if not isinstance(cleared_raw, str):
+        return False
+    try:
+        cleared_at = datetime.fromisoformat(cleared_raw)
+    except ValueError:
+        return False
+    started = (
+        started_at if started_at.tzinfo is not None else started_at.replace(tzinfo=UTC)
+    )
+    if cleared_at.tzinfo is None:
+        cleared_at = cleared_at.replace(tzinfo=UTC)
+    return started <= cleared_at
+
+
+async def to_connection_read(
+    session: AsyncSession, account: ConnectedAccount
+) -> ConnectionRead:
+    last_status, last_error = await latest_sync_outcome(session, account)
+    return ConnectionRead(
+        id=account.id,
+        tenant_id=account.tenant_id,
+        provider=account.provider,
+        auth_type=account.auth_type,
+        external_account_id=account.external_account_id,
+        external_account_name=account.external_account_name,
+        status=account.status,
+        auth_error=auth_error_message(account),
+        last_sync_status=last_status,
+        last_sync_error=last_error,
+        created_at=account.created_at,
+        updated_at=account.updated_at,
+    )
+
+
+def clear_auth_failure(account: ConnectedAccount) -> None:
+    """Clear auth / sync error markers after a successful reconnect.
+
+    Drops ``meta.auth`` and stamps ``sync_error_cleared_at`` so stale failed
+    ingestion runs no longer surface on the workspace Integrations cards.
+    """
+    meta = dict(account.meta or {})
+    meta.pop(_AUTH_META_KEY, None)
+    meta[_SYNC_ERROR_CLEARED_AT_KEY] = datetime.now(UTC).isoformat()
+    account.meta = meta
+
+
+def mark_auth_failure(
+    account: ConnectedAccount,
+    *,
+    reason: str,
+    message: str,
+    status: ConnectionStatus = ConnectionStatus.paused,
+) -> None:
+    """Record that ingestion cannot authenticate this connection.
+
+    Sets ``status`` so hourly jobs skip the account, and stores a short reason
+    on ``meta.auth`` for the workspace Integrations UI.
+    """
+    meta = dict(account.meta or {})
+    meta.pop(_SYNC_ERROR_CLEARED_AT_KEY, None)
+    meta[_AUTH_META_KEY] = {
+        "reason": reason,
+        "message": message,
+        "at": datetime.now(UTC).isoformat(),
+    }
+    account.status = status.value
+    account.meta = meta
+
+
 async def update_connection_status(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -116,6 +226,8 @@ async def update_connection_status(
     if account is None or account.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Connection not found")
     account.status = payload.status.value
+    if payload.status == ConnectionStatus.active:
+        clear_auth_failure(account)
     await session.commit()
     await session.refresh(account)
     return account
@@ -186,8 +298,10 @@ async def bind_github_installation(
             status=ConnectionStatus.active.value,
         )
         session.add(account)
+        clear_auth_failure(account)
     else:
         account.status = ConnectionStatus.active.value
+        clear_auth_failure(account)
         if account_name:
             account.external_account_name = account_name
 
@@ -332,11 +446,17 @@ async def sync_installations_from_github(session: AsyncSession) -> dict[str, int
             account.status != status
             or account.external_account_name != login
             or account.scopes != installation.get("permissions")
+            or (
+                status == ConnectionStatus.active.value
+                and auth_error_message(account) is not None
+            )
         ):
             account.status = status
             account.external_account_name = login
             if installation.get("permissions"):
                 account.scopes = installation["permissions"]
+            if status == ConnectionStatus.active.value:
+                clear_auth_failure(account)
             updated += 1
 
     # Installations gone from GitHub mean the app was uninstalled; revoke.
@@ -463,6 +583,7 @@ async def process_installation_webhook(session: AsyncSession, payload: dict) -> 
         account.status = ConnectionStatus.paused.value
     elif action in {"created", "unsuspend", "new_permissions_accepted"}:
         account.status = ConnectionStatus.active.value
+        clear_auth_failure(account)
         github_account = installation.get("account") or {}
         if github_account.get("login"):
             account.external_account_name = github_account["login"]

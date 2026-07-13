@@ -445,10 +445,22 @@ docker compose up -d backend ingestion
 
 1. Sign in as a workspace member with the `connections:manage` permission
    (admins have this by default).
-2. Go to **Settings → Workspace → Connections**.
-3. Click **Connect Linear** — you are redirected to Linear to authorize.
-4. On success you are returned to the workspace settings page with Linear
-   showing as connected.
+2. Go to **Settings → Workspace**. Each tool (GitHub, Linear) has its own
+   integration card.
+3. Click **Connect Linear** — Propel opens Linear’s authorize page in a new tab.
+4. Approve the app. On success that tab returns to workspace settings with
+   Linear showing as connected. You can also stay on the original tab and click
+   **I've connected it** to refresh status.
+
+#### Already installed (no OAuth callback)
+
+If Linear shows the app as already installed, it will not redirect with an
+authorization code. Revoke and reconnect:
+
+1. In Linear: **Settings → Installed Applications** → find Propel → **Manage** →
+   **Revoke Access**
+2. Return to Propel and click **Connect Linear** again
+3. Click **I've connected it** if the original tab is still open
 
 ### 4. Verify ingestion
 
@@ -511,6 +523,13 @@ App, and that your reverse proxy forwards the raw request body to the API.
 - For GitHub, verify the App is installed on the org and repository permissions
   were granted.
 - For Linear, re-authorize if the token expired and refresh failed.
+
+### Workspace shows “Needs reconnect” on an integration
+
+Ingestion marked the connection `paused` / `revoked` after an auth or install
+failure (Linear token refresh failure, missing GitHub App installation, etc.).
+Use **Reconnect** / **Reinstall** on the Workspace Integrations card. Successful
+OAuth / installation sync clears the error and sets status back to `active`.
 
 ### Meltano install is slow or fails on first boot
 

@@ -30,6 +30,7 @@ from app.models.enums import AuthType, ConnectionStatus, IntegrationProvider, Ro
 from app.models.membership import TenantMembership
 from app.services import role_permissions as role_permission_service
 from app.services import token_crypto
+from app.services.connections import clear_auth_failure
 
 logger = logging.getLogger("propel.connections")
 
@@ -176,6 +177,7 @@ async def bind_linear_oauth(
             status=ConnectionStatus.active.value,
         )
         session.add(account)
+        clear_auth_failure(account)
     else:
         account = existing
         account.connected_by_user_id = user_id
@@ -185,6 +187,7 @@ async def bind_linear_oauth(
         account.token_expires_at = token.expires_at
         account.scopes = token.scopes
         account.status = ConnectionStatus.active.value
+        clear_auth_failure(account)
 
     try:
         await session.commit()
@@ -228,6 +231,28 @@ async def get_active_linear_account(
             ConnectedAccount.provider == IntegrationProvider.linear.value,
             ConnectedAccount.status == ConnectionStatus.active.value,
         )
+    )
+
+
+async def get_linear_account(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> ConnectedAccount | None:
+    """Latest Linear connection for a tenant (any status), or None.
+
+    Prefer an active row so reconnect stays healthy; otherwise surface
+    paused/revoked state for the workspace Integrations UI.
+    """
+    active = await get_active_linear_account(session, tenant_id)
+    if active is not None:
+        return active
+    return await session.scalar(
+        select(ConnectedAccount)
+        .where(
+            ConnectedAccount.tenant_id == tenant_id,
+            ConnectedAccount.provider == IntegrationProvider.linear.value,
+        )
+        .order_by(ConnectedAccount.updated_at.desc())
+        .limit(1)
     )
 
 

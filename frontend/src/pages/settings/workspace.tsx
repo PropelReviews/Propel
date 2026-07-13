@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,8 +13,12 @@ import {
 } from "@/components/ui/card";
 import {
   ApiError,
+  getGithubTenantInstallUrl,
   getLinearAuthorizeUrl,
   getLinearConnection,
+  listConnections,
+  syncGithubInstallations,
+  type Connection,
   type LinearConnection,
 } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
@@ -35,9 +40,256 @@ export function WorkspacePage() {
 
       <section className="space-y-6">
         <h2 className="text-lg font-medium">Integrations</h2>
+        <GitHubIntegrationCard token={token} tenantId={tenant?.id ?? null} />
         <LinearIntegrationCard token={token} tenantId={tenant?.id ?? null} />
       </section>
     </main>
+  );
+}
+
+type CheckState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "not-found" }
+  | { status: "error"; message: string };
+
+function isHealthy(status: string) {
+  return status === "active";
+}
+
+function SyncFailureAlert({ provider }: { provider: "github" | "linear" }) {
+  return (
+    <div
+      role="alert"
+      className="border-destructive/60 bg-destructive/5 text-destructive flex gap-3 rounded-lg border p-3"
+    >
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="space-y-2 text-sm">
+        <p className="text-destructive font-medium">Latest sync failed</p>
+        {provider === "linear" ? (
+          <>
+            <p>
+              Reconnect Linear to refresh credentials. If Linear says the app is already
+              installed, revoke it first so OAuth can issue a new token:
+            </p>
+            <ol className="text-destructive/90 list-decimal space-y-1 pl-5">
+              <li>
+                In Linear, open{" "}
+                <span className="font-medium">Settings → Installed Applications</span>
+              </li>
+              <li>
+                Find Propel → <span className="font-medium">Manage</span> →{" "}
+                <span className="font-medium">Revoke Access</span>
+              </li>
+              <li>Return here and click Reconnect</li>
+            </ol>
+          </>
+        ) : (
+          <p>
+            Reinstall the GitHub App on your organization, then click{" "}
+            <span className="font-medium">I&apos;ve installed it</span> so Propel can
+            pick up the installation again.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GitHubIntegrationCard({
+  token,
+  tenantId,
+}: {
+  token: string | null;
+  tenantId: string | null;
+}) {
+  const [accounts, setAccounts] = useState<Connection[] | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [check, setCheck] = useState<CheckState>({ status: "idle" });
+  const [error, setError] = useState<string | null>(null);
+
+  async function refreshConnections() {
+    if (!token || !tenantId) return [];
+    const all = await listConnections(token, tenantId);
+    const github = all.filter((c) => c.provider === "github");
+    setAccounts(github);
+    return github.filter((c) => isHealthy(c.status));
+  }
+
+  useEffect(() => {
+    if (!token || !tenantId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const all = await listConnections(token, tenantId);
+        if (!cancelled) {
+          setAccounts(all.filter((c) => c.provider === "github"));
+        }
+      } catch {
+        if (!cancelled) setAccounts(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, tenantId]);
+
+  const onInstall = async () => {
+    if (!token || !tenantId) return;
+    setError(null);
+    setCheck({ status: "idle" });
+    setOpening(true);
+    try {
+      const url = await getGithubTenantInstallUrl(token, tenantId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.status === 503
+            ? "GitHub App isn't configured for this deployment yet."
+            : err.message
+          : "Could not open the GitHub install page. Please try again.",
+      );
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const onCheck = async () => {
+    if (!token || !tenantId) return;
+    setError(null);
+    setCheck({ status: "checking" });
+    try {
+      await syncGithubInstallations(token);
+      const healthy = await refreshConnections();
+      setCheck(healthy.length > 0 ? { status: "idle" } : { status: "not-found" });
+    } catch (err) {
+      setCheck({
+        status: "error",
+        message:
+          err instanceof ApiError
+            ? err.message
+            : "Could not check the GitHub connection.",
+      });
+    }
+  };
+
+  const healthy = accounts?.filter((c) => isHealthy(c.status)) ?? [];
+  const broken =
+    accounts?.filter((c) => !isHealthy(c.status) || Boolean(c.auth_error)) ?? [];
+  const connected = healthy.length > 0;
+  const hasAuthIssue = !connected && broken.length > 0;
+  const syncErrorAccount =
+    accounts?.find((c) => c.last_sync_status === "error" && c.last_sync_error) ?? null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>GitHub</CardTitle>
+        <CardDescription>
+          Install the Propel GitHub App on your organization to ingest commits, pull
+          requests, reviews, and Copilot usage.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {connected ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">Connected</Badge>
+                {healthy.map((account) => (
+                  <span key={account.id} className="text-sm font-medium">
+                    {account.external_account_name ?? account.external_account_id}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onInstall}
+                  disabled={opening}
+                  analyticsName="github_workspace_reinstall"
+                >
+                  {opening ? "Opening…" : "Install again"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={onCheck}
+                  disabled={check.status === "checking"}
+                  analyticsName="github_workspace_check"
+                >
+                  {check.status === "checking" ? "Checking…" : "I've installed it"}
+                </Button>
+              </div>
+            </div>
+            {syncErrorAccount && <SyncFailureAlert provider="github" />}
+          </div>
+        ) : hasAuthIssue ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="destructive">Needs reconnect</Badge>
+              {broken.map((account) => (
+                <span key={account.id} className="text-sm font-medium">
+                  {account.external_account_name ?? account.external_account_id}
+                </span>
+              ))}
+            </div>
+            <p className="text-destructive text-sm">
+              {broken.find((a) => a.auth_error)?.auth_error ??
+                "Ingestion could not authenticate this GitHub App installation. Reinstall the app, then click I've installed it."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={onInstall}
+                disabled={opening}
+                analyticsName="github_workspace_reinstall"
+              >
+                {opening ? "Opening…" : "Reinstall GitHub App"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={onCheck}
+                disabled={check.status === "checking"}
+                analyticsName="github_workspace_check"
+              >
+                {check.status === "checking" ? "Checking…" : "I've installed it"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-muted-foreground text-sm">Not connected yet.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={onInstall}
+                disabled={opening}
+                analyticsName="github_workspace_install"
+              >
+                {opening ? "Opening…" : "Install GitHub App"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={onCheck}
+                disabled={check.status === "checking"}
+                analyticsName="github_workspace_check"
+              >
+                {check.status === "checking" ? "Checking…" : "I've installed it"}
+              </Button>
+            </div>
+          </div>
+        )}
+        {check.status === "not-found" && (
+          <p className="text-muted-foreground text-sm">
+            We couldn&apos;t find a GitHub App installation for this workspace yet. Make
+            sure the app is installed on your organization, then check again.
+          </p>
+        )}
+        {check.status === "error" && (
+          <p className="text-destructive text-sm">{check.message}</p>
+        )}
+        {error && <p className="text-destructive text-sm">{error}</p>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -50,7 +302,8 @@ function LinearIntegrationCard({
 }) {
   const [params, setParams] = useSearchParams();
   const [linear, setLinear] = useState<LinearConnection | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [check, setCheck] = useState<CheckState>({ status: "idle" });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<"connected" | "error" | null>(null);
 
@@ -83,6 +336,7 @@ function LinearIntegrationCard({
         }
       }
       setNotice(result);
+      setCheck({ status: "idle" });
     })();
     const next = new URLSearchParams(params);
     next.delete("linear");
@@ -92,12 +346,12 @@ function LinearIntegrationCard({
   const onConnect = async () => {
     if (!token || !tenantId) return;
     setError(null);
-    setConnecting(true);
+    setCheck({ status: "idle" });
+    setOpening(true);
     try {
       const url = await getLinearAuthorizeUrl(token, tenantId);
-      window.location.href = url;
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
-      setConnecting(false);
       setError(
         err instanceof ApiError
           ? err.status === 503
@@ -105,8 +359,43 @@ function LinearIntegrationCard({
             : err.message
           : "Could not start the Linear connection. Please try again.",
       );
+    } finally {
+      setOpening(false);
     }
   };
+
+  const onCheck = async () => {
+    if (!token || !tenantId) return;
+    setError(null);
+    setCheck({ status: "checking" });
+    try {
+      const result = await getLinearConnection(token, tenantId);
+      setLinear(result);
+      if (result.connected) {
+        setCheck({ status: "idle" });
+        setNotice("connected");
+      } else {
+        setCheck({ status: "not-found" });
+      }
+    } catch (err) {
+      setCheck({
+        status: "error",
+        message:
+          err instanceof ApiError
+            ? err.message
+            : "Could not check the Linear connection.",
+      });
+    }
+  };
+
+  const hasAuthIssue =
+    Boolean(linear) &&
+    !linear?.connected &&
+    (Boolean(linear?.auth_error) ||
+      linear?.status === "paused" ||
+      linear?.status === "revoked");
+  const hasSyncFailure =
+    linear?.last_sync_status === "error" && Boolean(linear.last_sync_error);
 
   return (
     <Card>
@@ -119,34 +408,125 @@ function LinearIntegrationCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {linear?.connected ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">Connected</Badge>
-              {linear.workspace_name && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Connected</Badge>
+                {linear.workspace_name && (
+                  <span className="text-sm font-medium">{linear.workspace_name}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onConnect}
+                  disabled={opening}
+                  analyticsName="linear_reconnect"
+                >
+                  {opening ? "Opening…" : "Reconnect"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={onCheck}
+                  disabled={check.status === "checking"}
+                  analyticsName="linear_check"
+                >
+                  {check.status === "checking" ? "Checking…" : "I've connected it"}
+                </Button>
+              </div>
+            </div>
+            {hasSyncFailure && <SyncFailureAlert provider="linear" />}
+          </div>
+        ) : hasAuthIssue ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="destructive">Needs reconnect</Badge>
+              {linear?.workspace_name && (
                 <span className="text-sm font-medium">{linear.workspace_name}</span>
               )}
             </div>
-            <Button
-              variant="outline"
-              onClick={onConnect}
-              disabled={connecting}
-              analyticsName="linear_reconnect"
-            >
-              {connecting ? "Redirecting…" : "Reconnect"}
-            </Button>
+            <p className="text-destructive text-sm">
+              {linear?.auth_error ??
+                "Ingestion could not authenticate Linear. Reconnect to refresh tokens."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={onConnect}
+                disabled={opening}
+                analyticsName="linear_reconnect"
+              >
+                {opening ? "Opening…" : "Reconnect Linear"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={onCheck}
+                disabled={check.status === "checking"}
+                analyticsName="linear_check"
+              >
+                {check.status === "checking" ? "Checking…" : "I've connected it"}
+              </Button>
+            </div>
+            <div className="text-muted-foreground space-y-2 text-sm">
+              <p>
+                If Linear says the app is already installed, revoke it first so OAuth
+                can issue a new token:
+              </p>
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>
+                  In Linear, open{" "}
+                  <span className="font-medium">Settings → Installed Applications</span>
+                </li>
+                <li>
+                  Find Propel → <span className="font-medium">Manage</span> →{" "}
+                  <span className="font-medium">Revoke Access</span>
+                </li>
+                <li>Return here and click Reconnect Linear</li>
+              </ol>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             <p className="text-muted-foreground text-sm">Not connected yet.</p>
-            <Button
-              onClick={onConnect}
-              disabled={connecting}
-              analyticsName="linear_connect"
-              className="self-start"
-            >
-              {connecting ? "Redirecting…" : "Connect Linear"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={onConnect}
+                disabled={opening}
+                analyticsName="linear_connect"
+              >
+                {opening ? "Opening…" : "Connect Linear"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={onCheck}
+                disabled={check.status === "checking"}
+                analyticsName="linear_check"
+              >
+                {check.status === "checking" ? "Checking…" : "I've connected it"}
+              </Button>
+            </div>
           </div>
+        )}
+        {check.status === "not-found" && !hasAuthIssue && (
+          <div className="text-muted-foreground space-y-2 text-sm">
+            <p>
+              Linear didn&apos;t finish authorizing — this usually means the app is
+              already installed and Linear skipped the OAuth callback.
+            </p>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>
+                In Linear, open{" "}
+                <span className="font-medium">Settings → Installed Applications</span>
+              </li>
+              <li>
+                Find Propel → <span className="font-medium">Manage</span> →{" "}
+                <span className="font-medium">Revoke Access</span>
+              </li>
+              <li>Return here and click Connect Linear again</li>
+            </ol>
+          </div>
+        )}
+        {check.status === "error" && (
+          <p className="text-destructive text-sm">{check.message}</p>
         )}
         {notice === "connected" && (
           <p className="text-sm text-emerald-700 dark:text-emerald-400">

@@ -77,6 +77,7 @@ async def test_authorize_requires_config(client: AsyncClient, monkeypatch):
     assert url.startswith("https://linear.app/oauth/authorize")
     assert "actor=app" in url
     assert "scope=read" in url
+    assert "prompt=consent" in url
 
 
 @pytest.mark.asyncio

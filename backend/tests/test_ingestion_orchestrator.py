@@ -237,3 +237,96 @@ async def test_run_all_skips_paused_accounts(client, monkeypatch):
     async with async_session_maker() as session:
         total = await session.scalar(select(func.count()).select_from(IngestionRun))
         assert total == 0
+
+
+@pytest.mark.asyncio
+async def test_github_auth_failure_pauses_connection(client, monkeypatch):
+    account = await _seed_account()
+
+    async def fail_token(installation_id):
+        raise app_auth.GitHubAppAuthError(
+            "Installation token exchange failed (401): bad credentials"
+        )
+
+    monkeypatch.setattr(orchestrator.app_auth, "get_installation_token", fail_token)
+
+    async with async_session_maker() as session:
+        # Re-load so the orchestrator writes onto a session-bound instance.
+        db_account = await session.get(ConnectedAccount, account.id)
+        run = await orchestrator.run_account_job(session, db_account, GITHUB_JOB)
+
+    assert run is not None
+    assert run.status == "error"
+
+    async with async_session_maker() as session:
+        updated = await session.get(ConnectedAccount, account.id)
+        assert updated.status == "paused"
+        assert updated.meta["auth"]["reason"] == "GitHubAppAuthError"
+        assert "Authentication failed" in updated.meta["auth"]["message"] or (
+            "authentication failed" in updated.meta["auth"]["message"].lower()
+        )
+
+
+@pytest.mark.asyncio
+async def test_github_404_auth_failure_revokes_connection(client, monkeypatch):
+    account = await _seed_account()
+
+    async def fail_token(installation_id):
+        raise app_auth.GitHubAppAuthError(
+            "Installation token exchange failed (404): Not Found"
+        )
+
+    monkeypatch.setattr(orchestrator.app_auth, "get_installation_token", fail_token)
+
+    async with async_session_maker() as session:
+        db_account = await session.get(ConnectedAccount, account.id)
+        await orchestrator.run_account_job(session, db_account, GITHUB_JOB)
+
+    async with async_session_maker() as session:
+        updated = await session.get(ConnectedAccount, account.id)
+        assert updated.status == "revoked"
+        assert "missing or inaccessible" in updated.meta["auth"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_meltano_auth_like_failure_pauses_connection(client, monkeypatch):
+    account = await _seed_account()
+    _patch_github(monkeypatch)
+
+    async def fake_run(job, env, **kwargs):
+        return meltano_runner.RunResult(
+            returncode=1,
+            stdout="",
+            stderr="HTTP Error 401: Unauthorized — bad credentials from GitHub",
+        )
+
+    monkeypatch.setattr(orchestrator.meltano_runner, "run_job", fake_run)
+
+    async with async_session_maker() as session:
+        db_account = await session.get(ConnectedAccount, account.id)
+        await orchestrator.run_account_job(session, db_account, GITHUB_JOB)
+
+    async with async_session_maker() as session:
+        updated = await session.get(ConnectedAccount, account.id)
+        assert updated.status == "paused"
+        assert updated.meta["auth"]["reason"] == "meltano_auth_failure"
+
+
+@pytest.mark.asyncio
+async def test_meltano_failure_does_not_pause_connection(client, monkeypatch):
+    account = await _seed_account()
+    _patch_github(monkeypatch)
+
+    async def fake_run(job, env, **kwargs):
+        return meltano_runner.RunResult(returncode=1, stdout="", stderr="boom")
+
+    monkeypatch.setattr(orchestrator.meltano_runner, "run_job", fake_run)
+
+    async with async_session_maker() as session:
+        db_account = await session.get(ConnectedAccount, account.id)
+        await orchestrator.run_account_job(session, db_account, GITHUB_JOB)
+
+    async with async_session_maker() as session:
+        updated = await session.get(ConnectedAccount, account.id)
+        assert updated.status == "active"
+        assert "auth" not in (updated.meta or {})
