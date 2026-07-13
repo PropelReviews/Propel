@@ -1,13 +1,26 @@
 name: Deploy Prod
 
+# Auto-deploys production after CI succeeds on main (merges), on version tags,
+# or via manual dispatch. The ``prod`` Environment gates approval + secrets and
+# records deployment status on the commit (Environments UI + commit checks).
 on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (branch, tag, or SHA). Empty = this workflow's SHA."
+        required: false
+        default: ""
 
 permissions:
   id-token: write
   contents: read
+  actions: read
 
 concurrency:
   group: deploy-prod
@@ -17,16 +30,69 @@ env:
   AWS_REGION: us-east-1
   TF_DIR: infrastructure/terraform/environments/prod
   AWS_ROLE_ARN: arn:aws:iam::616938645090:role/PropelTerraform
+  PROD_URL: https://propel.ninja
+  API_HEALTH_URL: https://api.propel.ninja/health
 
 jobs:
+  # Resolve the commit to deploy and skip failed CI runs on main.
+  prepare:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    outputs:
+      deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
+    steps:
+      - name: Resolve deploy SHA
+        id: resolve
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            workflow_run)
+              echo "deploy_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+              ;;
+            workflow_dispatch)
+              REF="${{ inputs.ref }}"
+              if [ -n "$REF" ]; then
+                echo "deploy_sha=$REF" >> "$GITHUB_OUTPUT"
+              else
+                echo "deploy_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              echo "deploy_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
   config:
+    needs: prepare
     runs-on: ubuntu-latest
     # Approval gate + environment-scoped Actions variables and secrets.
-    environment: prod
+    # ``url`` surfaces the live site on the Environments / Deployments UI.
+    environment:
+      name: prod
+      url: ${{ env.PROD_URL }}
     outputs:
       app_vars: ${{ toJSON(vars) }}
+      deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.deploy_sha }}
+
+      - name: Record resolved SHA
+        id: meta
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          echo "deploy_sha=$SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Production deploy"
+            echo ""
+            echo "- **SHA:** \`$SHA\`"
+            echo "- **Trigger:** \`${{ github.event_name }}\`"
+            echo "- **Site:** ${{ env.PROD_URL }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Terraform app config
         env:
@@ -53,13 +119,15 @@ jobs:
   deploy:
     needs: config
     runs-on: ubuntu-latest
-    # OIDC subject must be environment:prod (see prod-trust.json). Unlike beta,
-    # do not rely on refs/heads/main — workflow_run and workflow_dispatch refs
-    # are not always main. Approval already ran on config; same environment
-    # does not require a second gate in one workflow run.
-    environment: prod
+    # OIDC subject must be environment:prod (see prod-trust.json). Approval
+    # already ran on config; same environment does not require a second gate.
+    environment:
+      name: prod
+      url: ${{ env.PROD_URL }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.config.outputs.deploy_sha }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -79,6 +147,8 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
+          # deploy-*.sh / rollback.sh need raw ``terraform output`` (no wrapper JSON).
+          terraform_wrapper: false
 
       - name: Install Terraform app config
         run: cp terraform-app-config.json "${{ env.TF_DIR }}/app.auto.tfvars.json"
@@ -93,6 +163,8 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build, push & deploy API
+        env:
+          IMAGE_TAG: ${{ needs.config.outputs.deploy_sha }}
         run: ./scripts/deploy-api.sh prod
 
       - name: Set up Node
@@ -101,7 +173,24 @@ jobs:
           node-version: 20
 
       - name: Build & publish frontend
+        env:
+          RELEASE_SHA: ${{ needs.config.outputs.deploy_sha }}
         run: ./scripts/deploy-frontend.sh prod
 
       - name: Build & publish landing
+        env:
+          RELEASE_SHA: ${{ needs.config.outputs.deploy_sha }}
         run: ./scripts/deploy-landing.sh prod
+
+      - name: Smoke check API health
+        run: |
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors \
+            "${{ env.API_HEALTH_URL }}" | tee /tmp/health.json
+          echo
+          {
+            echo "## Deploy complete"
+            echo ""
+            echo "- **SHA:** \`${{ needs.config.outputs.deploy_sha }}\`"
+            echo "- **Health:** ${{ env.API_HEALTH_URL }}"
+            echo "- **Rollback:** Actions → Rollback Prod → SHA above"
+          } >> "$GITHUB_STEP_SUMMARY"

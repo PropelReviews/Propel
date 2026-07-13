@@ -28,17 +28,32 @@ resource "aws_ecr_repository" "api" {
 
 resource "aws_ecr_lifecycle_policy" "api" {
   repository = aws_ecr_repository.api.name
+  # Keep enough SHA-tagged images for clean rollbacks; expire untagged layers quickly.
   policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 10 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 10
-      }
-      action = { type = "expire" }
-    }]
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 30 tagged images (SHA releases)"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 30
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Expire untagged images after 1 day"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = { type = "expire" }
+      },
+    ]
   })
 }
 
@@ -192,8 +207,9 @@ resource "aws_ecs_task_definition" "api" {
     name      = "api"
     image     = "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
     essential = true
-    # No logConfiguration on purpose: no CloudWatch. Observability is shipped
-    # to PostHog by the app itself (OpenTelemetry traces).
+    # No logConfiguration on purpose: no CloudWatch log groups. Observability is
+    # shipped to PostHog by the app itself (OpenTelemetry traces). Deploy-safety
+    # ALB metric alarms (see deploy_rollback.tf) are intentional exceptions.
     portMappings = [{
       containerPort = var.container_port
       protocol      = "tcp"
@@ -214,6 +230,24 @@ resource "aws_ecs_service" "api" {
 
   health_check_grace_period_seconds = 60
 
+  # Fail a rolling deploy that cannot reach steady state, then restore the last
+  # successful task-definition revision automatically.
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  # Also roll back when ALB target-group metrics go unhealthy mid-deploy
+  # (see deploy_rollback.tf). ECS only evaluates these during an active deploy.
+  alarms {
+    enable   = true
+    rollback = true
+    alarm_names = [
+      aws_cloudwatch_metric_alarm.api_unhealthy_hosts.alarm_name,
+      aws_cloudwatch_metric_alarm.api_target_5xx.alarm_name,
+    ]
+  }
+
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [var.ecs_security_group_id]
@@ -227,6 +261,13 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener.https]
+
+  # Task definition revisions are registered by Terraform (env/cpu/secrets) and
+  # by deploy-api.sh / rollback.sh (image). Ignore service.task_definition so
+  # apply does not clobber a SHA pin or mid-rollback revision.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 
   tags = var.tags
 }

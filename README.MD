@@ -1,5 +1,8 @@
 # Propel
 
+[![CI](https://github.com/PropelReviews/Propel/actions/workflows/ci.yml/badge.svg)](https://github.com/PropelReviews/Propel/actions/workflows/ci.yml)
+[![Deploy Prod](https://github.com/PropelReviews/Propel/actions/workflows/deploy-prod.yml/badge.svg)](https://github.com/PropelReviews/Propel/actions/workflows/deploy-prod.yml)
+
 Transparent analytics for engineering teams. Fully open source and self-hostable.
 
 Your work in GitHub and Linear, turned into metrics you can read, trace, and trust. Built first for the developers doing the work, open to everyone who depends on it.

@@ -3,37 +3,93 @@
 GitHub Actions runs all checks and deploys. AWS auth is via **OIDC** — no stored
 AWS keys (see [`bootstrap.md`](bootstrap.md) Step 4).
 
+## Status badges
+
+| Check | Badge |
+|-------|-------|
+| CI | [![CI](https://github.com/PropelReviews/Propel/actions/workflows/ci.yml/badge.svg)](https://github.com/PropelReviews/Propel/actions/workflows/ci.yml) |
+| Deploy Prod | [![Deploy Prod](https://github.com/PropelReviews/Propel/actions/workflows/deploy-prod.yml/badge.svg)](https://github.com/PropelReviews/Propel/actions/workflows/deploy-prod.yml) |
+| Rollback Prod | [![Rollback Prod](https://github.com/PropelReviews/Propel/actions/workflows/rollback-prod.yml/badge.svg)](https://github.com/PropelReviews/Propel/actions/workflows/rollback-prod.yml) |
+
+Live deployment history (SHA, actor, URL) is on the repo **Environments → prod**
+page. Each deploy job sets `environment.url` to `https://propel.ninja`.
+
 ## Workflows
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | Terraform `fmt -check` + `validate` (prod); backend Ruff lint/format + `pytest`; frontend ESLint + Prettier + TypeScript + `vitest` + Vite builds |
-| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | push `v*` tag, manual | OIDC → prod role → `terraform apply` → deploy API → deploy frontend (uses the `prod` Environment for vars + approval) |
+| [`ci.yml`](../../.github/workflows/ci.yml) | PR, push to `main` | Full pre-merge suite (see below) ending in aggregate **`CI success`** |
+| [`deploy-prod.yml`](../../.github/workflows/deploy-prod.yml) | CI success on `main`, push `v*` tag, manual | OIDC → prod role → `terraform apply` → deploy API / frontend / landing (uses the `prod` Environment for vars + approval) |
+| [`rollback-prod.yml`](../../.github/workflows/rollback-prod.yml) | manual | Restore a previous git SHA (ECR image + S3 release archives); no Terraform apply |
+
+### CI jobs (all required)
+
+| Job | Checks |
+|-----|--------|
+| Terraform validate | `fmt -check`, `validate` for **prod** and **beta** |
+| Backend checks | `uv lock --check`, Ruff lint/format, `alembic upgrade head`, `pytest` |
+| Ingestion integration | Alembic + `target-propel` pytest suite |
+| dbt checks | sqlfluff, `dbt parse` / `dbt build` (full + tenant incremental), smoke SQL |
+| Frontend checks | ESLint, Prettier, `tsc`, Vitest (unit + Playwright browser), both Vite builds, `npm audit --audit-level=critical` |
+| Scripts tests | Zitadel bootstrap unit tests, `bash -n` on deploy/rollback scripts |
+| Workflow + repo lint | [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` |
+| Orchestration checks | Install Dagster + backend runtime, `compileall`, import job modules |
+| Docker API image | Build `backend.prod.Dockerfile` (no push) |
+| **CI success** | Aggregate gate — green only if every job above succeeded |
 
 > **Note:** Beta was decommissioned in June 2026. The `deploy-beta.yml` workflow
-> has been removed. Prod deploys via version tags or manual dispatch only.
+> has been removed. Prod auto-deploys when CI passes on `main`.
+
+## Branch protection
+
+Merges to `main` must require the aggregate **`CI success`** check (not each
+individual job — that check already waits on all of them).
+
+Apply once (repo admin):
+
+```bash
+./scripts/configure-branch-protection.sh
+# or: REPO=PropelReviews/Propel ./scripts/configure-branch-protection.sh
+```
+
+That creates/updates a GitHub **ruleset** on `main` with:
+
+- Required status check: `CI success` (strict — branch must be up to date)
+- Pull request required (1 approving review, dismiss stale reviews, conversations resolved)
+- Block force-push and branch deletion
+
+Or configure the same manually: **Settings → Rules → Rulesets → New branch
+ruleset** targeting `main`.
 
 ## Deploy flow
 
-1. **`config` job** — binds the `prod` GitHub Environment so environment-scoped
+1. **Merge to `main`** — `ci.yml` runs. On success, `deploy-prod.yml` starts via
+   `workflow_run` (or push a `v*` tag / run **Deploy Prod** manually).
+2. **`prepare` job** — resolves the commit SHA (the CI head SHA on
+   `workflow_run`, otherwise the pushed/dispatch ref).
+3. **`config` job** — binds the `prod` GitHub Environment so environment-scoped
    Actions variables and secrets are available (and prod approval runs here). This
    job does **not** call AWS. It runs
    [`scripts/generate-app-tfvars.sh`](../../scripts/generate-app-tfvars.sh) to
    build `app.auto.tfvars.json` (variables → `app_environment`, secrets →
    `app_secrets`) and uploads it as a workflow artifact.
-2. **`deploy` job** — checks out the repo, downloads the Terraform config
+4. **`deploy` job** — checks out that SHA, downloads the Terraform config
    artifact, and assumes `PropelTerraform` via OIDC. The deploy job binds the
    `prod` Environment so the OIDC subject is `environment:prod` (matches
    `prod-trust.json`); approval runs on the `config` job.
-3. **Forward Actions variables to env** — vars from the `config` job become shell
+5. **Forward Actions variables to env** — vars from the `config` job become shell
    env vars (consumed by the SPA build, e.g. `VITE_*`, `POSTHOG_*`).
-4. **Install Terraform app config** — the artifact from `config` is copied to
+6. **Install Terraform app config** — the artifact from `config` is copied to
    `app.auto.tfvars.json` in the prod Terraform directory.
-5. **`terraform init` + `apply`**
-6. **Build, push & deploy API** — `scripts/deploy-api.sh prod` builds
-   `backend.prod.Dockerfile`, pushes to ECR, forces an ECS redeploy.
-7. **Build & publish frontend** — `scripts/deploy-frontend.sh prod` runs
-   `vite build`, syncs to S3, invalidates CloudFront.
+7. **`terraform init` + `apply`**
+8. **Build, push & deploy API** — `scripts/deploy-api.sh prod` builds
+   `backend.prod.Dockerfile`, pushes ECR tags `$SHA` and `latest`, rolls ECS
+   services onto the SHA image, and waits until services are stable.
+9. **Build & publish frontend / landing** — sync to S3 live roots **and** archive
+   under `s3://…/releases/$SHA/` for rollbacks, then invalidate CloudFront.
+10. **Smoke check** — `GET https://api.propel.ninja/health`.
+
+Every release is identified by the full git SHA (ECR image tag + S3 archive key).
 
 ## Adding app config
 
@@ -57,14 +113,76 @@ API validates configuration at startup.
 
 ## Releasing to prod
 
-Cut a versioned release:
+**Default path:** merge to `main`. After CI is green, Deploy Prod runs
+automatically (approve in the `prod` Environment if reviewers are configured).
+
+Cut a versioned release tag (also deploys):
 
 ```bash
 git tag v1.2.3
 git push origin v1.2.3      # triggers deploy-prod.yml; approve in the Environment
 ```
 
-Or trigger **Deploy Prod** manually from the Actions tab (`workflow_dispatch`).
+Or trigger **Deploy Prod** manually from the Actions tab (`workflow_dispatch`),
+optionally with a specific ref.
+
+## Rollback
+
+### Automatic (ECS metrics)
+
+Prod API deploys are guarded by AWS-native rollback:
+
+| Mechanism | What it watches | What rolls back |
+|-----------|-----------------|-----------------|
+| **ECS deployment circuit breaker** | Tasks failing to start / ELB health checks during a rolling deploy | API (+ ingestion) task definition → last successful revision |
+| **CloudWatch deploy alarms** | ALB `UnHealthyHostCount` ≥ 1, `HTTPCode_Target_5XX_Count` > 10 (2×60s) | Same — wired into the ECS service `alarms { rollback = true }` block |
+| **Sustained unhealthy alarm** | `UnHealthyHostCount` for ~10 minutes after deploy | EventBridge → Lambda restores previous **SHA** (ECS image + S3 `releases/`) |
+| **`SERVICE_DEPLOYMENT_FAILED`** | Circuit breaker / deploy-alarm failure event | Same Lambda (keeps SPA/landing aligned with the ECS rollback) |
+
+Release SHAs are tracked in SSM (`/propel-prod/release/current` + `previous`) so metric
+rollbacks know the last good version. Notifications go to the
+`propel-prod-deploy-rollback` SNS topic (subscribe email/Slack as needed).
+
+App logs still go to PostHog — these are **deploy-safety ALB metrics only**, not
+Container Insights or CloudWatch log groups.
+
+### Manual
+
+Rollbacks restore a **previous successful deploy SHA** without re-running
+Terraform:
+
+1. Find the SHA on **Environments → prod**, the Deploy Prod run summary, SSM
+   previous, or:
+
+   ```bash
+   AWS_PROFILE=propel-prod ./scripts/rollback.sh prod --list
+   AWS_PROFILE=propel-prod ./scripts/rollback.sh prod --previous
+   ```
+
+2. From Actions → **Rollback Prod**, enter the full SHA and type `rollback`, then
+   approve the `prod` Environment gate.
+
+   Or locally:
+
+   ```bash
+   AWS_PROFILE=propel-prod ./scripts/rollback.sh prod <full-git-sha>
+   ```
+
+What rollback does:
+
+- Points API / ingestion / Dask ECS services at the ECR image tagged with that SHA
+- Restores frontend + landing from `s3://…/releases/<sha>/` and invalidates CloudFront
+- Updates SSM current/previous release pointers
+- Smoke-checks `/health`
+
+What it does **not** do:
+
+- Change Terraform-managed infra or Secrets Manager values
+- Reverse database migrations — use expand/contract migrations so older code
+  stays compatible with the current schema
+
+Release archives and ECR SHA tags are retained for about **30 days** (S3
+lifecycle + ECR lifecycle policy).
 
 ## Required GitHub config
 
@@ -73,7 +191,7 @@ Or trigger **Deploy Prod** manually from the Actions tab (`workflow_dispatch`).
   `POSTHOG_TOKEN`, `POSTHOG_HOST`) and **secrets** (OAuth client secrets when
   enabled) reach the API via Terraform.
 - **`prod` Environment** — add required reviewers to gate prod deploys (runs on
-  the `config` job).
+  the `config` job). Deployment status and the live URL appear on this page.
 - Prod OIDC provider + `PropelTerraform` role (bootstrap Step 4). If prod OIDC
   fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity`, re-apply
   `prod-trust.json` (see bootstrap troubleshooting).

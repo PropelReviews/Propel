@@ -74,21 +74,40 @@ github_pull_requests dbt model.
 
 ## Code quality
 
-CI runs linting, formatting, type checks, tests, and builds on every pull request. Run the same checks locally before opening a PR:
+CI runs a full pre-merge suite on every pull request (Terraform, backend,
+ingestion, dbt, frontend, scripts, workflows, orchestration imports, and a
+production Docker image build). The aggregate **`CI success`** check must be
+green before merging to `main` (see [`docs/deployment/cicd.md`](docs/deployment/cicd.md)).
+
+Run the same checks locally before opening a PR:
 
 ```bash
 # Frontend (from frontend/)
 npm run lint          # ESLint
 npm run format:check  # Prettier
 npm run typecheck     # TypeScript
-npm test
+npm test              # Vitest unit + browser
 npm run build
 npm run build:landing
 
 # Backend (from backend/)
+uv lock --check
 uv run ruff check .
 uv run ruff format --check .
+uv run alembic upgrade head
 uv run pytest
+
+# Ingestion target (from backend/, after uv sync + editable install)
+uv pip install -e meltano/target-propel
+uv run --no-sync pytest meltano/target-propel/tests -v
+
+# dbt (from transformation/dbt/, needs local Postgres — or rely on CI)
+sqlfluff lint models
+dbt build --full-refresh --project-dir . --profiles-dir .
+
+# Scripts
+python3 scripts/tests/test_zitadel_bootstrap_idp.py -v
+bash -n scripts/*.sh scripts/lib/*.sh
 
 # Terraform (from infrastructure/terraform/)
 terraform fmt -check -recursive
