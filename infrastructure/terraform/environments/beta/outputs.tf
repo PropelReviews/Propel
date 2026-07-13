@@ -61,3 +61,19 @@ output "cloudfront_distribution_id" {
 output "alb_dns_name" {
   value = module.stack.alb_dns_name
 }
+
+output "release_current_parameter" {
+  value = module.stack.release_current_parameter
+}
+
+output "release_previous_parameter" {
+  value = module.stack.release_previous_parameter
+}
+
+output "deploy_alarm_names" {
+  value = module.stack.deploy_alarm_names
+}
+
+output "deploy_rollback_sns_topic_arn" {
+  value = module.stack.deploy_rollback_sns_topic_arn
+}

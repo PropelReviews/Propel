@@ -207,8 +207,9 @@ resource "aws_ecs_task_definition" "api" {
     name      = "api"
     image     = "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
     essential = true
-    # No logConfiguration on purpose: no CloudWatch. Observability is shipped
-    # to PostHog by the app itself (OpenTelemetry traces).
+    # No logConfiguration on purpose: no CloudWatch log groups. Observability is
+    # shipped to PostHog by the app itself (OpenTelemetry traces). Deploy-safety
+    # ALB metric alarms (see deploy_rollback.tf) are intentional exceptions.
     portMappings = [{
       containerPort = var.container_port
       protocol      = "tcp"
@@ -228,6 +229,24 @@ resource "aws_ecs_service" "api" {
   launch_type     = "FARGATE"
 
   health_check_grace_period_seconds = 60
+
+  # Fail a rolling deploy that cannot reach steady state, then restore the last
+  # successful task-definition revision automatically.
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  # Also roll back when ALB target-group metrics go unhealthy mid-deploy
+  # (see deploy_rollback.tf). ECS only evaluates these during an active deploy.
+  alarms {
+    enable   = true
+    rollback = true
+    alarm_names = [
+      aws_cloudwatch_metric_alarm.api_unhealthy_hosts.alarm_name,
+      aws_cloudwatch_metric_alarm.api_target_5xx.alarm_name,
+    ]
+  }
 
   network_configuration {
     subnets          = var.private_subnet_ids

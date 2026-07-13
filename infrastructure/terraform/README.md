@@ -138,10 +138,13 @@ open https://propel.ninja               # landing (www redirects here)
 
 ## Notes & trade-offs
 
-- **No CloudWatch:** ECS task definitions omit `logConfiguration`; there are no
-  log groups, dashboards, or alarms. App-level observability goes to PostHog.
-- **No autoscaling:** target tracking needs CloudWatch, so `api_desired_count`
-  is fixed per environment.
+- **No CloudWatch app logs:** ECS task definitions omit `logConfiguration`; there
+  are no log groups or dashboards. App-level observability goes to PostHog.
+  Deploy-safety **ALB metric alarms** (unhealthy hosts / 5xx) do exist — they
+  drive ECS circuit-breaker rollbacks and the metric-rollback Lambda (see
+  [`docs/deployment/cicd.md`](../../docs/deployment/cicd.md)).
+- **No autoscaling:** target tracking needs broader CloudWatch metrics, so
+  `api_desired_count` is fixed per environment.
 - **Single NAT gateway** per environment (~$32/mo) is the main fixed cost; ECS
   tasks pull from ECR and reach PostHog through it. VPC endpoints could remove
   it later.

@@ -11,7 +11,8 @@
 #
 # Usage:
 #   scripts/rollback.sh <beta|prod> <git-sha>
-#   scripts/rollback.sh prod --list          # show recent ECR release tags
+#   scripts/rollback.sh prod --previous   # SSM previous release (metric target)
+#   scripts/rollback.sh prod --list       # show recent ECR release tags
 #
 # Requires AWS credentials for the target account (CI: OIDC; local: AWS profile).
 # Terraform state must be readable (outputs) — run from a checkout that can
@@ -22,8 +23,7 @@ ENV="${1:-}"
 TARGET="${2:-}"
 
 if [[ "$ENV" != "beta" && "$ENV" != "prod" ]]; then
-  echo "Usage: $0 <beta|prod> <git-sha>" >&2
-  echo "       $0 <beta|prod> --list" >&2
+  echo "Usage: $0 <beta|prod> <git-sha|--previous|--list>" >&2
   exit 1
 fi
 
@@ -31,6 +31,8 @@ REGION="${AWS_REGION:-us-east-1}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/ecs.sh
 source "$REPO_ROOT/scripts/lib/ecs.sh"
+# shellcheck source=lib/release-ssm.sh
+source "$REPO_ROOT/scripts/lib/release-ssm.sh"
 
 TF_DIR="$REPO_ROOT/infrastructure/terraform/environments/$ENV"
 
@@ -61,8 +63,17 @@ if [[ "$TARGET" == "--list" ]]; then
   exit 0
 fi
 
+if [[ "$TARGET" == "--previous" ]]; then
+  TARGET="$(read_previous_release_sha)"
+  if [[ -z "$TARGET" || "$TARGET" == "none" ]]; then
+    echo "error: no previous release SHA recorded in SSM" >&2
+    exit 1
+  fi
+  echo "==> Using previous release from SSM: $TARGET"
+fi
+
 if [[ -z "$TARGET" ]]; then
-  echo "Usage: $0 <beta|prod> <git-sha>" >&2
+  echo "Usage: $0 <beta|prod> <git-sha|--previous|--list>" >&2
   exit 1
 fi
 
@@ -98,7 +109,6 @@ restore_s3_release() {
   fi
 
   echo "==> Restoring $label from s3://$bucket/releases/$sha/"
-  # Copy release objects to a temp prefix sync via aws s3 sync between prefixes.
   aws s3 sync "s3://$bucket/releases/$sha/" "s3://$bucket/" \
     --delete \
     --exclude "releases/*" \
@@ -132,6 +142,7 @@ restore_s3_release "frontend" "$FRONTEND_BUCKET" "$FRONTEND_DIST" "$SHA"
 restore_s3_release "landing" "$LANDING_BUCKET" "$LANDING_DIST" "$SHA"
 
 wait_ecs_services_stable "$CLUSTER" "${SERVICES[@]}"
+record_release_sha "$SHA"
 
 echo "==> Smoke check $API_URL/health"
 curl -fsS --retry 5 --retry-delay 2 "$API_URL/health" >/dev/null

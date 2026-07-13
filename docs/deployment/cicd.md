@@ -92,13 +92,35 @@ optionally with a specific ref.
 
 ## Rollback
 
+### Automatic (ECS metrics)
+
+Prod API deploys are guarded by AWS-native rollback:
+
+| Mechanism | What it watches | What rolls back |
+|-----------|-----------------|-----------------|
+| **ECS deployment circuit breaker** | Tasks failing to start / ELB health checks during a rolling deploy | API (+ ingestion) task definition → last successful revision |
+| **CloudWatch deploy alarms** | ALB `UnHealthyHostCount` ≥ 1, `HTTPCode_Target_5XX_Count` > 10 (2×60s) | Same — wired into the ECS service `alarms { rollback = true }` block |
+| **Sustained unhealthy alarm** | `UnHealthyHostCount` for ~10 minutes after deploy | EventBridge → Lambda restores previous **SHA** (ECS image + S3 `releases/`) |
+| **`SERVICE_DEPLOYMENT_FAILED`** | Circuit breaker / deploy-alarm failure event | Same Lambda (keeps SPA/landing aligned with the ECS rollback) |
+
+Release SHAs are tracked in SSM (`/propel-prod/release/current` + `previous`) so metric
+rollbacks know the last good version. Notifications go to the
+`propel-prod-deploy-rollback` SNS topic (subscribe email/Slack as needed).
+
+App logs still go to PostHog — these are **deploy-safety ALB metrics only**, not
+Container Insights or CloudWatch log groups.
+
+### Manual
+
 Rollbacks restore a **previous successful deploy SHA** without re-running
 Terraform:
 
-1. Find the SHA on **Environments → prod**, the Deploy Prod run summary, or:
+1. Find the SHA on **Environments → prod**, the Deploy Prod run summary, SSM
+   previous, or:
 
    ```bash
    AWS_PROFILE=propel-prod ./scripts/rollback.sh prod --list
+   AWS_PROFILE=propel-prod ./scripts/rollback.sh prod --previous
    ```
 
 2. From Actions → **Rollback Prod**, enter the full SHA and type `rollback`, then
@@ -114,6 +136,7 @@ What rollback does:
 
 - Points API / ingestion / Dask ECS services at the ECR image tagged with that SHA
 - Restores frontend + landing from `s3://…/releases/<sha>/` and invalidates CloudFront
+- Updates SSM current/previous release pointers
 - Smoke-checks `/health`
 
 What it does **not** do:

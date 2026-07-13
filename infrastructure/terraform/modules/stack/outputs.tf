@@ -65,3 +65,19 @@ output "cloudfront_distribution_id" {
 output "database_url_secret_arn" {
   value = module.database.database_url_secret_arn
 }
+
+output "release_current_parameter" {
+  value = module.api.release_current_parameter
+}
+
+output "release_previous_parameter" {
+  value = module.api.release_previous_parameter
+}
+
+output "deploy_alarm_names" {
+  value = module.api.deploy_alarm_names
+}
+
+output "deploy_rollback_sns_topic_arn" {
+  value = aws_sns_topic.deploy_rollback.arn
+}

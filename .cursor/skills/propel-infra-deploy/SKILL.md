@@ -49,6 +49,7 @@ Deploy scripts need `AWS_PROFILE=propel-prod` locally (CI uses OIDC).
 - `ci.yml` (PRs + main): `terraform` (fmt + validate prod), `backend` (ruff + pytest w/ Postgres service), `ingestion-integration` (alembic + target-propel tests), `dbt`, `frontend` (eslint, prettier, tsc, vitest w/ Playwright Chromium, both builds).
 - `deploy-prod.yml`: after CI succeeds on `main`, `v*` tag, or manual `workflow_dispatch` → terraform apply + deploy api/frontend/landing with `prod` environment approval gate. Releases are SHA-tagged in ECR and archived under S3 `releases/$SHA/`.
 - `rollback-prod.yml`: manual rollback to a previous deploy SHA (ECR + S3 archives; no terraform).
+- ECS metric rollback: circuit breaker + ALB CloudWatch alarms auto-roll the API task def mid-deploy; EventBridge + Lambda restore the previous SHA (ECS + S3) on `SERVICE_DEPLOYMENT_FAILED` or sustained unhealthy hosts. SNS topic `propel-*-deploy-rollback`.
 
 Docs: `docs/deployment/bootstrap.md` (one-time setup), `docs/deployment/cicd.md`, `docs/deployment/aws-sso.md`.
 
@@ -58,4 +59,4 @@ Docs: `docs/deployment/bootstrap.md` (one-time setup), `docs/deployment/cicd.md`
 - State backends are hardcoded in each env's `backend.tf` — never change bucket/lock names.
 - Migrations run automatically when the API container starts; the ingestion ECS service sets `SKIP_MIGRATIONS=1`. Use expand/contract migrations for rolling deploys.
 - Smoke check after deploy: `curl https://api.propel.ninja/health`.
-- No CloudWatch app logs — observability goes to PostHog via OTEL.
+- No CloudWatch app logs — observability goes to PostHog via OTEL. ALB deploy-safety alarms are intentional exceptions for metric rollback.

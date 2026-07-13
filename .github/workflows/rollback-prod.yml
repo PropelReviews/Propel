@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       git_sha:
-        description: "Full git SHA of a previously successful deploy"
+        description: "Full git SHA to restore, or the literal previous to use SSM previous release"
         required: true
         type: string
       confirm:

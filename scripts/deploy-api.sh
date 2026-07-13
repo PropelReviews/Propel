@@ -80,4 +80,8 @@ fi
 
 wait_ecs_services_stable "$CLUSTER" "${SERVICES[@]}"
 
+# shellcheck source=lib/release-ssm.sh
+source "$REPO_ROOT/scripts/lib/release-ssm.sh"
+record_release_sha "$TAG"
+
 echo "Done. Deployed $IMAGE to $ENV."
