@@ -6,15 +6,17 @@
 # (small) coordinator task. The launcher derives cluster, subnets, security
 # groups, image, environment, and secrets from the currently running task and
 # registers a per-deploy task definition whose single container is named
-# `run` with command `dagster api execute_run ...` (handled by entrypoint.sh).
+# `run` with command `/entrypoint.sh dagster api execute_run ...`.
+# EcsRunLauncher clears the image ENTRYPOINT, so PropelEcsRunLauncher prepends
+# entrypoint.sh explicitly (see propel_orchestration/ecs_run_launcher.py).
 #
 # The run worker itself is light for org ingestion (steps execute on the Dask
 # fleet via dask_executor) but hosts dbt builds for analytics runs, so it gets
 # the footprint the old all-in-one ingestion task had. Override per-run with
 # the ecs/cpu and ecs/memory run tags if a job needs more.
 run_launcher:
-  module: dagster_aws.ecs
-  class: EcsRunLauncher
+  module: propel_orchestration.ecs_run_launcher
+  class: PropelEcsRunLauncher
   config:
     # Don't scan Secrets Manager for tagged secrets (would need ListSecrets);
     # the run task inherits the coordinator container's explicit secrets.
