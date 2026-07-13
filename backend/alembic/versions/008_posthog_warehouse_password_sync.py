@@ -110,9 +110,11 @@ def upgrade() -> None:
         is not None
     )
     if not pub_exists:
+        # Match 007 / 012: public schema only (not FOR ALL TABLES).
         conn.execute(
             sa.text(
-                f"CREATE PUBLICATION {_quote_ident(POSTHOG_PUBLICATION)} FOR ALL TABLES"
+                f"CREATE PUBLICATION {_quote_ident(POSTHOG_PUBLICATION)} "
+                f"FOR TABLES IN SCHEMA public"
             )
         )
 

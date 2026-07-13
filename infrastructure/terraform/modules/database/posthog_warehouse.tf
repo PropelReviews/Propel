@@ -1,7 +1,7 @@
 # PostHog data-warehouse Postgres CDC: logical replication, public endpoint, and
-# a dedicated login stored in Secrets Manager. The role + publication are created
-# by Alembic migration 007 when POSTHOG_WAREHOUSE_DB_PASSWORD is injected at API
-# boot (same password as this secret).
+# a dedicated login stored in Secrets Manager. The role + publication (public
+# schema only) are created by Alembic when POSTHOG_WAREHOUSE_DB_PASSWORD is
+# injected at API boot (same password as this secret).
 
 locals {
   # Family must match the cluster major version (e.g. 18.3 → aurora-postgresql18).

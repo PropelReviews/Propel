@@ -7,8 +7,9 @@ Create Date: 2026-06-17
 Creates the dedicated PostHog Postgres login when POSTHOG_WAREHOUSE_DB_PASSWORD is
 set (injected from Secrets Manager on ECS). Skipped in local dev and CI when unset.
 
-Self-managed CDC: the publication is created here once; PostHog connects with a
-user that has SELECT + REPLICATION (rds_replication on Aurora).
+Self-managed CDC: the publication is created here once for tables in ``public``
+only (PostHog is granted SELECT on that schema); PostHog connects with a user
+that has SELECT + REPLICATION (rds_replication on Aurora).
 """
 
 from __future__ import annotations
@@ -114,9 +115,13 @@ def upgrade() -> None:
         is not None
     )
     if not pub_exists:
+        # Only public: PostHog is granted SELECT there, and publishing other
+        # schemas (analytics/dagster) breaks delete+insert dbt marts that lack
+        # a replica identity. See migration 012 for existing ALL TABLES pubs.
         conn.execute(
             sa.text(
-                f"CREATE PUBLICATION {_quote_ident(POSTHOG_PUBLICATION)} FOR ALL TABLES"
+                f"CREATE PUBLICATION {_quote_ident(POSTHOG_PUBLICATION)} "
+                f"FOR TABLES IN SCHEMA public"
             )
         )
 
