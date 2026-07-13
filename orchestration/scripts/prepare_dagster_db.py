@@ -26,6 +26,8 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 SCHEMA = "dagster"
 _ENV_POSTGRES_URL_MARKER = "postgres_url:\n      env: DAGSTER_PG_URL"
+_INGESTION_CONCURRENCY_MARKER = "__INGESTION_CONCURRENCY_LIMIT__"
+_DEFAULT_INGESTION_CONCURRENCY = 4
 
 
 def _sync_url(raw: str) -> str:
@@ -51,6 +53,15 @@ def _default_template_path() -> Path:
     return Path(__file__).resolve().parent.parent / "dagster.yaml"
 
 
+def ingestion_concurrency_limit() -> int:
+    """Match the Dask worker fleet ceiling (DASK_WORKER_MAX on ECS)."""
+    raw = os.environ.get("DASK_WORKER_MAX", "")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return _DEFAULT_INGESTION_CONCURRENCY
+
+
 def materialize_dagster_yaml(
     dagster_home: Path,
     postgres_url: str,
@@ -62,12 +73,19 @@ def materialize_dagster_yaml(
         raise ValueError(
             "dagster.yaml template is missing the postgres_url env: DAGSTER_PG_URL marker"
         )
+    if _INGESTION_CONCURRENCY_MARKER not in template:
+        raise ValueError(
+            "dagster.yaml template is missing the ingestion concurrency marker"
+        )
     escaped_url = postgres_url.replace("\\", "\\\\").replace('"', '\\"')
     dagster_home.mkdir(parents=True, exist_ok=True)
     (dagster_home / "dagster.yaml").write_text(
         template.replace(
             _ENV_POSTGRES_URL_MARKER,
             f'postgres_url: "{escaped_url}"',
+        ).replace(
+            _INGESTION_CONCURRENCY_MARKER,
+            str(ingestion_concurrency_limit()),
         )
     )
 

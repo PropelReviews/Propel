@@ -55,7 +55,16 @@ roll_ecs_service_to_image() {
           .registeredAt,
           .registeredBy
         )
-        | .containerDefinitions |= map(.image = $image)
+        | .containerDefinitions |= map(
+            .image = $image
+            | if (.environment // []) | length > 0 then
+                .environment |= map(
+                  if .name == "DAGSTER_CURRENT_IMAGE" then .value = $image else . end
+                )
+              else
+                .
+              end
+          )
       ')
 
   new_arn=$(aws ecs register-task-definition \

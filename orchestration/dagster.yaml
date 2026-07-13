@@ -16,6 +16,10 @@ storage:
 
 # Serialize dbt runs: per-tenant analytics runs (dagster/concurrency_key: dbt)
 # queue instead of racing delete+insert statements on the same target tables.
+#
+# Cap concurrent org/Linear ingestion runs (dagster/concurrency_key: ingestion)
+# so EcsRunLauncher does not stampede Fargate with one task per org at fan-out.
+# The limit is inlined from DASK_WORKER_MAX by prepare_dagster_db.py (default 4).
 run_coordinator:
   module: dagster._core.run_coordinator
   class: QueuedRunCoordinator
@@ -24,6 +28,18 @@ run_coordinator:
       - key: dagster/concurrency_key
         value: dbt
         limit: 1
+      - key: dagster/concurrency_key
+        value: ingestion
+        limit: __INGESTION_CONCURRENCY_LIMIT__
+
+# Detect run workers that never leave STARTING (common when ECS cannot place
+# Fargate tasks under load) and free stale concurrency slots after failures.
+run_monitoring:
+  enabled: true
+  # Fargate run-worker cold start can take several minutes during fan-out.
+  start_timeout_seconds: 600
+  poll_interval_seconds: 30
+  free_slots_after_run_end_seconds: 60
 
 # No phone-home from a backend service.
 telemetry:

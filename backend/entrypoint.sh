@@ -36,10 +36,11 @@ if { [ "$1" = "cron" ] || [ "$1" = "dagster" ] || [ "$1" = "dagster-service" ] \
 fi
 
 # ECS run worker (EcsRunLauncher): the launched task's command is
-# `dagster api execute_run ...`. Same env prep as `dagster-service` (the
-# orchestration venv, import paths, Dagster's Postgres URL), but no daemon or
-# webserver — the command executes one run and exits. Must precede the dev
-# `dagster` branch below, which also matches on $1.
+# `/entrypoint.sh dagster api execute_run ...` (PropelEcsRunLauncher prepends
+# the entrypoint because EcsRunLauncher clears the image ENTRYPOINT). Same env
+# prep as `dagster-service` (the orchestration venv, import paths, Dagster's
+# Postgres URL), but no daemon or webserver — the command executes one run and
+# exits. Must precede the dev `dagster` branch below, which also matches on $1.
 if [ "$1" = "dagster" ] && [ "$2" = "api" ]; then
   echo "==> Starting Dagster run worker"
   : "${DAGSTER_HOME:=/tmp/dagster}"
