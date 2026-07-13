@@ -10,6 +10,7 @@ from app.auth.dependencies import get_tenant_context, require_permission
 from app.auth.manager import current_active_user
 from app.config import get_settings
 from app.db.session import get_async_session
+from app.models.enums import ConnectionStatus
 from app.models.user import User
 from app.schemas.connection import (
     ConnectionRead,
@@ -37,7 +38,7 @@ async def list_connections(
     session: AsyncSession = Depends(get_async_session),
 ):
     accounts = await connection_service.list_connections(session, ctx.tenant.id)
-    return [ConnectionRead.model_validate(a) for a in accounts]
+    return [await connection_service.to_connection_read(session, a) for a in accounts]
 
 
 @router.get(
@@ -65,7 +66,7 @@ async def update_connection(
     account = await connection_service.update_connection_status(
         session, ctx.tenant.id, connection_id, payload
     )
-    return ConnectionRead.model_validate(account)
+    return await connection_service.to_connection_read(session, account)
 
 
 @router.get(
@@ -76,13 +77,25 @@ async def linear_connection_status(
     ctx=Depends(get_tenant_context),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Whether this tenant has an active Linear connection (visible to members)."""
-    account = await linear_connection_service.get_active_linear_account(
-        session, ctx.tenant.id
+    """Linear connection health for this tenant (visible to members).
+
+    ``connected`` is true only while status is active. Paused/revoked rows
+    (e.g. after an ingestion auth failure) still return ``status`` /
+    ``auth_error`` so the workspace Integrations UI can prompt reconnect.
+    """
+    account = await linear_connection_service.get_linear_account(session, ctx.tenant.id)
+    if account is None:
+        return LinearConnectionStatus(connected=False)
+    last_status, last_error = await connection_service.latest_sync_outcome(
+        session, account
     )
     return LinearConnectionStatus(
-        connected=account is not None,
-        workspace_name=account.external_account_name if account else None,
+        connected=account.status == ConnectionStatus.active.value,
+        workspace_name=account.external_account_name,
+        status=account.status,
+        auth_error=connection_service.auth_error_message(account),
+        last_sync_status=last_status,
+        last_sync_error=last_error,
     )
 
 

@@ -248,9 +248,51 @@ export async function getGithubAppInstallUrl(token: string): Promise<string> {
   return install_url;
 }
 
+/**
+ * Tenant-scoped GitHub App install URL (signed state binds the installation to
+ * this workspace). Requires `connections:manage`.
+ */
+export async function getGithubTenantInstallUrl(
+  token: string,
+  tenantId: string,
+): Promise<string> {
+  const { install_url } = await authedGet<{ install_url: string }>(
+    `/api/v1/tenants/${tenantId}/connections/github/install`,
+    token,
+  );
+  return install_url;
+}
+
+export type Connection = {
+  id: string;
+  tenant_id: string;
+  provider: string;
+  auth_type: string;
+  external_account_id: string;
+  external_account_name: string | null;
+  status: string;
+  auth_error: string | null;
+  last_sync_status: string | null;
+  last_sync_error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** List connected accounts for a tenant. Requires `connections:manage`. */
+export async function listConnections(
+  token: string,
+  tenantId: string,
+): Promise<Connection[]> {
+  return authedGet<Connection[]>(`/api/v1/tenants/${tenantId}/connections`, token);
+}
+
 export type LinearConnection = {
   connected: boolean;
   workspace_name: string | null;
+  status: string | null;
+  auth_error: string | null;
+  last_sync_status: string | null;
+  last_sync_error: string | null;
 };
 
 /** Whether the tenant has an active Linear connection (visible to members). */
@@ -266,9 +308,9 @@ export async function getLinearConnection(
 
 /**
  * Fetch the Linear authorization URL to connect a workspace's Linear account.
- * Requires the `connections:manage` permission. The caller redirects the
- * browser to this URL; Linear returns to the backend callback, which binds the
- * connection and bounces back to `/profile?linear=connected`.
+ * Requires the `connections:manage` permission. Open in a new tab; Linear
+ * returns to the backend callback, which binds the connection and bounces back
+ * to `/settings/workspace?linear=connected`.
  */
 export async function getLinearAuthorizeUrl(
   token: string,

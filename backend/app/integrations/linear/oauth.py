@@ -65,6 +65,9 @@ def build_authorize_url(redirect_uri: str, state: str) -> str:
         "redirect_uri": redirect_uri,
         "scope": DEFAULT_SCOPE,
         "actor": _ACTOR,
+        # Always show consent so admins can pick/reconnect a workspace even when
+        # scopes were previously granted (Linear multi-workspace / re-consent).
+        "prompt": "consent",
         "state": state,
     }
     return f"{AUTHORIZE_URL}?{urlencode(params)}"

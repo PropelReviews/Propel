@@ -128,10 +128,11 @@ models:
         data_tests:
           - not_null
       - name: ticket_uid
-        description: Stable key source:external_id (unique per tenant).
+        description: >
+          Stable key source:external_id. Unique together with tenant_id
+          (the same GitHub/Linear ticket can appear in multiple tenants).
         data_tests:
           - not_null
-          - unique
       - name: source
         data_tests:
           - not_null

@@ -188,14 +188,17 @@ Set the resulting credentials as env (or Secrets Manager) values:
   stored access/refresh tokens at rest. Required whenever Linear is enabled.
 
 The connect flow: `GET /api/v1/tenants/{tenant_id}/connections/linear/authorize`
-(admin) returns the Linear authorization URL with a signed `state`; the SPA
-redirects the browser there; Linear returns to
+(admin) returns the Linear authorization URL with a signed `state` and
+`prompt=consent`; the SPA opens it in a new tab; Linear returns to
 `…/connections/linear/callback?code&state`, which exchanges the code, reads the
 workspace, stores encrypted tokens on a `connected_accounts` row
 (`provider='linear'`, `auth_type='oauth'`), and bounces back to
 `{FRONTEND_BASE_URL}/settings/workspace?linear=connected`. The Workspace
-settings page (admin-only) shows the Linear connection status by polling
-`GET /api/v1/tenants/{tenant_id}/connections/linear`.
+settings Integrations section shows Linear status by polling
+`GET /api/v1/tenants/{tenant_id}/connections/linear`. If Linear reports the app
+as already installed (no callback), revoke it under Linear → Installed
+Applications and connect again, or use **I've connected it** after a successful
+authorize in the other tab.
 
 A Linear **developer token** (`lin_oauth_…`) issued from the app settings is for
 local/manual API testing only — it is not part of the production OAuth flow.

@@ -39,7 +39,9 @@ sources:
           tap-github-pull-requests. Used for time-to-first-review primitives.
         meta:
           dagster:
-            asset_key: ["github", "pull_requests"]
+            # Same Meltano job as pull_requests, but must be a distinct Dagster
+            # asset key (dagster-dbt rejects duplicate keys across sources).
+            asset_key: ["github", "reviews"]
 
       - name: github_releases
         identifier: raw_record

@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,7 @@ from app.config import get_settings
 from app.db.session import async_session_maker
 from app.ingestion import meltano_runner
 from app.integrations.github import app_auth, copilot
+from app.integrations.linear.oauth import LinearOAuthError
 from app.models.connected_account import ConnectedAccount
 from app.models.enums import (
     AuthType,
@@ -35,7 +37,9 @@ from app.models.enums import (
     IntegrationProvider,
 )
 from app.models.ingestion_run import IngestionRun
+from app.services import connections as connection_service
 from app.services import github_identity
+from app.services.token_crypto import TokenEncryptionError
 
 logger = logging.getLogger("propel.ingestion")
 settings = get_settings()
@@ -337,7 +341,8 @@ async def run_account_job(
 
         result = await meltano_runner.run_job(job.name, env)
         if not result.ok:
-            error = _tail(result.stderr or result.stdout)
+            raw_error = result.stderr or result.stdout or ""
+            error = _summarize_error(raw_error)
             await _finalize(
                 session,
                 run,
@@ -351,6 +356,14 @@ async def run_account_job(
                 "Extraction run failed: Meltano exited non-zero",
                 extra=fail_extra,
             )
+            if _looks_like_auth_failure(raw_error):
+                await _mark_auth_failure_from_message(
+                    session,
+                    account,
+                    reason="meltano_auth_failure",
+                    message=_auth_failure_user_message(account, raw_error),
+                    status=_meltano_auth_status(account, raw_error),
+                )
             return run
 
         await _finalize(
@@ -372,7 +385,159 @@ async def run_account_job(
         fail_extra["error.message"] = str(exc)
         logger.exception("Extraction run failed", extra=fail_extra)
         await _finalize(session, run, status=IngestionRunStatus.error, error=str(exc))
+        await _pause_on_auth_failure(session, account, exc)
     return run
+
+
+_AUTH_ERROR_MARKERS = (
+    "401",
+    "403",
+    "unauthorized",
+    "authentication",
+    "invalid_token",
+    "invalid token",
+    "token has been revoked",
+    "bad credentials",
+    "access denied",
+    "not authenticated",
+    "forbidden",
+    "invalid_grant",
+    "auth_token",
+    "oauth",
+)
+
+
+def _strip_ansi(message: str) -> str:
+    # Meltano Rich traces include ANSI; strip so classification / UI stay readable.
+    return re.sub(r"\x1b\[[0-9;]*m", "", message or "")
+
+
+def _looks_like_auth_failure(message: str) -> bool:
+    text = _strip_ansi(message).lower()
+    return any(marker in text for marker in _AUTH_ERROR_MARKERS)
+
+
+def _meltano_auth_status(account: ConnectedAccount, message: str) -> ConnectionStatus:
+    text = _strip_ansi(message).lower()
+    if account.provider == IntegrationProvider.github.value and "404" in text:
+        return ConnectionStatus.revoked
+    return ConnectionStatus.paused
+
+
+def _auth_failure_user_message(account: ConnectedAccount, message: str) -> str:
+    status = _meltano_auth_status(account, message)
+    if status == ConnectionStatus.revoked:
+        return "GitHub App installation is missing or inaccessible. Reinstall the app."
+    if account.provider == IntegrationProvider.linear.value:
+        return "Linear authentication failed during ingestion. Reconnect Linear."
+    return (
+        "GitHub App authentication failed during ingestion. "
+        "Reinstall or check the app installation."
+    )
+
+
+def _summarize_error(message: str, *, limit: int = 2000) -> str:
+    """Prefer root-cause lines over Meltano's Rich CLI footer."""
+    cleaned = _strip_ansi(message).strip()
+    if not cleaned:
+        return ""
+    lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
+    interesting = [
+        ln
+        for ln in lines
+        if any(
+            key in ln.lower()
+            for key in (
+                "error",
+                "exception",
+                "failed",
+                "401",
+                "403",
+                "404",
+                "unauthorized",
+                "forbidden",
+                "graphql",
+                "traceback",
+            )
+        )
+    ]
+    body = "\n".join(interesting[-50:] if interesting else lines[-50:])
+    return body[-limit:]
+
+
+def _auth_failure_status(exc: BaseException) -> ConnectionStatus | None:
+    """Map auth exceptions to a connection status, or None if not an auth issue."""
+    if isinstance(exc, (LinearOAuthError, TokenEncryptionError)):
+        return ConnectionStatus.paused
+    if isinstance(exc, app_auth.GitHubAppAuthError):
+        # 404 on installation token exchange usually means the app was removed.
+        message = str(exc)
+        if "(404)" in message:
+            return ConnectionStatus.revoked
+        return ConnectionStatus.paused
+    return None
+
+
+async def _mark_auth_failure_from_message(
+    session: AsyncSession,
+    account: ConnectedAccount,
+    *,
+    reason: str,
+    message: str,
+    status: ConnectionStatus,
+) -> None:
+    db_account = await session.get(ConnectedAccount, account.id)
+    if db_account is None:
+        return
+    connection_service.mark_auth_failure(
+        db_account, reason=reason, message=message, status=status
+    )
+    await session.commit()
+    logger.warning(
+        "Paused connection after auth failure",
+        extra={
+            "event": "connection.auth_failure",
+            "connected_account.id": str(db_account.id),
+            "tenant.id": str(db_account.tenant_id),
+            "connection.provider": db_account.provider,
+            "connection.status": db_account.status,
+            "error.message": message,
+            "error.reason": reason,
+        },
+    )
+
+
+async def _pause_on_auth_failure(
+    session: AsyncSession,
+    account: ConnectedAccount,
+    exc: BaseException,
+) -> None:
+    """Pause/revoke the connection when ingestion fails due to install/auth state.
+
+    Generic Meltano errors are ignored unless they look like auth failures —
+    only token/install auth issues flip the connection so the workspace
+    Integrations UI can prompt reconnect.
+    """
+    status = _auth_failure_status(exc)
+    if status is None:
+        return
+    message = (
+        "GitHub App installation is missing or inaccessible. Reinstall the app."
+        if status == ConnectionStatus.revoked
+        else (
+            "Authentication failed during ingestion. Reconnect this integration."
+            if isinstance(exc, (LinearOAuthError, TokenEncryptionError))
+            else "GitHub App authentication failed during ingestion. "
+            "Reinstall or check the app installation."
+        )
+    )
+    await _mark_auth_failure_from_message(
+        session,
+        account,
+        reason=type(exc).__name__,
+        message=message,
+        status=status,
+    )
 
 
 async def _reconcile_identities(
