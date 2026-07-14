@@ -61,6 +61,68 @@ async def _pick_schema(session: AsyncSession, plan_sql: str) -> str | None:
     return None
 
 
+async def _ic_identity_keys(
+    session: AsyncSession, *, tenant_id: str, user_id: str
+) -> set[str]:
+    """Return external ids/logins for the user that may appear in person dims."""
+    from uuid import UUID
+
+    from sqlalchemy import select
+
+    from app.models.enums import IntegrationProvider
+    from app.models.external_identity import ExternalIdentity
+
+    try:
+        uid = UUID(user_id)
+        tid = UUID(tenant_id)
+    except ValueError:
+        return set()
+    result = await session.execute(
+        select(
+            ExternalIdentity.external_user_id, ExternalIdentity.external_login
+        ).where(
+            ExternalIdentity.tenant_id == tid,
+            ExternalIdentity.propel_user_id == uid,
+            ExternalIdentity.provider == IntegrationProvider.github,
+        )
+    )
+    keys: set[str] = set()
+    for ext_id, login in result.all():
+        if ext_id:
+            keys.add(str(ext_id))
+        if login:
+            keys.add(str(login))
+    return keys
+
+
+def _apply_ic_row_filter(
+    rows: list[dict[str, Any]],
+    *,
+    identity_keys: set[str],
+    person_fields: list[str],
+) -> list[dict[str, Any]]:
+    """Keep only rows whose person-dim columns match the caller's identity."""
+    if not identity_keys or not person_fields:
+        return rows
+    candidates = []
+    for field in person_fields:
+        candidates.extend([field, f"dim_{field}", field.replace(".", "_")])
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        matched = False
+        saw_person_col = False
+        for key, value in row.items():
+            if key in candidates or any(key.endswith(f"_{f}") for f in person_fields):
+                saw_person_col = True
+                if value is not None and str(value) in identity_keys:
+                    matched = True
+                    break
+        # Aggregate-shaped rows (no person column) pass through.
+        if matched or not saw_person_col:
+            out.append(row)
+    return out
+
+
 async def preview_definition(
     session: AsyncSession,
     org_slug: str,
@@ -182,6 +244,55 @@ async def preview_definition(
                     executed = True
                     if len(rows) >= int(preview["row_limit"]):
                         truncated = True
+
+                    # IC visibility: do not leak other people's person-dim rows.
+                    visibility = (flat.get("spec") or {}).get("visibility")
+                    if visibility == "ic":
+                        from propel_metrics.validate.loader import load_catalog
+
+                        catalog = load_catalog()
+                        entity = (flat.get("spec") or {}).get("entity")
+                        fields = (catalog.get("entities") or {}).get(
+                            entity or "", {}
+                        ).get("fields") or {}
+                        catalog_person = [
+                            name
+                            for name, meta in fields.items()
+                            if isinstance(meta, dict) and meta.get("person")
+                        ]
+                        dims = list((flat.get("spec") or {}).get("dimensions") or [])
+                        person_fields = [
+                            d for d in dims if d in catalog_person
+                        ] or catalog_person
+                        keys = await _ic_identity_keys(
+                            session, tenant_id=tenant_uuid, user_id=user_id
+                        )
+                        before = len(rows)
+                        rows = _apply_ic_row_filter(
+                            rows,
+                            identity_keys=keys,
+                            person_fields=person_fields,
+                        )
+                        if before and len(rows) < before:
+                            diagnostics.append(
+                                {
+                                    "cte": "ic_visibility",
+                                    "message": (
+                                        "IC visibility: filtered to caller identity "
+                                        f"({before} → {len(rows)} rows)."
+                                    ),
+                                }
+                            )
+                        elif not keys and person_fields:
+                            diagnostics.append(
+                                {
+                                    "cte": "ic_visibility",
+                                    "message": (
+                                        "IC visibility: no linked external identity; "
+                                        "showing aggregate-shaped rows only."
+                                    ),
+                                }
+                            )
 
                     diag_sql = preview.get("diagnostics_sql")
                     if diag_sql:

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { PropelLineChart } from "@/components/charts";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ApiError } from "@/lib/api";
@@ -8,6 +9,25 @@ import {
   type PreviewResponse,
 } from "@/features/metrics/api/metric-definitions";
 import { documentToYaml } from "@/features/metrics/document/yaml-io";
+
+function rowsToChartData(rows: Array<Record<string, unknown>>) {
+  return rows
+    .map((row) => {
+      const raw =
+        row.bucket_start ?? row.period_start ?? row.date ?? row.bucket ?? null;
+      const date =
+        raw instanceof Date
+          ? raw.toISOString().slice(0, 10)
+          : typeof raw === "string"
+            ? raw.slice(0, 10)
+            : null;
+      const value = Number(row.value ?? row.metric_value ?? NaN);
+      if (!date || Number.isNaN(value)) return null;
+      return { date, value };
+    })
+    .filter((p): p is { date: string; value: number } => p != null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
 
 export function PreviewPanel({
   token,
@@ -35,6 +55,11 @@ export function PreviewPanel({
       setLoading(false);
     }
   }
+
+  const chartData = useMemo(
+    () => (result ? rowsToChartData(result.rows) : []),
+    [result],
+  );
 
   return (
     <aside
@@ -68,6 +93,14 @@ export function PreviewPanel({
                   : JSON.stringify(d)}
             </p>
           ))}
+          {chartData.length > 0 && (
+            <PropelLineChart
+              data={chartData}
+              series={[{ key: "value", label: "Value" }]}
+              height={180}
+              emptyMessage="No chartable points"
+            />
+          )}
           {result.rows.length === 0 ? (
             <p className="text-muted-foreground text-xs">
               No sample rows returned. Inspect generated SQL below.
