@@ -290,6 +290,28 @@ export function activateMetricDefinition(
   );
 }
 
+export type PreviewResponse = {
+  rows: Array<Record<string, unknown>>;
+  timing_ms: number;
+  sql: string;
+  grain: string | null;
+  diagnostics: Array<Record<string, unknown>>;
+  truncated: boolean;
+  sampled: boolean;
+  executed: boolean;
+  metric_id: string | null;
+};
+
+export function previewMetricDefinition(
+  token: string,
+  tenantId: string,
+  yaml: string,
+): Promise<PreviewResponse> {
+  return authedRequest("POST", `${base(tenantId)}/metric-definitions:preview`, token, {
+    yaml,
+  });
+}
+
 export function getMetricSet(token: string, tenantId: string): Promise<MetricSetRead> {
   return authedGet(`${base(tenantId)}/metric-set`, token);
 }

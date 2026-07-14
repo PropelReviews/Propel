@@ -180,3 +180,19 @@ class MetricHealthSummary(BaseModel):
     open_parent_version_notices: int
     recent_compile_runs: list[CompileRunRead] = Field(default_factory=list)
     broken_metrics: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PreviewBody(BaseModel):
+    yaml: str
+
+
+class PreviewResponse(BaseModel):
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    timing_ms: int
+    sql: str
+    grain: str | None = None
+    diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+    truncated: bool = False
+    sampled: bool = False
+    executed: bool = False
+    metric_id: str | None = None

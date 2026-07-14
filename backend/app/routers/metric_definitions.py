@@ -28,6 +28,8 @@ from app.schemas.metric_definitions import (
     MetricSetRead,
     MetricSummaryRead,
     MetricVersionRead,
+    PreviewBody,
+    PreviewResponse,
     ValidateResponse,
     YamlBody,
 )
@@ -205,6 +207,29 @@ async def classify_metric_definition(
             ctx.tenant.slug,
             body.yaml,
             previous_version=body.previous_version,
+        )
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/metric-definitions:preview",
+    response_model=PreviewResponse,
+)
+async def preview_metric_definition(
+    body: PreviewBody,
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    from app.services import metric_preview as preview_svc
+
+    return PreviewResponse.model_validate(
+        await preview_svc.preview_definition(
+            session,
+            ctx.tenant.slug,
+            body.yaml,
+            tenant_uuid=str(ctx.tenant.id),
+            user_id=str(user.id),
         )
     )
 

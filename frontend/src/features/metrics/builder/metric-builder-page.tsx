@@ -36,6 +36,7 @@ import {
   emptyMetricDocument,
 } from "@/features/metrics/document/store";
 import { documentToYaml } from "@/features/metrics/document/yaml-io";
+import { PreviewPanel } from "@/features/metrics/preview/preview-panel";
 
 const MEASURE_TYPES = [
   "count",
@@ -294,385 +295,396 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   }
 
   return (
-    <main className="bg-background mx-auto min-h-svh max-w-3xl space-y-10 px-6 py-12">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {mode === "create" ? "New metric" : "Edit metric"}
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Structured editor over a <code>propel/v1</code> document.
-            {saveState && (
-              <span className="text-muted-foreground ml-2">· {saveState}</span>
-            )}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => dispatch({ type: "undo" })}
-          >
-            Undo
-          </Button>
-          {yamlMode ? (
-            <Button size="sm" variant="outline" onClick={leaveYaml}>
-              Form mode
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={enterYaml}>
-              View as YAML
-            </Button>
-          )}
-          <Button
-            size="sm"
-            analyticsName="metric_activate"
-            onClick={() => void onActivate()}
-          >
-            Activate
-          </Button>
-        </div>
-      </header>
+    <main className="bg-background mx-auto min-h-svh max-w-6xl px-6 py-12">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-10">
+          <header className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight">
+                {mode === "create" ? "New metric" : "Edit metric"}
+              </h1>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Structured editor over a <code>propel/v1</code> document.
+                {saveState && (
+                  <span className="text-muted-foreground ml-2">· {saveState}</span>
+                )}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => dispatch({ type: "undo" })}
+              >
+                Undo
+              </Button>
+              {yamlMode ? (
+                <Button size="sm" variant="outline" onClick={leaveYaml}>
+                  Form mode
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={enterYaml}>
+                  View as YAML
+                </Button>
+              )}
+              <Button
+                size="sm"
+                analyticsName="metric_activate"
+                onClick={() => void onActivate()}
+              >
+                Activate
+              </Button>
+            </div>
+          </header>
 
-      {activateMsg && (
-        <p role="status" className="text-sm">
-          {activateMsg}
-        </p>
-      )}
-
-      {validateErrors.length > 0 && (
-        <ul
-          role="alert"
-          className="border-destructive/40 bg-destructive/5 text-destructive space-y-1 rounded-lg border p-3 text-sm"
-        >
-          {validateErrors.map((e, i) => (
-            <li key={`${e.path}-${i}`}>
-              [{e.code}] {e.path}: {e.message}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {yamlMode ? (
-        <div className="space-y-2">
-          <textarea
-            className="border-input bg-background min-h-96 w-full rounded-lg border p-3 font-mono text-sm"
-            value={yamlText}
-            onChange={(e) => setYamlText(e.target.value)}
-            aria-label="Metric YAML"
-          />
-          {yamlError && (
-            <p role="alert" className="text-destructive text-sm">
-              {yamlError}
+          {activateMsg && (
+            <p role="status" className="text-sm">
+              {activateMsg}
             </p>
           )}
-        </div>
-      ) : (
-        <>
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">① What kind of metric?</h2>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <KindCard
-                title="Measure events"
-                body="Count, interval, or aggregate over an entity."
-                active
-              />
-              <KindCard
-                title="Combine metrics"
-                body="Ratio or formula (M5.4)."
-                disabled
-              />
-              <KindCard
-                title="Variant"
-                body="Extend an existing metric (M5.4)."
-                disabled
-              />
-            </div>
-          </section>
 
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">② Basics</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="metric-name">Name</Label>
-                <Input
-                  id="metric-name"
-                  value={String(meta.name ?? "")}
-                  onChange={(e) => setMeta("name", e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="metric-id">Id</Label>
-                <Input
-                  id="metric-id"
-                  className="font-mono"
-                  value={String(meta.id ?? "")}
-                  disabled={mode === "edit"}
-                  onChange={(e) => setMeta("id", e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="metric-desc">Description</Label>
+          {validateErrors.length > 0 && (
+            <ul
+              role="alert"
+              className="border-destructive/40 bg-destructive/5 text-destructive space-y-1 rounded-lg border p-3 text-sm"
+            >
+              {validateErrors.map((e, i) => (
+                <li key={`${e.path}-${i}`}>
+                  [{e.code}] {e.path}: {e.message}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {yamlMode ? (
+            <div className="space-y-2">
               <textarea
-                id="metric-desc"
-                className="border-input bg-background mt-1 min-h-20 w-full rounded-lg border p-2 text-sm"
-                value={String(meta.description ?? "")}
-                onChange={(e) => setMeta("description", e.target.value)}
+                className="border-input bg-background min-h-96 w-full rounded-lg border p-3 font-mono text-sm"
+                value={yamlText}
+                onChange={(e) => setYamlText(e.target.value)}
+                aria-label="Metric YAML"
               />
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">③ Data</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {entities.map((ent) => (
-                <button
-                  key={ent.name}
-                  type="button"
-                  className={
-                    entity === ent.name
-                      ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
-                      : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
-                  }
-                  onClick={() => setSpec("entity", ent.name)}
-                >
-                  <div className="font-medium">{ent.name}</div>
-                  <div className="text-muted-foreground text-xs">{ent.grain}</div>
-                </button>
-              ))}
-            </div>
-            <div>
-              <Label>Measure type</Label>
-              <Select
-                value={String(measure.type ?? "count")}
-                onValueChange={(type) => setSpec("measure", { type })}
-              >
-                <SelectTrigger className="mt-1 w-56">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MEASURE_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {(measure.type === "sum" ||
-              measure.type === "avg" ||
-              measure.type === "min" ||
-              measure.type === "max" ||
-              measure.type === "percentile" ||
-              measure.type === "count_distinct") && (
-              <div>
-                <Label>Field</Label>
-                <Select
-                  value={String(measure.field ?? "")}
-                  onValueChange={(field) => setSpec("measure", { ...measure, field })}
-                >
-                  <SelectTrigger className="mt-1 w-56">
-                    <SelectValue placeholder="Pick field" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {measureFields.map((f) => (
-                      <SelectItem key={f.name} value={f.name}>
-                        {f.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {measure.type === "interval" && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>From</Label>
-                  <Select
-                    value={String(measure.from ?? "")}
-                    onValueChange={(from) =>
-                      setSpec("measure", { ...measure, type: "interval", from })
-                    }
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="from" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {eventTimeFields.map((f) => (
-                        <SelectItem key={f.name} value={f.name}>
-                          {f.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>To</Label>
-                  <Select
-                    value={String(measure.to ?? "")}
-                    onValueChange={(to) =>
-                      setSpec("measure", {
-                        ...measure,
-                        type: "interval",
-                        to,
-                        agg: measure.agg ?? "median",
-                      })
-                    }
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="to" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {eventTimeFields.map((f) => (
-                        <SelectItem key={f.name} value={f.name}>
-                          {f.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">④ Filters</h2>
-            <FilterBuilder
-              entity={entity}
-              catalogEntities={entities}
-              filters={Array.isArray(spec.filters) ? (spec.filters as unknown[]) : []}
-              onChange={(filters) => setSpec("filters", filters)}
-            />
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">⑤ Time</h2>
-            <div>
-              <Label>Event time field</Label>
-              <Select
-                value={String(time.field ?? "")}
-                onValueChange={(field) => setSpec("time", { ...time, field })}
-              >
-                <SelectTrigger className="mt-1 w-56">
-                  <SelectValue placeholder="field" />
-                </SelectTrigger>
-                <SelectContent>
-                  {eventTimeFields.map((f) => (
-                    <SelectItem key={f.name} value={f.name}>
-                      {f.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {GRAINS.map((g) => {
-                const checked = grains.includes(g);
-                return (
-                  <label key={g} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        const next = checked
-                          ? grains.filter((x) => x !== g)
-                          : [...grains, g];
-                        setSpec("time", { ...time, grains: next });
-                      }}
-                    />
-                    {g}
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">⑥ Dimensions</h2>
-            <div className="flex flex-wrap gap-3">
-              {dimFields.map((f) => {
-                const dims = Array.isArray(spec.dimensions)
-                  ? (spec.dimensions as string[])
-                  : [];
-                const checked = dims.includes(f.name);
-                return (
-                  <label key={f.name} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        const next = checked
-                          ? dims.filter((x) => x !== f.name)
-                          : [...dims, f.name];
-                        setSpec("dimensions", next);
-                      }}
-                    />
-                    {f.name}
-                    {f.person ? " (person)" : ""}
-                    {f.cardinality_estimate != null
-                      ? ` · ~${f.cardinality_estimate}`
-                      : ""}
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">⑦ Display & visibility</h2>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(
-                [
-                  [
-                    "ic",
-                    "IC",
-                    "Surfaced to each individual about their own work; appears in team/org rollups only if the individual opts in.",
-                  ],
-                  [
-                    "team",
-                    "Team",
-                    "Visible to the team. Person-dimension breakdowns still respect opt-in.",
-                  ],
-                  [
-                    "org",
-                    "Org",
-                    "Visible across the organization. Prefer IC for person-level flow metrics.",
-                  ],
-                ] as const
-              ).map(([value, title, copy]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={
-                    spec.visibility === value
-                      ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
-                      : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
-                  }
-                  onClick={() => setSpec("visibility", value)}
-                >
-                  <div className="font-medium">{title}</div>
-                  <div className="text-muted-foreground mt-1 text-xs">{copy}</div>
-                </button>
-              ))}
-            </div>
-            {Array.isArray(spec.dimensions) &&
-              (spec.dimensions as string[]).some((d) =>
-                dimFields.find((f) => f.name === d && f.person),
-              ) &&
-              spec.visibility !== "ic" && (
-                <p
-                  role="status"
-                  className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
-                >
-                  This metric breaks down by individual and is visible beyond the
-                  individual. Propel&apos;s default is IC visibility for person-level
-                  metrics.
+              {yamlError && (
+                <p role="alert" className="text-destructive text-sm">
+                  {yamlError}
                 </p>
               )}
-          </section>
-        </>
-      )}
+            </div>
+          ) : (
+            <>
+              <section className="space-y-3">
+                <h2 className="text-lg font-medium">① What kind of metric?</h2>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <KindCard
+                    title="Measure events"
+                    body="Count, interval, or aggregate over an entity."
+                    active
+                  />
+                  <KindCard
+                    title="Combine metrics"
+                    body="Ratio or formula (M5.4)."
+                    disabled
+                  />
+                  <KindCard
+                    title="Variant"
+                    body="Extend an existing metric (M5.4)."
+                    disabled
+                  />
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-lg font-medium">② Basics</h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="metric-name">Name</Label>
+                    <Input
+                      id="metric-name"
+                      value={String(meta.name ?? "")}
+                      onChange={(e) => setMeta("name", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="metric-id">Id</Label>
+                    <Input
+                      id="metric-id"
+                      className="font-mono"
+                      value={String(meta.id ?? "")}
+                      disabled={mode === "edit"}
+                      onChange={(e) => setMeta("id", e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="metric-desc">Description</Label>
+                  <textarea
+                    id="metric-desc"
+                    className="border-input bg-background mt-1 min-h-20 w-full rounded-lg border p-2 text-sm"
+                    value={String(meta.description ?? "")}
+                    onChange={(e) => setMeta("description", e.target.value)}
+                  />
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-lg font-medium">③ Data</h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {entities.map((ent) => (
+                    <button
+                      key={ent.name}
+                      type="button"
+                      className={
+                        entity === ent.name
+                          ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
+                          : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
+                      }
+                      onClick={() => setSpec("entity", ent.name)}
+                    >
+                      <div className="font-medium">{ent.name}</div>
+                      <div className="text-muted-foreground text-xs">{ent.grain}</div>
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <Label>Measure type</Label>
+                  <Select
+                    value={String(measure.type ?? "count")}
+                    onValueChange={(type) => setSpec("measure", { type })}
+                  >
+                    <SelectTrigger className="mt-1 w-56">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MEASURE_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(measure.type === "sum" ||
+                  measure.type === "avg" ||
+                  measure.type === "min" ||
+                  measure.type === "max" ||
+                  measure.type === "percentile" ||
+                  measure.type === "count_distinct") && (
+                  <div>
+                    <Label>Field</Label>
+                    <Select
+                      value={String(measure.field ?? "")}
+                      onValueChange={(field) =>
+                        setSpec("measure", { ...measure, field })
+                      }
+                    >
+                      <SelectTrigger className="mt-1 w-56">
+                        <SelectValue placeholder="Pick field" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {measureFields.map((f) => (
+                          <SelectItem key={f.name} value={f.name}>
+                            {f.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {measure.type === "interval" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>From</Label>
+                      <Select
+                        value={String(measure.from ?? "")}
+                        onValueChange={(from) =>
+                          setSpec("measure", { ...measure, type: "interval", from })
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="from" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eventTimeFields.map((f) => (
+                            <SelectItem key={f.name} value={f.name}>
+                              {f.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>To</Label>
+                      <Select
+                        value={String(measure.to ?? "")}
+                        onValueChange={(to) =>
+                          setSpec("measure", {
+                            ...measure,
+                            type: "interval",
+                            to,
+                            agg: measure.agg ?? "median",
+                          })
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="to" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eventTimeFields.map((f) => (
+                            <SelectItem key={f.name} value={f.name}>
+                              {f.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-lg font-medium">④ Filters</h2>
+                <FilterBuilder
+                  entity={entity}
+                  catalogEntities={entities}
+                  filters={
+                    Array.isArray(spec.filters) ? (spec.filters as unknown[]) : []
+                  }
+                  onChange={(filters) => setSpec("filters", filters)}
+                />
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-lg font-medium">⑤ Time</h2>
+                <div>
+                  <Label>Event time field</Label>
+                  <Select
+                    value={String(time.field ?? "")}
+                    onValueChange={(field) => setSpec("time", { ...time, field })}
+                  >
+                    <SelectTrigger className="mt-1 w-56">
+                      <SelectValue placeholder="field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eventTimeFields.map((f) => (
+                        <SelectItem key={f.name} value={f.name}>
+                          {f.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {GRAINS.map((g) => {
+                    const checked = grains.includes(g);
+                    return (
+                      <label key={g} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? grains.filter((x) => x !== g)
+                              : [...grains, g];
+                            setSpec("time", { ...time, grains: next });
+                          }}
+                        />
+                        {g}
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-lg font-medium">⑥ Dimensions</h2>
+                <div className="flex flex-wrap gap-3">
+                  {dimFields.map((f) => {
+                    const dims = Array.isArray(spec.dimensions)
+                      ? (spec.dimensions as string[])
+                      : [];
+                    const checked = dims.includes(f.name);
+                    return (
+                      <label key={f.name} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? dims.filter((x) => x !== f.name)
+                              : [...dims, f.name];
+                            setSpec("dimensions", next);
+                          }}
+                        />
+                        {f.name}
+                        {f.person ? " (person)" : ""}
+                        {f.cardinality_estimate != null
+                          ? ` · ~${f.cardinality_estimate}`
+                          : ""}
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-lg font-medium">⑦ Display & visibility</h2>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {(
+                    [
+                      [
+                        "ic",
+                        "IC",
+                        "Surfaced to each individual about their own work; appears in team/org rollups only if the individual opts in.",
+                      ],
+                      [
+                        "team",
+                        "Team",
+                        "Visible to the team. Person-dimension breakdowns still respect opt-in.",
+                      ],
+                      [
+                        "org",
+                        "Org",
+                        "Visible across the organization. Prefer IC for person-level flow metrics.",
+                      ],
+                    ] as const
+                  ).map(([value, title, copy]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={
+                        spec.visibility === value
+                          ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
+                          : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
+                      }
+                      onClick={() => setSpec("visibility", value)}
+                    >
+                      <div className="font-medium">{title}</div>
+                      <div className="text-muted-foreground mt-1 text-xs">{copy}</div>
+                    </button>
+                  ))}
+                </div>
+                {Array.isArray(spec.dimensions) &&
+                  (spec.dimensions as string[]).some((d) =>
+                    dimFields.find((f) => f.name === d && f.person),
+                  ) &&
+                  spec.visibility !== "ic" && (
+                    <p
+                      role="status"
+                      className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+                    >
+                      This metric breaks down by individual and is visible beyond the
+                      individual. Propel&apos;s default is IC visibility for
+                      person-level metrics.
+                    </p>
+                  )}
+              </section>
+            </>
+          )}
+        </div>
+        {token && tenant && (
+          <PreviewPanel token={token} tenantId={tenant.id} doc={doc} />
+        )}
+      </div>
     </main>
   );
 }
