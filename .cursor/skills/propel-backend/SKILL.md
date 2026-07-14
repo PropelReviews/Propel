@@ -26,10 +26,11 @@ DB host is `localhost` from the host/dev container, `postgres` inside compose se
 - `main.py` — app factory, middleware, router registration (new routers must be registered here)
 - `config.py` — pydantic-settings `Settings`, `get_settings()` (lru_cached)
 - `db/` — `base.py` (DeclarativeBase), `session.py` (engine + `get_async_session`)
-- `models/` — ORM models; **must be exported from `models/__init__.py`** or Alembic autogenerate won't see them
+- `models/` — ORM models; **must be exported from `models/__init__.py`** or Alembic autogenerate won't see them. Metric definition store models live in `models/metric_definition.py` (Alembic `013`).
 - `schemas/` — Pydantic DTOs: `*Create` / `*Update` / `*Read` (reads use `ConfigDict(from_attributes=True)`)
-- `routers/` — thin HTTP layer, prefix `/api/v1/...`
-- `services/` — business logic; services own `session.commit()` / `rollback()` and map errors to `HTTPException` (e.g. `IntegrityError` → 409)
+- `routers/` — thin HTTP layer, prefix `/api/v1/...` (metric definitions: `routers/metric_definitions.py`)
+- `services/` — business logic; services own `session.commit()` / `rollback()` and map errors to `HTTPException` (e.g. `IntegrityError` → 409). Definition lifecycle hydrates an in-memory `propel_metrics` store then persists (`services/metric_definitions.py`, `metric_compile.py`).
+- Path dependency: `propel-metrics` from `../transformation/propel_metrics` (editable). Dockerfiles copy it to `/transformation/propel_metrics` before `uv sync`.
 - `auth/` — fastapi-users, JWT, OAuth, RBAC deps, rate-limit middleware
 - `ingestion/` — Meltano orchestrator + CLI (see `propel-data-pipeline` skill)
 
@@ -38,6 +39,7 @@ DB host is `localhost` from the host/dev container, `postgres` inside compose se
 - **No Postgres RLS.** Tenancy is enforced in Python only: every tenant-scoped query must filter by `tenant_id`, and tenant routes must use the deps in `app/auth/dependencies.py` (`require_member`, `require_admin`, `require_invite_manager` → yields `TenantContext(tenant, membership)`).
 - Non-members get **404** (not 403) — never reveal a tenant's existence.
 - Roles: `admin` / `manager` / `individual` (`Role` Postgres enum); permission matrix in `auth/permissions.py`.
+- Metric definition writes use `metrics:manage` (admin default); definition reads use `metrics:read`. Store `org_id` is the tenant **slug** (or `__system` for `propel.*`); no RLS on `metric_definitions`.
 - User-only (non-tenant) routes use `Depends(current_active_user)`.
 - `oauth_accounts` = sign-in identity; `connected_accounts` = tenant-scoped tool installs (GitHub App). Different things — see `docs/backend/data-model.md`.
 - Login is fastapi-users OAuth2 password flow: form-encoded with field `username` (the email).

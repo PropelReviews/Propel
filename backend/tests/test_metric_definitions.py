@@ -63,14 +63,41 @@ spec:
     assert activate.status_code == 200, activate.text
     assert activate.json()["status"] == "active"
 
+    # Enrollment is MetricSet-driven: enable one standard + the custom metric.
+    metric_set_yaml = """
+apiVersion: propel/v1
+kind: MetricSet
+metadata:
+  org: acmemetrics
+spec:
+  standard:
+    mode: explicit
+    enabled: [propel.merged_prs]
+  custom: [acmemetrics.sample_count]
+"""
+    put_set = await client.put(
+        f"/api/v1/tenants/{tenant_id}/metric-set",
+        headers=headers,
+        json={"yaml": metric_set_yaml},
+    )
+    assert put_set.status_code == 200, put_set.text
+
     listing = await client.get(
         f"/api/v1/tenants/{tenant_id}/metric-definitions",
         headers=headers,
     )
     assert listing.status_code == 200, listing.text
     ids = {row["metric_id"] for row in listing.json()}
-    assert "acmemetrics.sample_count" in ids
-    assert "propel.merged_prs" in ids
+    assert ids == {"propel.merged_prs", "acmemetrics.sample_count"}
+
+    detail = await client.get(
+        f"/api/v1/tenants/{tenant_id}/metric-definitions/detail",
+        headers=headers,
+        params={"metric_id": "acmemetrics.sample_count"},
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["status"] == "active"
+    assert detail.json()["yaml"]
 
 
 @pytest.mark.asyncio

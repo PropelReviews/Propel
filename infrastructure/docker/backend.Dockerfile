@@ -35,6 +35,9 @@ RUN sed -i 's/\r$//' /usr/local/bin/propel-ingestion \
     && chmod +x /usr/local/bin/propel-ingestion
 
 # Seed the venv at build time so `docker compose up` works before the first bind-mount sync.
+# propel-metrics is a path dependency at ../transformation/propel_metrics relative to
+# /app (→ /transformation/propel_metrics). Copy it before `uv sync`.
+COPY transformation/propel_metrics /transformation/propel_metrics
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 

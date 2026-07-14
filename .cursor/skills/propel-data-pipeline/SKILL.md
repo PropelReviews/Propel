@@ -29,8 +29,10 @@ incremental delete+insert).
 - `orchestration/propel_orchestration/jobs.py` — `discovery_job` + hourly `discovery_schedule`, per-org `org_ingestion_job` (one op per resource), `org_fanout_sensor`, `linear_ingestion_job`
 - `orchestration/propel_orchestration/analytics.py` — dagster-dbt assets (tenant `DynamicPartitionsDefinition`), `analytics_assets_job`, `analytics_sensor`; derives `DBT_*` env from `DATABASE_URL`
 - `transformation/dbt/` — dbt project: staging views → canonical L0 entities → daily primitive marts + generated `fct_metric_values` in the `analytics` schema. Tool-specific staging; **normalized facts** (`fct_ticket_*`, `fct_project_activity_daily`, plus GitHub DORA/CI marts) with a `source` dimension where multi-tracker
-- `transformation/propel_metrics/` — declarative Metric YAML (`propel.*`), entity catalog, IR + `propel-metrics validate|compile` (codegen into `models/metrics/generated/`, including ratio/formula/windows). See `docs/metrics/config-system.md`
+- `transformation/propel_metrics/` — declarative Metric YAML (`propel.*`), entity catalog, IR + org resolve / params / push-pull + `propel-metrics validate|compile|import-system|pull|push|resolve-parity` (codegen into `models/metrics/generated/`, including ratio/formula/windows + shared-hash models). Definition store docs: `docs/metrics/definition-store.md`. Compile source gated by `METRICS_COMPILE_SOURCE` (`files` default; `db` for store-backed shared models).
 - `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the **legacy** marts (`date_trunc` per granularity); ticket/project endpoints are tracker-agnostic. Cutover to `fct_metric_values` is not done yet
+- `backend/app/{routers,services,schemas}/metric_definitions.py` (+ `metric_compile.py`, `metric_store.py`) — M4 definition management API (`/tenants/{id}/metric-definitions…`); activation dirties content hashes for the Dagster `metrics_compile_build` job
+- `orchestration/propel_orchestration/metrics_compile.py` — non-partitioned dirty-set compile job (hourly schedule stopped by default)
 
 ## Running it
 
@@ -52,6 +54,7 @@ cd transformation/dbt && uvx --from "sqlfluff>=3,<4" sqlfluff lint models
 cd transformation/propel_metrics && uv sync --extra dev
 uv run propel-metrics validate
 uv run propel-metrics compile --check
+uv run propel-metrics resolve-parity --org <slug> --store .propel-store.json  # after import-system
 ```
 
 ## Data contract
