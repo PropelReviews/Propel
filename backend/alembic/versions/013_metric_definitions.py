@@ -158,9 +158,7 @@ def downgrade() -> None:
     op.drop_table("metric_compile_dirty")
     op.drop_index("one_running_compile", table_name="metric_compile_runs")
     op.drop_table("metric_compile_runs")
-    op.drop_index(
-        "ix_definition_notices_org_metric", table_name="definition_notices"
-    )
+    op.drop_index("ix_definition_notices_org_metric", table_name="definition_notices")
     op.drop_table("definition_notices")
     op.drop_table("org_metric_enrollment")
     op.drop_index("defs_by_hash", table_name="metric_definitions")
