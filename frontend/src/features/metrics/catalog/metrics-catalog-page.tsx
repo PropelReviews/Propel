@@ -20,6 +20,7 @@ import {
   listMetricDefinitions,
   type MetricCatalogItem,
 } from "@/features/metrics/api/metric-definitions";
+import { CustomizeParamsDialog } from "@/features/metrics/catalog/customize-params-dialog";
 import {
   SourceBadge,
   StatusChip,
@@ -40,6 +41,10 @@ export function MetricsCatalogPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [visibilityFilter, setVisibilityFilter] = useState<string>("all");
+  const [customizeTarget, setCustomizeTarget] = useState<MetricCatalogItem | null>(
+    null,
+  );
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!token || !tenant) return;
@@ -58,7 +63,7 @@ export function MetricsCatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, tenant]);
+  }, [token, tenant, reloadKey]);
 
   const filtered = useMemo(() => {
     if (state.status !== "ready") return [];
@@ -231,11 +236,49 @@ export function MetricsCatalogPage() {
                       {tag}
                     </span>
                   ))}
+                  {canManage && row.source.startsWith("standard") && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCustomizeTarget(row)}
+                      >
+                        Customize
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <Link
+                          to={`/metrics/new?extends=${encodeURIComponent(row.metric_id)}`}
+                        >
+                          Create variant
+                        </Link>
+                      </Button>
+                    </>
+                  )}
+                  {canManage && row.status === "broken" && (
+                    <Button asChild size="sm" variant="destructive">
+                      <Link to={`/metrics/${encodeURIComponent(row.metric_id)}/edit`}>
+                        Fix definition
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {customizeTarget && token && tenant && (
+        <CustomizeParamsDialog
+          open={Boolean(customizeTarget)}
+          onOpenChange={(open) => {
+            if (!open) setCustomizeTarget(null);
+          }}
+          metric={customizeTarget}
+          token={token}
+          tenantId={tenant.id}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
       )}
     </main>
   );

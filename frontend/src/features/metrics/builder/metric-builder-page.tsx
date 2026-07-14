@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { parse as parseYaml } from "yaml";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import {
 } from "@/features/metrics/api/metric-definitions";
 import { FilterBuilder } from "@/features/metrics/builder/filter-builder";
 import { AdvancedBanner } from "@/features/metrics/components/metric-badges";
+import { ForkPrompt } from "@/features/metrics/catalog/customize-params-dialog";
 import { isAdvancedDocument } from "@/features/metrics/document/advanced";
 import {
   createDocumentState,
@@ -54,6 +55,9 @@ const GRAINS = ["day", "week", "month", "quarter"] as const;
 export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   const { metricId: rawId } = useParams<{ metricId: string }>();
   const metricIdParam = rawId ? decodeURIComponent(rawId) : null;
+  const [searchParams] = useSearchParams();
+  const extendsParent = searchParams.get("extends");
+  const presetId = searchParams.get("id");
   const { token } = useAuth();
   const { tenant } = useTenant();
   const navigate = useNavigate();
@@ -119,9 +123,39 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
     };
   }, [mode, token, tenant, metricIdParam]);
 
+  // Prefill variant from ?extends=
+  useEffect(() => {
+    if (mode !== "create" || !extendsParent || !tenant) return;
+    const id =
+      presetId ??
+      `${tenant.slug}.${extendsParent.split(".").slice(1).join("_")}_variant`;
+    dispatch({
+      type: "load",
+      doc: {
+        apiVersion: "propel/v1",
+        kind: "Metric",
+        metadata: {
+          id,
+          name: `Variant of ${extendsParent}`,
+          description: "",
+          tags: [],
+          status: "draft",
+          version: 1,
+        },
+        spec: {
+          extends: extendsParent,
+          overrides: {
+            filters: [],
+          },
+          visibility: "team",
+        },
+      },
+    });
+  }, [mode, extendsParent, presetId, tenant]);
+
   // Create mode: bind tenant slug into id once
   useEffect(() => {
-    if (mode !== "create" || !tenant) return;
+    if (mode !== "create" || !tenant || extendsParent) return;
     const id = String(meta.id ?? "");
     if (!id.startsWith(`${tenant.slug}.`)) {
       dispatch({
@@ -133,7 +167,7 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
         },
       });
     }
-  }, [mode, tenant]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, tenant, extendsParent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setMeta = (key: string, value: unknown) =>
     dispatch({ type: "patch", patch: { op: "set", path: ["metadata", key], value } });
@@ -294,6 +328,21 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
     );
   }
 
+  // Fork prompt when trying to edit a standard propel.* metric in the builder
+  if (mode === "edit" && metricIdParam?.startsWith("propel.") && tenant) {
+    return (
+      <main className="mx-auto max-w-2xl space-y-4 px-6 py-12">
+        <h1 className="text-2xl font-semibold">Edit standard metric</h1>
+        <ForkPrompt metricId={metricIdParam} orgSlug={tenant.slug} />
+        <Button asChild variant="outline">
+          <Link to={`/metrics/${encodeURIComponent(metricIdParam)}`}>
+            Back to detail
+          </Link>
+        </Button>
+      </main>
+    );
+  }
+
   return (
     <main className="bg-background mx-auto min-h-svh max-w-6xl px-6 py-12">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -378,19 +427,29 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                   <KindCard
                     title="Measure events"
                     body="Count, interval, or aggregate over an entity."
-                    active
+                    active={!extendsParent}
                   />
                   <KindCard
                     title="Combine metrics"
-                    body="Ratio or formula (M5.4)."
+                    body="Ratio or formula — use YAML / operand pickers in a follow-up."
                     disabled
                   />
                   <KindCard
                     title="Variant"
-                    body="Extend an existing metric (M5.4)."
-                    disabled
+                    body={
+                      extendsParent
+                        ? `Extends ${extendsParent}`
+                        : "Extend an existing metric from the catalog."
+                    }
+                    active={Boolean(extendsParent)}
                   />
                 </div>
+                {extendsParent && (
+                  <p className="text-muted-foreground text-sm">
+                    Locked fields (entity, time.field, measure type) inherit from the
+                    parent. Add filters below to narrow — never widen.
+                  </p>
+                )}
               </section>
 
               <section className="space-y-3">

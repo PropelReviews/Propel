@@ -14,6 +14,7 @@ import {
   getMetricDefinition,
   getMetricSql,
   listMetricVersions,
+  repinMetricDefinition,
   type DiffResponse,
   type MetricDefinitionDetail,
   type MetricVersion,
@@ -194,14 +195,20 @@ export function MetricDetailPage() {
       {parentNotice && (
         <div
           role="status"
-          className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"
+          className="mb-6 space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"
         >
-          A newer parent version is available.
-          {canManage && (
-            <span className="text-muted-foreground">
-              {" "}
-              Use Repin from the Overview actions once the builder flow lands (M5.4).
-            </span>
+          <p>A newer parent version is available.</p>
+          {canManage && token && tenant && (
+            <Button
+              size="sm"
+              onClick={() => {
+                void repinMetricDefinition(token, tenant.id, metricId)
+                  .then(() => window.location.reload())
+                  .catch(() => undefined);
+              }}
+            >
+              Repin to latest parent
+            </Button>
           )}
         </div>
       )}
