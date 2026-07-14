@@ -144,7 +144,9 @@ open https://propel.ninja               # landing (www redirects here)
   drive ECS circuit-breaker rollbacks and the metric-rollback Lambda (see
   [`docs/deployment/cicd.md`](../../docs/deployment/cicd.md)).
 - **No autoscaling:** target tracking needs broader CloudWatch metrics, so
-  `api_desired_count` is fixed per environment.
+  `api_desired_count` is fixed per environment (prod = 1 API task).
+- **Aurora capacity:** prod min 0.5 / max 2 ACU. Min cannot drop to 0 (auto-pause)
+  while PostHog CDC logical replication is enabled.
 - **Single NAT gateway** per environment (~$32/mo) is the main fixed cost; ECS
   tasks pull from ECR and reach PostHog through it. VPC endpoints could remove
   it later.
