@@ -37,6 +37,7 @@ export const ALL_PERMISSIONS: PermissionKey[] = [
   "github_identities:manage",
   "ingestion:read",
   "metrics:read",
+  "metrics:manage",
   "roles:manage",
 ];
 
@@ -78,6 +79,13 @@ export type MockApiOptions = {
   invites?: Invite[];
   catalog?: PermissionDefinition[];
   rolePermissions?: RolePermissions[];
+  /** Extra pathname handlers (checked before the default 404). */
+  extraHandlers?: Array<{
+    method?: string;
+    match: RegExp;
+    response: unknown | (() => unknown);
+    status?: number;
+  }>;
   /** Requests whose pathname matches never resolve (simulates loading). */
   hang?: RegExp;
 };
@@ -95,6 +103,7 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
     invites = [],
     catalog = [],
     rolePermissions = [],
+    extraHandlers = [],
     hang,
   } = options;
   const calls: RecordedCall[] = [];
@@ -181,6 +190,16 @@ export function mockApi(options: MockApiOptions = {}): { calls: RecordedCall[] }
         const role = path.split("/").pop() as Role;
         const { permissions } = body as { permissions: PermissionKey[] };
         return Promise.resolve(json({ role, permissions }));
+      }
+      for (const handler of extraHandlers) {
+        if (handler.match.test(path)) {
+          if (handler.method && handler.method.toUpperCase() !== method) continue;
+          const payload =
+            typeof handler.response === "function"
+              ? handler.response()
+              : handler.response;
+          return Promise.resolve(json(payload, handler.status ?? 200));
+        }
       }
       return Promise.resolve(json({ detail: "NOT_FOUND" }, 404));
     },
