@@ -48,8 +48,8 @@ variable "db_name" {
 
 variable "db_min_acu" {
   type        = number
-  default     = 0.5
-  description = "Aurora Serverless v2 min ACU."
+  default     = 0
+  description = "Aurora Serverless v2 min ACU. 0 enables auto-pause when idle."
 }
 
 variable "db_max_acu" {

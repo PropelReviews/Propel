@@ -33,8 +33,14 @@ variable "engine_version" {
 
 variable "min_acu" {
   type        = number
-  description = "Serverless v2 minimum Aurora Capacity Units."
-  default     = 0.5
+  description = "Serverless v2 minimum Aurora Capacity Units. 0 enables auto-pause when idle."
+  default     = 0
+}
+
+variable "seconds_until_auto_pause" {
+  type        = number
+  description = "Idle seconds before Aurora Serverless v2 pauses when min_acu is 0 (300–86400). Ignored when min_acu > 0."
+  default     = 300
 }
 
 variable "max_acu" {

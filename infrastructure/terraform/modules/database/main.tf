@@ -61,8 +61,10 @@ resource "aws_rds_cluster" "this" {
   deletion_protection       = var.deletion_protection
 
   serverlessv2_scaling_configuration {
-    min_capacity = var.min_acu
-    max_capacity = var.max_acu
+    min_capacity             = var.min_acu
+    max_capacity             = var.max_acu
+    # Only valid when min_capacity is 0; omit otherwise (AWS rejects it).
+    seconds_until_auto_pause = var.min_acu == 0 ? var.seconds_until_auto_pause : null
   }
 
   tags = var.tags
