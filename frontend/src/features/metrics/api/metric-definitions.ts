@@ -229,6 +229,67 @@ export function validateMetricDefinition(
   });
 }
 
+export function createMetricDefinition(
+  token: string,
+  tenantId: string,
+  yaml: string,
+): Promise<MetricDefinitionDetail> {
+  return authedRequest("POST", `${base(tenantId)}/metric-definitions`, token, {
+    yaml,
+  });
+}
+
+export function putMetricDefinitionDraft(
+  token: string,
+  tenantId: string,
+  body: {
+    yaml: string;
+    expected_version?: number | null;
+    expected_revision?: number | null;
+  },
+): Promise<MetricDefinitionDetail> {
+  return authedRequest(
+    "PUT",
+    `${base(tenantId)}/metric-definitions/draft`,
+    token,
+    body,
+  );
+}
+
+export function classifyMetricDefinition(
+  token: string,
+  tenantId: string,
+  body: { yaml: string; previous_version?: number | null },
+): Promise<{
+  kind: "none" | "non_semantic" | "semantic";
+  next_version: number;
+  next_revision: number;
+  previous_version: number | null;
+  previous_revision: number | null;
+}> {
+  return authedRequest(
+    "POST",
+    `${base(tenantId)}/metric-definitions:classify`,
+    token,
+    body,
+  );
+}
+
+export function activateMetricDefinition(
+  token: string,
+  tenantId: string,
+  metricId: string,
+  body: { version?: number | null } = {},
+): Promise<MetricDefinitionDetail> {
+  const params = new URLSearchParams({ metric_id: metricId });
+  return authedRequest(
+    "POST",
+    `${base(tenantId)}/metric-definitions:activate?${params}`,
+    token,
+    body,
+  );
+}
+
 export function getMetricSet(token: string, tenantId: string): Promise<MetricSetRead> {
   return authedGet(`${base(tenantId)}/metric-set`, token);
 }

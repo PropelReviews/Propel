@@ -1,5 +1,5 @@
-import { MetricBuilderPlaceholder } from "@/features/metrics/builder/placeholder";
+import { MetricBuilderPage } from "@/features/metrics/builder/metric-builder-page";
 
 export function MetricNewPage() {
-  return <MetricBuilderPlaceholder mode="create" />;
+  return <MetricBuilderPage mode="create" />;
 }
