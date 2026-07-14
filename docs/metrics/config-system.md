@@ -3,11 +3,9 @@
 Propel computes metrics from declarative YAML configs that compile to dbt models.
 L1 standard metrics (`propel.*`) and L2 org metrics share one format.
 
-> Status: **M1–M4 landed.** Validator, IR (`CompiledPlan`), calendar-grain and
-> rolling-window codegen for count / interval / percentile / **ratio** /
-> **formula**, plus org MetricSets, params, `extends` pins, DimensionMappings,
-> Postgres definition store, push/pull CLI, and definition APIs.
-> Authoring UI (M5) is next.
+> Status: **M1–M5 authoring UI landed (iterative).** Validator, IR, codegen,
+> org MetricSets / definition store (M4), plus catalog/builder/preview/variants
+> UI (M5). See [authoring-ui.md](./authoring-ui.md).
 
 ## Layers
 

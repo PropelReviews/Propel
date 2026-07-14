@@ -270,6 +270,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Metric types drift check
+        run: npm run metrics:check-types
+
+      - name: Metric corpus round-trip
+        run: npm run metrics:roundtrip
+
       # Vitest browser-mode tests (chart components) run in headless Chromium,
       # which isn't present on a fresh runner. Install it plus its OS libraries.
       - name: Install Playwright browser

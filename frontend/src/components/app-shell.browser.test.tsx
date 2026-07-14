@@ -68,6 +68,7 @@ describe("AppShell", () => {
 
     // The rest of the nav renders for authenticated users.
     expect(container.querySelector('a[href="/data"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/metrics"]')).not.toBeNull();
     expect(container.querySelector('a[href="/settings/access"]')).toBeNull();
   });
 

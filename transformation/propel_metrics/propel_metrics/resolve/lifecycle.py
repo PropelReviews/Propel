@@ -147,8 +147,15 @@ def save_draft(
     yaml_text: str,
     created_by: str,
     catalog_version: str | None = None,
+    expected_version: int | None = None,
+    expected_revision: int | None = None,
 ) -> StoredDefinition:
-    """Create or bump a draft definition from authored YAML."""
+    """Create or update a draft definition from authored YAML.
+
+    Autosave semantics (M5): when the latest row is already ``draft``, overwrite
+    that version in place (revision++) so each keystroke does not mint N+1.
+    Semantic edits against an active/broken row still create version N+1 as draft.
+    """
     doc = yaml.safe_load(yaml_text)
     if not isinstance(doc, dict):
         raise ValueError("YAML root must be a mapping")
@@ -156,22 +163,33 @@ def save_draft(
     mid = METRIC_SET_ID if kind == "MetricSet" else (doc.get("metadata") or {})["id"]
 
     existing_any = store.get_definition(org_id, mid)
+    if existing_any is not None and (
+        expected_version is not None or expected_revision is not None
+    ):
+        if expected_version is not None and existing_any.version != expected_version:
+            raise DraftConflictError(existing_any)
+        if expected_revision is not None and existing_any.revision != expected_revision:
+            raise DraftConflictError(existing_any)
+
     prev_doc = existing_any.doc if existing_any else None
     diff = classify_doc_diff(prev_doc, doc)
 
     catalog = load_catalog()
     cat_ver = catalog_version or str(catalog.get("catalogVersion", "1"))
 
-    if existing_any and diff == "non_semantic":
-        # Bump revision in place on the latest version row
+    if existing_any and diff == "none":
+        return existing_any
+
+    # In-place update for open drafts (autosave) and non-semantic active edits.
+    if existing_any and (existing_any.status == "draft" or diff == "non_semantic"):
         row = existing_any
         row.revision = row.revision + 1
         row.yaml = yaml_text
         row.doc = doc
+        row.created_by = created_by
+        if existing_any.status == "draft":
+            row.status = "draft"
         return store.upsert_definition(row)
-
-    if existing_any and diff == "none":
-        return existing_any
 
     new_version = 1
     if existing_any:
@@ -197,6 +215,64 @@ def save_draft(
         created_by=created_by,
     )
     return store.upsert_definition(row)
+
+
+class DraftConflictError(Exception):
+    """Optimistic concurrency conflict for draft autosave."""
+
+    def __init__(self, current: StoredDefinition) -> None:
+        self.current = current
+        super().__init__(
+            f"draft conflict: current version={current.version} "
+            f"revision={current.revision}"
+        )
+
+
+def classify_yaml_change(
+    store: DefinitionStore,
+    *,
+    org_id: str,
+    yaml_text: str,
+    previous_version: int | None = None,
+) -> dict[str, Any]:
+    """Dry-run semantic vs revision classification for the activate sheet."""
+    doc = yaml.safe_load(yaml_text)
+    if not isinstance(doc, dict):
+        raise ValueError("YAML root must be a mapping")
+    kind = doc["kind"]
+    mid = METRIC_SET_ID if kind == "MetricSet" else (doc.get("metadata") or {})["id"]
+
+    if previous_version is not None:
+        previous = store.get_definition(org_id, mid, version=previous_version)
+    else:
+        previous = store.get_definition(org_id, mid, status="active")
+        if previous is None:
+            previous = store.get_definition(org_id, mid)
+
+    prev_doc = previous.doc if previous else None
+    kind_diff = classify_doc_diff(prev_doc, doc)
+    next_version = 1
+    next_revision = 1
+    if previous is None:
+        next_version = 1
+        next_revision = 1
+    elif kind_diff == "none":
+        next_version = previous.version
+        next_revision = previous.revision
+    elif kind_diff == "non_semantic" or previous.status == "draft":
+        next_version = previous.version
+        next_revision = previous.revision + 1
+    else:
+        next_version = previous.version + 1
+        next_revision = 1
+
+    return {
+        "kind": kind_diff,
+        "next_version": next_version,
+        "next_revision": next_revision,
+        "previous_version": previous.version if previous else None,
+        "previous_revision": previous.revision if previous else None,
+    }
 
 
 def activate(

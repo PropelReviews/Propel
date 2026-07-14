@@ -44,6 +44,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     "invites:read",
   );
   const showWorkspace = useAnyPermission("connections:manage");
+  const showMetrics = useAnyPermission("metrics:read");
+  const showMetricAdmin = useAnyPermission("metrics:manage");
 
   return (
     <div className="bg-background min-h-svh">
@@ -57,8 +59,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               <nav className="flex items-center gap-4">
                 <TopNavLink to="/home">Home</TopNavLink>
                 <TopNavLink to="/data">Data</TopNavLink>
+                {showMetrics && <TopNavLink to="/metrics">Metrics</TopNavLink>}
                 {showWorkspace && (
                   <TopNavLink to="/settings/workspace">Workspace</TopNavLink>
+                )}
+                {showMetricAdmin && (
+                  <TopNavLink to="/settings/metric-set">Metric set</TopNavLink>
+                )}
+                {showMetrics && (
+                  <TopNavLink to="/settings/metric-health">Health</TopNavLink>
                 )}
                 {showAccess && <TopNavLink to="/settings/access">Access</TopNavLink>}
                 <TopNavLink to="/profile">Profile</TopNavLink>

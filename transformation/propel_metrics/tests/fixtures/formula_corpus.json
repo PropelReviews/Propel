@@ -1,0 +1,12 @@
+[
+  { "expr": "a + b", "ok": true },
+  { "expr": "a + b / c", "ok": true },
+  { "expr": "(a + b) * c", "ok": true },
+  { "expr": "-a + 2.5", "ok": true },
+  { "expr": "a * b - c / d", "ok": true },
+  { "expr": "((a))", "ok": true },
+  { "expr": "a +", "ok": false },
+  { "expr": "a $ b", "ok": false },
+  { "expr": "", "ok": false },
+  { "expr": "()", "ok": false }
+]

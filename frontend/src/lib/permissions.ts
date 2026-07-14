@@ -28,6 +28,7 @@ export type PermissionKey =
   | "github_identities:manage"
   | "ingestion:read"
   | "metrics:read"
+  | "metrics:manage"
   | "roles:manage";
 
 /** Permission required to send an invite for each target role. */
