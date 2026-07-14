@@ -1,19 +1,21 @@
 # Metric configuration system
 
 Propel computes metrics from declarative YAML configs that compile to dbt models.
-L1 standard metrics (`propel.*`) and future L2 org metrics share one format.
+L1 standard metrics (`propel.*`) and L2 org metrics share one format.
 
-> Status: **M1 + M2 + M3 landed.** Validator, IR (`CompiledPlan`), calendar-grain
-> and rolling-window codegen for count / interval / percentile / **ratio** /
-> **formula**. Org MetricSets + definition store (M4) and authoring UI (M5) are next.
+> Status: **M1–M4 landed.** Validator, IR (`CompiledPlan`), calendar-grain and
+> rolling-window codegen for count / interval / percentile / **ratio** /
+> **formula**, plus org MetricSets, params, `extends` pins, DimensionMappings,
+> Postgres definition store, push/pull CLI, and definition APIs.
+> Authoring UI (M5) is next.
 
 ## Layers
 
 | Layer | What | Where |
 |---|---|---|
 | L0 — entities | Canonical rows (`pull_request`, `release`, …) | `transformation/dbt/models/canonical/` + catalog |
-| L1 — standard metrics | Shipped Metric YAML in the `propel` namespace | `transformation/propel_metrics/propel_metrics/configs/propel/` |
-| L2 — org metrics | Org-defined configs (later) | MetricSet + org namespace |
+| L1 — standard metrics | Shipped Metric YAML in the `propel` namespace | `transformation/propel_metrics/.../configs/propel/` + `__system` store |
+| L2 — org metrics | Org MetricSet + custom defs / mappings | Postgres `metric_definitions` (slug = `org_id`) |
 
 ## Package
 
@@ -23,62 +25,43 @@ L1 standard metrics (`propel.*`) and future L2 org metrics share one format.
 cd transformation/propel_metrics
 uv sync --extra dev
 uv run propel-metrics validate --strict
-uv run propel-metrics compile          # writes dbt SQL
-uv run propel-metrics ci               # validate --strict + compile --check + inventory
-uv run pytest -v                       # schema, invalid fixtures, IR/expr/property suite
+uv run propel-metrics compile          # file pipeline → dbt SQL
+uv run propel-metrics ci
+uv run propel-metrics import-system    # seed JSON/DB store from propel.* YAML
+uv run propel-metrics pull|push|repin|archive
+uv run pytest -v
 ```
 
-CI also asserts: JSON Schema meta-validity, catalog self-check, an invalid-fixture
-corpus (`tests/fixtures/invalid/`), compile determinism, and that every compilable
-active metric is present in `models/metrics/generated/` and unioned into
-`fct_metric_values`.
+Validation passes: **structural** → **semantic** → **graph**.
 
-Validation passes: **structural** (JSON Schema) → **semantic** (entity catalog /
-roles / ops / formula syntax) → **graph** (`extends` / operand refs / no
-derived-of-derived).
-
-## Compilation pipeline (M3)
+## Compilation pipeline
 
 ```
-YAML ─► validate ─► resolve (extends) ─► CompiledPlan (IR) ─► SQL codegen ─► dbt
+YAML/DB ─► validate ─► resolve(org) ─► CompiledPlan (IR) ─► content_hash ─► SQL
 ```
 
-Active metrics with calendar `time.grains` and/or rolling `time.windows` compile
-when the measure is a simple aggregate **or** a derived `ratio` / `formula`:
+- File pipeline (CI default): active `propel.*` → committed
+  `models/metrics/generated/metric_propel_*.sql`
+- Store pipeline (M4): enrollment by content_hash → shared
+  `metric_<slug>__<hash12>.sql` + `metric_enrollment.sql`
+- Serving: `fct_metric_values` **table** with per-metric swap
+  (`macros/swap_metric_values.sql`)
 
-- Per-metric models: `transformation/dbt/models/metrics/generated/metric_propel_*.sql`
-  (`materialized='table'`)
-- Serving union: `fct_metric_values.sql` (`materialized='view'`)
-- Shared spine: `models/metrics/dim_step_spine.sql` (`history_days` var, default 730)
-
-**Ratio** uses the denominator bucket universe (`LEFT JOIN` numerator).  
-**Formula** uses the union of input buckets; `/` emits `nullif` (NULL on ÷0).  
-**Windows** spine-join unaggregated rows over `(end - N days, end]` with grain
-label `rolling_{N}d`.
-
-Durations are stored in **seconds**. Org-total dimension slots use `''` (empty
-string); treat `''` as org total at serve time. `value` may be NULL for
-ratio/formula divide-by-zero.
-
-Generated SQL for `propel.*` is **committed**. CI fails if configs and SQL drift.
-
-Shipped M3 dogfood: `propel.change_failure_rate` (ratio),
-`propel.cycle_time_trailing_30d` (30d rolling window). `propel.mttr` stays draft
-until an incident L0 entity exists.
+See [definition-store.md](./definition-store.md) for store schema, pins, API,
+and push/pull.
 
 ## Dual-run with legacy marts
 
-Hand-written `fct_*_daily` marts and the FastAPI metrics endpoints remain the
-serving path. `fct_metric_values` dual-runs until the API cutover. Do not delete
-legacy DORA marts until that cutover.
+Hand-written `fct_*_daily` marts and the FastAPI *values* endpoints remain the
+dashboard serving path. Definition APIs are live; values cutover is separate.
 
 ## Visibility (push-to-pull)
 
-Every Metric declares `visibility: ic | team | org`. Flow metrics that describe
-people default to `ic`. Dimension mappings (M4) never broaden visibility;
-`extends` children may not escalate visibility above their parent.
+Every Metric declares `visibility: ic | team | org`. Dimension mappings never
+broaden visibility; `extends` children may not escalate above their parent.
 
 ## Tenancy naming
 
-Configs and docs say “org”; the warehouse column and catalog tenant key are
-`tenant_id` (UUID). MetricSet `metadata.org` (M4) is the tenant **slug**.
+Configs and docs say “org”; the warehouse column is `tenant_id` (UUID).
+MetricSet `metadata.org` / store `org_id` is the tenant **slug**. Tenancy is
+enforced in application code (no Postgres RLS on definition tables).

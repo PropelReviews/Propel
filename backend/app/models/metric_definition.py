@@ -60,17 +60,13 @@ class OrgMetricEnrollment(Base):
 
 class DefinitionNotice(Base):
     __tablename__ = "definition_notices"
-    __table_args__ = (
-        Index("ix_definition_notices_org_metric", "org_id", "metric_id"),
-    )
+    __table_args__ = (Index("ix_definition_notices_org_metric", "org_id", "metric_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     org_id: Mapped[str] = mapped_column(Text, nullable=False)
     metric_id: Mapped[str] = mapped_column(Text, nullable=False)
     notice: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -65,4 +65,4 @@ def test_compile_writes_generated_files(tmp_path) -> None:
     assert "metric_propel_cycle_time_trailing_30d.sql" in names
     assert "schema.yml" in names
     fct = (tmp_path / "fct_metric_values.sql").read_text(encoding="utf-8")
-    assert "materialized='view'" in fct
+    assert "materialized='table'" in fct

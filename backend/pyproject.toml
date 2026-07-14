@@ -22,6 +22,7 @@ dependencies = [
     "python-dotenv",
     "email-validator",
     "posthog>=7.22.2",
+    "propel-metrics",
 ]
 
 [dependency-groups]
@@ -34,6 +35,9 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+propel-metrics = { path = "../transformation/propel_metrics", editable = true }
 
 [tool.ruff]
 line-length = 88
