@@ -1,0 +1,14 @@
+# expect: E_UNKNOWN_ENTITY
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.bad_entity
+  name: Bad Entity
+  status: active
+spec:
+  entity: spaceship
+  measure:
+    type: count
+  time:
+    field: merged_at
+    grains: [day]

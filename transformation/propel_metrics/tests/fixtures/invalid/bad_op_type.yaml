@@ -1,0 +1,18 @@
+# expect: E_OP_TYPE
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.bad_op_type
+  name: Bad Op Type
+  status: active
+spec:
+  entity: pull_request
+  measure:
+    type: count
+  filters:
+    - field: repo
+      op: gt
+      value: 1
+  time:
+    field: merged_at
+    grains: [day]

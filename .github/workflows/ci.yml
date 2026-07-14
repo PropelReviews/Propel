@@ -158,6 +158,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "transformation/propel_metrics/uv.lock"
 
+      - name: Lockfile up to date
+        run: uv lock --check
+
       - name: Install propel-metrics
         run: uv sync --frozen --extra dev
 
@@ -167,14 +170,14 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
+      # Unit + fixture tests: schema/catalog self-check, invalid YAML corpus,
+      # semantic/graph edge cases, compile determinism + inventory.
       - name: Pytest
         run: uv run pytest -v --tb=short
 
-      - name: Validate shipped configs
-        run: uv run propel-metrics validate
-
-      - name: Generated SQL drift check
-        run: uv run propel-metrics compile --check
+      # Aggregate gate: validate --strict + compile --check (drift + inventory)
+      - name: propel-metrics ci
+        run: uv run propel-metrics ci
 
   dbt:
     name: dbt checks

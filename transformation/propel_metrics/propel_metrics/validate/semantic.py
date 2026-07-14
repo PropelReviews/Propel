@@ -509,11 +509,21 @@ def validate_metric_semantic(
     measure_type = (measure or {}).get("type") if measure else None
     if parent_doc and extends:
         parent_vis = (parent_doc.get("spec") or {}).get("visibility", "team")
-        child_vis = spec.get("visibility", parent_vis)
+        overrides = spec.get("overrides") or {}
+        # Child may set visibility on the spec root or under overrides.
+        if "visibility" in spec:
+            child_vis = spec["visibility"]
+            vis_path = "spec.visibility"
+        elif "visibility" in overrides:
+            child_vis = overrides["visibility"]
+            vis_path = "spec.overrides.visibility"
+        else:
+            child_vis = parent_vis
+            vis_path = "spec.visibility"
         if _VISIBILITY_RANK.get(child_vis, 1) > _VISIBILITY_RANK.get(parent_vis, 1):
             result.error(
                 "E_VISIBILITY_ESCALATION",
-                "spec.visibility",
+                vis_path,
                 f"extends child visibility {child_vis!r} broader than parent "
                 f"{parent_vis!r}",
                 file=file,

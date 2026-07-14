@@ -1,0 +1,12 @@
+# expect: E_VISIBILITY_ESCALATION
+# Companion parent is visibility_escalation_parent.yaml (loaded together).
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.vis_child
+  name: Visibility Child
+  status: active
+spec:
+  extends: propel.vis_parent
+  overrides:
+    visibility: org

@@ -16,13 +16,21 @@ uv sync --extra dev
 ```bash
 # Validate shipped configs (and any extra paths)
 uv run propel-metrics validate
+uv run propel-metrics validate --strict   # warnings → errors
 
 # Compile propel.* metrics into transformation/dbt/models/metrics/generated/
 uv run propel-metrics compile
 
-# Fail if generated SQL drifts from configs (CI)
+# Fail if generated SQL drifts from configs, or inventory is incomplete (CI)
 uv run propel-metrics compile --check
+
+# Full local CI gate (validate --strict + compile --check + inventory)
+uv run propel-metrics ci
+uv run pytest -v
 ```
+
+CI (`.github/workflows/ci.yml` job **Metric config checks**) runs lockfile check,
+ruff, pytest (including `tests/fixtures/invalid/`), and `propel-metrics ci`.
 
 ## Layout
 

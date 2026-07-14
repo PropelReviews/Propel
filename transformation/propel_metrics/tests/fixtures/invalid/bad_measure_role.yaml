@@ -1,0 +1,15 @@
+# expect: E_FIELD_ROLE
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.bad_measure_role
+  name: Bad Measure Role
+  status: active
+spec:
+  entity: pull_request
+  measure:
+    type: sum
+    field: repo
+  time:
+    field: merged_at
+    grains: [day]

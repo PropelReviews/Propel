@@ -22,10 +22,16 @@ L1 standard metrics (`propel.*`) and future L2 org metrics share one format.
 ```bash
 cd transformation/propel_metrics
 uv sync --extra dev
-uv run propel-metrics validate
+uv run propel-metrics validate --strict
 uv run propel-metrics compile          # writes dbt SQL
-uv run propel-metrics compile --check  # CI drift gate
+uv run propel-metrics ci               # validate --strict + compile --check + inventory
+uv run pytest -v                       # schema, invalid fixtures, semantic matrix
 ```
+
+CI also asserts: JSON Schema meta-validity, catalog self-check, an invalid-fixture
+corpus (`tests/fixtures/invalid/`), compile determinism, and that every compilable
+active metric is present in `models/metrics/generated/` and unioned into
+`fct_metric_values`.
 
 Validation passes: **structural** (JSON Schema) → **semantic** (entity catalog /
 roles / ops) → **graph** (`extends` / operand refs / no derived-of-derived).

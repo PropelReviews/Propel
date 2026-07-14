@@ -128,6 +128,63 @@ def _render_schema_yml(metrics: list[ResolvedMetric]) -> str:
     return "\n".join(lines)
 
 
+def check_inventory(paths: list[Path] | None = None) -> list[str]:
+    """Ensure every compilable active metric has committed generated SQL + union."""
+    messages: list[str] = []
+    resolved = resolve_metrics(paths, active_only=True)
+    compilable = [m for m in resolved if is_compilable(m)]
+    if not compilable:
+        messages.append("no compilable active metrics found")
+        return messages
+
+    if not GENERATED_DIR.is_dir():
+        messages.append(f"generated dir missing: {GENERATED_DIR}")
+        return messages
+
+    fct = GENERATED_DIR / "fct_metric_values.sql"
+    if not fct.is_file():
+        messages.append("missing fct_metric_values.sql")
+        return messages
+    fct_text = fct.read_text(encoding="utf-8")
+
+    for metric in compilable:
+        filename = metric_model_filename(metric.metric_id)
+        path = GENERATED_DIR / filename
+        if not path.is_file():
+            messages.append(
+                f"compilable metric {metric.metric_id!r} missing {filename}"
+            )
+            continue
+        body = path.read_text(encoding="utf-8")
+        if f"metric_id: {metric.metric_id}" not in body:
+            messages.append(f"{filename} header missing metric_id {metric.metric_id}")
+        if f"definition_version: {metric.definition_version}" not in body:
+            messages.append(
+                f"{filename} definition_version mismatch "
+                f"(expected {metric.definition_version})"
+            )
+        model_name = _slug_model_name(metric.metric_id)
+        if f"ref('{model_name}')" not in fct_text:
+            messages.append(f"fct_metric_values.sql does not union ref('{model_name}')")
+
+    # Active ratio/formula metrics must remain uncompiled (M2 contract)
+    for metric in resolved:
+        mtype = (metric.spec.get("measure") or {}).get("type")
+        if mtype in {"ratio", "formula"} and is_compilable(metric):
+            messages.append(
+                f"derived metric {metric.metric_id!r} unexpectedly compilable"
+            )
+        if mtype in {"ratio", "formula"}:
+            unexpected = GENERATED_DIR / metric_model_filename(metric.metric_id)
+            if unexpected.is_file():
+                messages.append(
+                    f"derived metric {metric.metric_id!r} should not have "
+                    f"{unexpected.name}"
+                )
+
+    return messages
+
+
 def check_drift(paths: list[Path] | None = None) -> list[str]:
     """Return human-readable drift messages; empty if generated SQL matches."""
     import tempfile
@@ -157,5 +214,8 @@ def check_drift(paths: list[Path] | None = None) -> list[str]:
                 messages.append(f"unexpected generated file: {name}")
             if name == "fct_metric_values.sql" and name not in expected_files:
                 messages.append(f"unexpected generated file: {name}")
+            if name == "schema.yml" and name not in expected_files:
+                messages.append(f"unexpected generated file: {name}")
 
+        messages.extend(check_inventory(paths))
         return messages
