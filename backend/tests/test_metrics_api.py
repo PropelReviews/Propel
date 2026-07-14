@@ -778,12 +778,8 @@ async def test_normalized_ticket_and_project_metrics(
     await _seed_ticket_activity(
         tenant_id, date(2026, 6, 1), source="github", created=1, canceled=1
     )
-    await _seed_ticket_comments(
-        tenant_id, date(2026, 6, 1), source="linear", count=4
-    )
-    await _seed_ticket_comments(
-        tenant_id, date(2026, 6, 1), source="github", count=3
-    )
+    await _seed_ticket_comments(tenant_id, date(2026, 6, 1), source="linear", count=4)
+    await _seed_ticket_comments(tenant_id, date(2026, 6, 1), source="github", count=3)
     await _seed_project_activity(
         tenant_id, date(2026, 6, 1), created=1, completed=1, canceled=0
     )
