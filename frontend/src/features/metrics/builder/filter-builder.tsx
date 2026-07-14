@@ -13,6 +13,20 @@ import { NULL_OPS, opsForFieldType } from "@/features/metrics/catalogue/operator
 
 type Predicate = { field: string; op: string; value?: unknown };
 
+function unwrapNot(node: unknown): { negated: boolean; inner: unknown } {
+  if (node && typeof node === "object" && "not" in node) {
+    const inner = (node as { not: unknown }).not;
+    // Flatten nested nots
+    const nested = unwrapNot(inner);
+    return { negated: !nested.negated, inner: nested.inner };
+  }
+  return { negated: false, inner: node };
+}
+
+function wrapNot(inner: unknown, negated: boolean): unknown {
+  return negated ? { not: inner } : inner;
+}
+
 export function FilterBuilder({
   entity,
   catalogEntities,
@@ -31,7 +45,7 @@ export function FilterBuilder({
     (f) => f.role === "dimension" || f.role === "event_time",
   );
 
-  function updateAt(index: number, next: Predicate) {
+  function setAt(index: number, next: unknown) {
     const copy = [...filters];
     copy[index] = next;
     onChange(copy);
@@ -55,22 +69,32 @@ export function FilterBuilder({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="tree" aria-label="Filter conditions">
       {filters.map((raw, index) => {
-        if (raw && typeof raw === "object" && ("any_of" in raw || "all_of" in raw)) {
-          const group = raw as { any_of?: unknown[]; all_of?: unknown[] };
+        const { negated, inner } = unwrapNot(raw);
+
+        if (
+          inner &&
+          typeof inner === "object" &&
+          ("any_of" in inner || "all_of" in inner)
+        ) {
+          const group = inner as { any_of?: unknown[]; all_of?: unknown[] };
           const mode = group.any_of ? "any_of" : "all_of";
           const children = (group.any_of ?? group.all_of ?? []) as unknown[];
           return (
-            <div key={index} className="border-border space-y-2 rounded-lg border p-3">
-              <div className="flex items-center gap-2">
+            <div
+              key={index}
+              className="border-border space-y-2 rounded-lg border p-3"
+              role="treeitem"
+              aria-expanded="true"
+            >
+              <div className="flex flex-wrap items-center gap-2">
                 <Select
                   value={mode}
                   onValueChange={(v) => {
-                    const copy = [...filters];
-                    copy[index] =
+                    const nextInner =
                       v === "any_of" ? { any_of: children } : { all_of: children };
-                    onChange(copy);
+                    setAt(index, wrapNot(nextInner, negated));
                   }}
                 >
                   <SelectTrigger className="w-28" aria-label="Group combinator">
@@ -81,6 +105,19 @@ export function FilterBuilder({
                     <SelectItem value="any_of">OR</SelectItem>
                   </SelectContent>
                 </Select>
+                <label className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={negated}
+                    onChange={() => {
+                      const nextInner =
+                        mode === "any_of" ? { any_of: children } : { all_of: children };
+                      setAt(index, wrapNot(nextInner, !negated));
+                    }}
+                    aria-label="Negate group"
+                  />
+                  Negate
+                </label>
                 <Button size="sm" variant="ghost" onClick={() => removeAt(index)}>
                   Remove group
                 </Button>
@@ -91,16 +128,16 @@ export function FilterBuilder({
                 filters={children}
                 depth={depth + 1}
                 onChange={(next) => {
-                  const copy = [...filters];
-                  copy[index] = mode === "any_of" ? { any_of: next } : { all_of: next };
-                  onChange(copy);
+                  const nextInner =
+                    mode === "any_of" ? { any_of: next } : { all_of: next };
+                  setAt(index, wrapNot(nextInner, negated));
                 }}
               />
             </div>
           );
         }
 
-        const pred = (raw ?? {}) as Predicate;
+        const pred = (inner ?? {}) as Predicate;
         const fieldMeta = dimFields.find((f) => f.name === pred.field);
         const ops = opsForFieldType(fieldMeta?.type);
         const needsValue = !NULL_OPS.has(pred.op);
@@ -110,11 +147,12 @@ export function FilterBuilder({
             key={index}
             className="flex flex-wrap items-center gap-2"
             data-testid="filter-row"
+            role="treeitem"
           >
             <Select
               value={pred.field}
               onValueChange={(field) =>
-                updateAt(index, { ...pred, field, op: "eq", value: "" })
+                setAt(index, wrapNot({ ...pred, field, op: "eq", value: "" }, negated))
               }
             >
               <SelectTrigger className="w-40" aria-label="Filter field">
@@ -132,11 +170,17 @@ export function FilterBuilder({
             <Select
               value={pred.op}
               onValueChange={(op) =>
-                updateAt(index, {
-                  ...pred,
-                  op,
-                  value: NULL_OPS.has(op) ? undefined : pred.value,
-                })
+                setAt(
+                  index,
+                  wrapNot(
+                    {
+                      ...pred,
+                      op,
+                      value: NULL_OPS.has(op) ? undefined : pred.value,
+                    },
+                    negated,
+                  ),
+                )
               }
             >
               <SelectTrigger className="w-36" aria-label="Filter operator">
@@ -153,7 +197,9 @@ export function FilterBuilder({
             {needsValue && fieldMeta?.type === "enum" && fieldMeta.values ? (
               <Select
                 value={String(pred.value ?? "")}
-                onValueChange={(value) => updateAt(index, { ...pred, value })}
+                onValueChange={(value) =>
+                  setAt(index, wrapNot({ ...pred, value }, negated))
+                }
               >
                 <SelectTrigger className="w-40" aria-label="Filter value">
                   <SelectValue placeholder="Value" />
@@ -170,7 +216,7 @@ export function FilterBuilder({
               <Select
                 value={String(pred.value ?? "true")}
                 onValueChange={(value) =>
-                  updateAt(index, { ...pred, value: value === "true" })
+                  setAt(index, wrapNot({ ...pred, value: value === "true" }, negated))
                 }
               >
                 <SelectTrigger className="w-28" aria-label="Boolean value">
@@ -185,10 +231,21 @@ export function FilterBuilder({
               <Input
                 className="w-40"
                 value={String(pred.value ?? "")}
-                onChange={(e) => updateAt(index, { ...pred, value: e.target.value })}
+                onChange={(e) =>
+                  setAt(index, wrapNot({ ...pred, value: e.target.value }, negated))
+                }
                 aria-label="Filter value"
               />
             ) : null}
+            <label className="flex items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={negated}
+                onChange={() => setAt(index, wrapNot(pred, !negated))}
+                aria-label="Negate condition"
+              />
+              Negate
+            </label>
             <Button size="sm" variant="ghost" onClick={() => removeAt(index)}>
               Remove
             </Button>

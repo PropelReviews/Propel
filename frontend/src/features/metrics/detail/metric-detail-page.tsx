@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { parse as parseYaml } from "yaml";
 
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -29,6 +30,7 @@ import {
   isAdvancedDocument,
   parseYamlLoose,
 } from "@/features/metrics/document/advanced";
+import { PreviewPanel } from "@/features/metrics/preview/preview-panel";
 
 type LoadState =
   | { status: "loading" }
@@ -228,9 +230,7 @@ export function MetricDetailPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="definition">Definition</TabsTrigger>
-          <TabsTrigger value="preview" disabled>
-            Preview
-          </TabsTrigger>
+          <TabsTrigger value="preview">Preview</TabsTrigger>
           <TabsTrigger value="versions">Versions</TabsTrigger>
         </TabsList>
 
@@ -310,7 +310,25 @@ export function MetricDetailPage() {
         </TabsContent>
 
         <TabsContent value="preview" className="mt-6">
-          <p className="text-muted-foreground text-sm">Preview arrives in M5.3.</p>
+          {token && tenant ? (
+            <PreviewPanel
+              token={token}
+              tenantId={tenant.id}
+              doc={(() => {
+                try {
+                  const parsed = parseYaml(detail.yaml);
+                  if (parsed && typeof parsed === "object") {
+                    return parsed as Record<string, unknown>;
+                  }
+                } catch {
+                  /* fall through */
+                }
+                return (detail.resolved_json as Record<string, unknown> | null) ?? {};
+              })()}
+            />
+          ) : (
+            <p className="text-muted-foreground text-sm">Sign in to run preview.</p>
+          )}
         </TabsContent>
 
         <TabsContent value="versions" className="mt-6 space-y-4">

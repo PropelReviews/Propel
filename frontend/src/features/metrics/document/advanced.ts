@@ -27,10 +27,8 @@ function filtersContainSql(filters: unknown): boolean {
 }
 
 export function parseYamlLoose(yamlText: string): Record<string, unknown> | null {
-  // Lightweight parse for display flags only — full YAML round-trip lands in M5.2.
-  // Prefer server resolved_json when available; this is a best-effort fallback.
+  // Lightweight scan for advanced/sql markers when full YAML parse isn't needed.
   try {
-    // Dynamic import avoided; use a minimal line scan for advanced/sql markers.
     if (/^\s*advanced:\s*true\s*$/m.test(yamlText))
       return { metadata: { advanced: true } };
     if (/type:\s*sql\b/.test(yamlText) || /\bsql:\s*[|>]/.test(yamlText)) {
