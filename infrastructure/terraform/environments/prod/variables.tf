@@ -39,7 +39,7 @@ variable "db_min_acu" {
 
 variable "db_max_acu" {
   type    = number
-  default = 4
+  default = 2
 }
 
 variable "db_engine_version" {
@@ -56,7 +56,7 @@ variable "api_image_tag" {
 
 variable "api_desired_count" {
   type    = number
-  default = 2
+  default = 1
 }
 
 variable "app_environment" {

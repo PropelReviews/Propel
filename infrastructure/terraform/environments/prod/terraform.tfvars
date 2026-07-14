@@ -11,7 +11,12 @@ api_subdomain     = "api"
 app_subdomain     = "app"
 dagster_subdomain = "dagster"
 
+# Aurora Serverless v2: min stays at 0.5 ACU. Scale-to-zero (min=0) is blocked
+# while PostHog CDC logical replication is enabled. Cap max at 2 ACU to match
+# the previous beta sizing and limit peak RDS spend.
 db_min_acu        = 0.5
-db_max_acu        = 4
+db_max_acu        = 2
 db_engine_version = "18.3"
-api_desired_count = 2
+# Single API task is enough at current traffic; ECS still does a rolling replace
+# (default maxPercent=200) so deploys stay zero-downtime.
+api_desired_count = 1
