@@ -272,8 +272,38 @@ def _validate_measure(
             file=file,
         )
 
-    if mtype in {"ratio", "formula"}:
+    if mtype == "ratio":
         return  # graph + derived checks elsewhere; entity optional
+
+    if mtype == "formula":
+        from propel_metrics.expr.parse import (
+            FormulaSyntaxError,
+            collect_names,
+            parse_expression,
+        )
+
+        expression = measure.get("expression")
+        inputs = measure.get("inputs") or {}
+        if isinstance(expression, str) and expression.strip():
+            try:
+                tree = parse_expression(expression)
+            except FormulaSyntaxError as exc:
+                result.error(
+                    "E_FORMULA_SYNTAX",
+                    f"{path}.expression",
+                    str(exc),
+                    file=file,
+                )
+                return
+            unknown = collect_names(tree) - set(inputs)
+            if unknown:
+                result.error(
+                    "E_FORMULA_UNKNOWN_INPUT",
+                    f"{path}.expression",
+                    f"unknown input name(s): {sorted(unknown)}",
+                    file=file,
+                )
+        return
 
     if not entity:
         result.error(

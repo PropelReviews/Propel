@@ -1,0 +1,12 @@
+version: 2
+
+models:
+  - name: dim_step_spine
+    description: >
+      Shared day/week step spine for rolling-window metric models (M3).
+      Horizon controlled by dbt var history_days (default 730).
+    columns:
+      - name: step_date
+        data_tests: [not_null]
+      - name: step
+        data_tests: [not_null]

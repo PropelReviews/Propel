@@ -5,8 +5,8 @@ metadata:
   id: propel.change_failure_rate
   name: Change Failure Rate
   description: >
-    Share of merged PRs whose title matches the revert heuristic. Validated in
-    M1; ratio codegen lands in M3 — not compiled by M2.
+    Share of merged PRs whose title matches the revert heuristic (ratio of
+    propel.reverted_prs / propel.merged_prs).
   tags: [dora]
   status: active
   version: 1
