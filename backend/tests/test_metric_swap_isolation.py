@@ -99,3 +99,7 @@ async def test_swap_under_repeatable_read_sees_single_version(db_engine):
             )
         ).fetchall()
     assert {r[0] for r in rows} == {"2"}
+
+    # Do not leave analytics objects around for other suites' DROP SCHEMA.
+    async with db_engine.begin() as conn:
+        await conn.execute(text("DROP TABLE IF EXISTS analytics.fct_metric_values"))
