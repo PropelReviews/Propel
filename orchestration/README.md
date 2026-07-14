@@ -65,6 +65,7 @@ orchestration/
   workspace.yaml                      code location -> propel_orchestration.definitions
   scripts/prepare_dagster_db.py       creates the `dagster` schema, prints DAGSTER_PG_URL
   run_launcher_ecs.yaml               PropelEcsRunLauncher config (prod ECS only)
+  tests/test_definitions.py           CI: Definitions.get_repository_def() (catches bad AssetSpecs)
   propel_orchestration/
     ecs_run_launcher.py               prepends /entrypoint.sh to EcsRunLauncher commands
     definitions.py                    Definitions(assets, jobs, schedules, sensors, resources)

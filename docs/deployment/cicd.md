@@ -33,7 +33,7 @@ page. Each deploy job sets `environment.url` to `https://propel.ninja`.
 | Frontend checks | ESLint, Prettier, `tsc`, Vitest (unit + Playwright browser), both Vite builds, `npm audit --audit-level=critical` |
 | Scripts tests | Zitadel bootstrap unit tests, `bash -n` on deploy/rollback scripts |
 | Workflow + repo lint | [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` |
-| Orchestration checks | Install Dagster + backend runtime, `compileall`, import job modules |
+| Orchestration checks | Install Dagster + backend runtime, `compileall`, import job modules, load Definitions (`get_repository_def`) |
 | Docker API image | Build `backend.prod.Dockerfile` (no push) |
 | **CI success** | Aggregate gate — green only if every job above succeeded |
 
