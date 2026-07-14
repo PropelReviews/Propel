@@ -10,8 +10,10 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from propel_metrics.resolve.lifecycle import (
+    DraftConflictError,
     activate,
     archive,
+    classify_yaml_change,
     repin,
     save_draft,
     validate_yaml_text,
@@ -365,18 +367,56 @@ async def create_draft(
     yaml_text: str,
     *,
     created_by: str,
+    expected_version: int | None = None,
+    expected_revision: int | None = None,
 ) -> StoredDefinition:
     await ensure_system_imported(session)
     mem, sql = await _hydrate(session, org_slug)
     try:
         row = save_draft(
-            mem, org_id=org_slug, yaml_text=yaml_text, created_by=created_by
+            mem,
+            org_id=org_slug,
+            yaml_text=yaml_text,
+            created_by=created_by,
+            expected_version=expected_version,
+            expected_revision=expected_revision,
         )
+    except DraftConflictError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "DRAFT_CONFLICT",
+                "message": str(exc),
+                "current_version": exc.current.version,
+                "current_revision": exc.current.revision,
+                "updated_by": exc.current.created_by,
+            },
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     await _persist(sql, mem, [org_slug, SYSTEM_ORG])
     await session.commit()
     return row
+
+
+async def classify_definition(
+    session: AsyncSession,
+    org_slug: str,
+    yaml_text: str,
+    *,
+    previous_version: int | None = None,
+) -> dict[str, Any]:
+    await ensure_system_imported(session)
+    mem, _sql = await _hydrate(session, org_slug)
+    try:
+        return classify_yaml_change(
+            mem,
+            org_id=org_slug,
+            yaml_text=yaml_text,
+            previous_version=previous_version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 async def activate_definition(

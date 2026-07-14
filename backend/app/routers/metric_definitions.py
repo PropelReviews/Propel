@@ -14,10 +14,13 @@ from app.db.session import get_async_session
 from app.models.user import User
 from app.schemas.metric_definitions import (
     ActivateBody,
+    ClassifyBody,
+    ClassifyResponse,
     CompileRunRead,
     DiffBody,
     DiffResponse,
     DimensionMappingSummary,
+    DraftPutBody,
     GeneratedSqlResponse,
     MetricCatalogResponse,
     MetricDefinitionRead,
@@ -162,6 +165,48 @@ async def create_metric_definition(
     )
     detail = await svc.get_definition_detail(session, ctx.tenant.slug, row.metric_id)
     return MetricDefinitionRead.model_validate(detail)
+
+
+@router.put(
+    "/tenants/{tenant_id}/metric-definitions/draft",
+    response_model=MetricDefinitionRead,
+)
+async def put_metric_definition_draft(
+    body: DraftPutBody,
+    ctx=Depends(require_permission("metrics:manage")),
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    """Autosave draft with optimistic concurrency (409 on version/revision mismatch)."""
+    row = await svc.create_draft(
+        session,
+        ctx.tenant.slug,
+        body.yaml,
+        created_by=str(user.id),
+        expected_version=body.expected_version,
+        expected_revision=body.expected_revision,
+    )
+    detail = await svc.get_definition_detail(session, ctx.tenant.slug, row.metric_id)
+    return MetricDefinitionRead.model_validate(detail)
+
+
+@router.post(
+    "/tenants/{tenant_id}/metric-definitions:classify",
+    response_model=ClassifyResponse,
+)
+async def classify_metric_definition(
+    body: ClassifyBody,
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return ClassifyResponse.model_validate(
+        await svc.classify_definition(
+            session,
+            ctx.tenant.slug,
+            body.yaml,
+            previous_version=body.previous_version,
+        )
+    )
 
 
 @router.post(

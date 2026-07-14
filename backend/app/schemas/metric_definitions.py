@@ -62,6 +62,25 @@ class YamlBody(BaseModel):
     yaml: str
 
 
+class DraftPutBody(BaseModel):
+    yaml: str
+    expected_version: int | None = None
+    expected_revision: int | None = None
+
+
+class ClassifyBody(BaseModel):
+    yaml: str
+    previous_version: int | None = None
+
+
+class ClassifyResponse(BaseModel):
+    kind: Literal["none", "non_semantic", "semantic"]
+    next_version: int
+    next_revision: int
+    previous_version: int | None = None
+    previous_revision: int | None = None
+
+
 class ValidateResponse(BaseModel):
     ok: bool
     errors: list[dict[str, Any]]

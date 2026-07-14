@@ -77,6 +77,9 @@ Permission `metrics:manage` (admin default) for writes; `metrics:read` for reads
 - `POST .../metric-definitions:diff` — resolved-JSON structural diff
 - `POST .../metric-definitions:validate` — pure, structured errors
 - `POST .../metric-definitions` — create draft
+- `PUT .../metric-definitions/draft` — autosave with optimistic
+  `expected_version` / `expected_revision` (409 on conflict)
+- `POST .../metric-definitions:classify` — semantic vs revision dry-run
 - `POST .../metric-definitions:activate?metric_id=`
 - `POST .../metric-definitions:repin?metric_id=`
 - `POST .../metric-definitions:archive?metric_id=`
