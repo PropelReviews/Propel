@@ -15,7 +15,11 @@ entities:
       id: { type: string, role: key }
       tenant_id: { type: string, role: tenant_key }
       repo: { type: string, role: dimension, cardinality_estimate: 200 }
-      author_id: { type: string, role: dimension, cardinality_estimate: 2000 }
+      author_id:
+        type: string
+        role: dimension
+        cardinality_estimate: 2000
+        person: true
       state:
         type: enum
         values: [open, merged, closed]
@@ -48,7 +52,11 @@ entities:
       id: { type: string, role: key }
       tenant_id: { type: string, role: tenant_key }
       repo: { type: string, role: dimension, cardinality_estimate: 200 }
-      reviewer_id: { type: string, role: dimension, cardinality_estimate: 2000 }
+      reviewer_id:
+        type: string
+        role: dimension
+        cardinality_estimate: 2000
+        person: true
       pull_request_number: { type: integer, role: dimension }
       submitted_at: { type: timestamp, role: event_time }
 

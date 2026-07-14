@@ -57,6 +57,10 @@
                 "cardinality_estimate": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "person": {
+                  "type": "boolean",
+                  "description": "Field identifies a person; used for visibility guardrails in the authoring UI."
                 }
               },
               "allOf": [

@@ -68,15 +68,22 @@ local push/pull round-trips and tests.
 
 Permission `metrics:manage` (admin default) for writes; `metrics:read` for reads.
 
-- `GET .../metric-definitions` — resolved enrollment summary
+- `GET .../metric-definitions` — enriched catalog rows (enrollment + drafts/broken;
+  `?referencable=1` for operand pickers; optional `entity=`)
+- `GET .../metric-catalog` — entity catalog + org virtual dimensions (`person` field metadata)
 - `GET .../metric-definitions/detail?metric_id=`
+- `GET .../metric-definitions/versions?metric_id=` — version history
+- `GET .../metric-definitions/sql?metric_id=` — generated SQL artifact
+- `POST .../metric-definitions:diff` — resolved-JSON structural diff
 - `POST .../metric-definitions:validate` — pure, structured errors
 - `POST .../metric-definitions` — create draft
 - `POST .../metric-definitions:activate?metric_id=`
 - `POST .../metric-definitions:repin?metric_id=`
 - `POST .../metric-definitions:archive?metric_id=`
 - `GET/PUT .../metric-set`
-- `GET/PUT .../dimension-mappings`
+- `GET .../dimension-mappings` — list mappings
+- `GET/PUT .../dimension-mappings` (detail via `?mapping_id=` on GET detail path)
+- `GET .../metric-health` — broken metrics, notices, recent compile runs
 - `GET .../metric-compile-runs`
 
 ## Compile source

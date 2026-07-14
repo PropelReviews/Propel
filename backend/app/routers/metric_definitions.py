@@ -1,4 +1,4 @@
-"""Tenant-scoped metric definition management (M4).
+"""Tenant-scoped metric definition management (M4 + M5 read/authoring APIs).
 
 Uses query param ``metric_id`` for dotted ids (e.g. propel.cycle_time).
 """
@@ -15,9 +15,16 @@ from app.models.user import User
 from app.schemas.metric_definitions import (
     ActivateBody,
     CompileRunRead,
+    DiffBody,
+    DiffResponse,
+    DimensionMappingSummary,
+    GeneratedSqlResponse,
+    MetricCatalogResponse,
     MetricDefinitionRead,
+    MetricHealthSummary,
     MetricSetRead,
     MetricSummaryRead,
+    MetricVersionRead,
     ValidateResponse,
     YamlBody,
 )
@@ -31,11 +38,35 @@ router = APIRouter(prefix="/api/v1", tags=["metric-definitions"])
     response_model=list[MetricSummaryRead],
 )
 async def list_metric_definitions(
+    referencable: bool = Query(default=False),
+    entity: str | None = Query(default=None),
+    include_drafts: bool = Query(default=True),
+    include_broken: bool = Query(default=True),
     ctx=Depends(require_permission("metrics:read")),
     session: AsyncSession = Depends(get_async_session),
 ):
-    rows = await svc.list_resolved_summaries(session, ctx.tenant.slug)
+    rows = await svc.list_resolved_summaries(
+        session,
+        ctx.tenant.slug,
+        referencable=referencable,
+        entity=entity,
+        include_drafts=include_drafts,
+        include_broken=include_broken,
+    )
     return [MetricSummaryRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/tenants/{tenant_id}/metric-catalog",
+    response_model=MetricCatalogResponse,
+)
+async def get_metric_catalog(
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return MetricCatalogResponse.model_validate(
+        await svc.get_metric_catalog(session, ctx.tenant.slug)
+    )
 
 
 @router.get(
@@ -49,6 +80,55 @@ async def get_metric_definition(
 ):
     detail = await svc.get_definition_detail(session, ctx.tenant.slug, metric_id)
     return MetricDefinitionRead.model_validate(detail)
+
+
+@router.get(
+    "/tenants/{tenant_id}/metric-definitions/versions",
+    response_model=list[MetricVersionRead],
+)
+async def list_metric_definition_versions(
+    metric_id: str = Query(...),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    rows = await svc.list_definition_versions(session, ctx.tenant.slug, metric_id)
+    return [MetricVersionRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/tenants/{tenant_id}/metric-definitions/sql",
+    response_model=GeneratedSqlResponse,
+)
+async def get_metric_generated_sql(
+    metric_id: str = Query(...),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return GeneratedSqlResponse.model_validate(
+        await svc.get_generated_sql(session, ctx.tenant.slug, metric_id)
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/metric-definitions:diff",
+    response_model=DiffResponse,
+)
+async def diff_metric_definitions(
+    body: DiffBody,
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return DiffResponse.model_validate(
+        await svc.diff_definitions(
+            session,
+            ctx.tenant.slug,
+            metric_id=body.metric_id,
+            from_version=body.from_version,
+            to_version=body.to_version,
+            from_yaml=body.from_yaml,
+            to_yaml=body.to_yaml,
+        )
+    )
 
 
 @router.post(
@@ -174,6 +254,18 @@ async def put_metric_set(
     )
 
 
+@router.get(
+    "/tenants/{tenant_id}/dimension-mappings",
+    response_model=list[DimensionMappingSummary],
+)
+async def list_dimension_mappings(
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    rows = await svc.list_dimension_mappings(session, ctx.tenant.slug)
+    return [DimensionMappingSummary.model_validate(r) for r in rows]
+
+
 @router.get("/tenants/{tenant_id}/dimension-mappings/detail")
 async def get_dimension_mapping(
     mapping_id: str = Query(...),
@@ -194,6 +286,19 @@ async def put_dimension_mapping(
         session, ctx.tenant.slug, body.yaml, created_by=str(user.id)
     )
     return await svc.get_dimension_mapping(session, ctx.tenant.slug, row.metric_id)
+
+
+@router.get(
+    "/tenants/{tenant_id}/metric-health",
+    response_model=MetricHealthSummary,
+)
+async def get_metric_health(
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return MetricHealthSummary.model_validate(
+        await svc.get_metric_health(session, ctx.tenant.slug)
+    )
 
 
 @router.get(
