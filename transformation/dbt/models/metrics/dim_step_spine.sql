@@ -3,24 +3,14 @@
 
 {{ config(materialized='table') }}
 
-with bounds as (
-
-    select
-        (current_date - ({{ var('history_days', 730) }} || ' days')::interval)::date
-            as start_date,
-        current_date as end_date
-
-),
-
-day_spine as (
+with day_spine as (
 
     select
         gs::date as step_date,
         'day'::text as step
-    from bounds
-    cross join lateral generate_series(
-        bounds.start_date,
-        bounds.end_date,
+    from generate_series(
+        (current_date - ({{ var('history_days', 730) }} || ' days')::interval)::date,
+        current_date,
         interval '1 day'
     ) as gs
 
@@ -29,14 +19,9 @@ day_spine as (
 week_spine as (
 
     select
-        date_trunc('week', gs)::date as step_date,
+        date_trunc('week', step_date)::date as step_date,
         'week'::text as step
-    from bounds
-    cross join lateral generate_series(
-        bounds.start_date,
-        bounds.end_date,
-        interval '1 day'
-    ) as gs
+    from day_spine
     group by 1
 
 )

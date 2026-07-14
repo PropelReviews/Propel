@@ -25,16 +25,15 @@ models:
     canonical:
       +materialized: view
     metrics:
+      +materialized: table
       generated:
         +materialized: table
-        # Incremental delete+insert issues DELETEs. When a Postgres publication
-        # publishes deletes (e.g. PostHog warehouse CDC), tables need a replica
-        # identity or the delete fails. Set FULL before/after each run so both
-        # existing tables and freshly created ones are covered.
+        # Incremental delete+insert (legacy marts / older metric models) needs
+        # REPLICA IDENTITY FULL under PostHog CDC. Skip for views (fct_metric_values).
         +pre-hook:
-          - "{% if execute %}alter table if exists {{ this }} replica identity full;{% endif %}"
+          - "{% if execute and model.config.materialized != 'view' %}alter table if exists {{ this }} replica identity full;{% endif %}"
         +post-hook:
-          - "alter table {{ this }} replica identity full"
+          - "{% if model.config.materialized != 'view' %}alter table {{ this }} replica identity full;{% endif %}"
     marts:
       +materialized: table
       # Incremental delete+insert issues DELETEs. When a Postgres publication
