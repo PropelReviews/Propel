@@ -51,7 +51,7 @@ activity as (
     from runs
     where
         updated_at is not null
-        and lower(coalesce(status, '')) = 'completed'
+        and lower(coalesce(run_status, '')) = 'completed'
 
 )
 

@@ -13,7 +13,7 @@ select distinct on (tenant_id, payload ->> 'node_id')
     payload -> 'user' ->> 'login' as author_login,
     (payload ->> 'pull_request_number')::int as pull_request_number,
     (payload ->> 'pull_request_review_id')::bigint as pull_request_review_id,
-    payload ->> 'path' as path,
+    payload ->> 'path' as file_path,
     nullif(concat(payload ->> 'org', '/', payload ->> 'repo'), '/') as repo,
     fetched_at
 from {{ source('propel', 'github_review_comments') }}

@@ -3,7 +3,7 @@
 select distinct on (tenant_id, payload ->> 'id')
     tenant_id,
     payload ->> 'id' as project_id,
-    payload ->> 'name' as name,
+    payload ->> 'name' as project_name,
     payload ->> 'url' as url,
     (payload ->> 'createdAt')::timestamptz as created_at,
     (payload ->> 'updatedAt')::timestamptz as updated_at,

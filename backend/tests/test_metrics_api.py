@@ -125,7 +125,8 @@ async def analytics_tables(db_engine):
         )
         await conn.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_description_edits_daily ("
+                "CREATE TABLE IF NOT EXISTS "
+                "analytics.fct_linear_description_edits_daily ("
                 "tenant_id uuid NOT NULL, "
                 "activity_date date NOT NULL, "
                 "description_edits int NOT NULL)"

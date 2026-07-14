@@ -174,9 +174,7 @@ function WorkflowRunsChartInner({ tenantId }: { tenantId: string }) {
         setState({
           status: "error",
           message:
-            error instanceof ApiError
-              ? error.message
-              : "Could not load workflow runs.",
+            error instanceof ApiError ? error.message : "Could not load workflow runs.",
         });
       }
     })();
@@ -249,9 +247,7 @@ function LinearIssueActivityChartInner({ tenantId }: { tenantId: string }) {
         setState({
           status: "error",
           message:
-            error instanceof ApiError
-              ? error.message
-              : "Could not load Linear issues.",
+            error instanceof ApiError ? error.message : "Could not load Linear issues.",
         });
       }
     })();
