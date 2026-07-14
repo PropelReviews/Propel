@@ -27,8 +27,15 @@ _SIMPLE_TYPES = {
     "interval",
 }
 
-# Catalog dimensions that codegen emits as native columns (no mapping required).
-_NATIVE_DIMS = frozenset({"repo"})
+def _all_catalog_dims() -> frozenset[str]:
+    """Entity fields with role=dimension (native columns; no mapping required)."""
+    catalog = load_catalog()
+    out: set[str] = set()
+    for ent in (catalog.get("entities") or {}).values():
+        for name, meta in (ent.get("fields") or {}).items():
+            if isinstance(meta, dict) and meta.get("role") == "dimension":
+                out.add(name)
+    return frozenset(out)
 
 
 def _dbt_model(entity: str) -> str:
@@ -147,12 +154,13 @@ def _dimensions(
 ) -> tuple[str, ...]:
     dims = tuple(spec.get("dimensions") or [])
     mapped_by_name = mapped_by_name or {}
+    catalog_dims = _all_catalog_dims()
     for dim in dims:
-        if dim in _NATIVE_DIMS or dim in mapped_by_name:
+        if dim in catalog_dims or dim in mapped_by_name:
             continue
         raise ValueError(
-            f"unsupported dimension {dim!r}; native={sorted(_NATIVE_DIMS)} "
-            f"mapped={sorted(mapped_by_name)}"
+            f"unsupported dimension {dim!r}; "
+            f"catalog={sorted(catalog_dims)} mapped={sorted(mapped_by_name)}"
         )
     return dims
 

@@ -130,24 +130,22 @@ export function ActivateReviewSheet({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Activate metric</DialogTitle>
+          <DialogTitle>Publish metric</DialogTitle>
           <DialogDescription>
-            Review the change class before activating. Semantic edits mint a new version
-            and recompute history; display-only edits bump a revision.
+            Review what will change before publishing.
           </DialogDescription>
         </DialogHeader>
         {loading && !kind && (
-          <p className="text-muted-foreground text-sm">Classifying…</p>
+          <p className="text-muted-foreground text-sm">Checking your changes…</p>
         )}
         {kind && (
           <div className="space-y-3 text-sm">
             <p>
-              <span className="font-medium">Classification:</span>{" "}
               {kind === "semantic"
-                ? `Semantic change → version ${nextVersion}, full history recompute`
+                ? `This changes how the metric is calculated. Publishing creates version ${nextVersion} and recalculates history.`
                 : kind === "non_semantic"
-                  ? "Display-only change → revision bump, no recompute"
-                  : "No change"}
+                  ? "Display-only change (name, description, formatting). Publishing updates the metric in place — no recalculation needed."
+                  : "Nothing to publish — the metric already matches this definition."}
             </p>
             {diff && (
               <ul className="bg-muted/40 max-h-48 space-y-1 overflow-auto rounded-lg p-3 font-mono text-xs">
@@ -170,7 +168,7 @@ export function ActivateReviewSheet({
             Cancel
           </Button>
           <Button disabled={loading || !kind} onClick={() => void confirm()}>
-            {loading ? "Working…" : "Confirm activate"}
+            {loading ? "Working…" : "Publish"}
           </Button>
         </DialogFooter>
       </DialogContent>

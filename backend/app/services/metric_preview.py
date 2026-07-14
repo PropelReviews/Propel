@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import copy
 import time
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import yaml
 from fastapi import HTTPException, status
@@ -18,6 +21,7 @@ from propel_metrics.codegen.preview import render_preview_sql
 from propel_metrics.ir.build import build_compiled_plan
 from propel_metrics.resolve import ResolvedMetric, apply_extends, content_hash
 from propel_metrics.resolve.lifecycle import validate_yaml_text
+from propel_metrics.resolve.org import load_org_mappings
 from propel_metrics.resolve.params import bind_params
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,25 +51,40 @@ async def _schema_has_relation(
     return result.scalar() is not None
 
 
-async def _pick_schema(session: AsyncSession, plan_sql: str) -> str | None:
-    """Choose a schema where rewritten refs exist; None → dry-run."""
-    # Collect relation names from rewritten SQL of form schema.name
-    # We probe for pull_request / dim_step_spine as canaries.
+async def _pick_schema(
+    session: AsyncSession, *, relation_names: set[str]
+) -> str | None:
+    """Choose a schema where required relations exist; None → dry-run."""
+    canaries = relation_names or {"pull_request"}
     for schema in _RELATION_SCHEMAS:
-        if await _schema_has_relation(session, schema, "pull_request"):
-            return schema
-        if "dim_step_spine" in plan_sql and await _schema_has_relation(
-            session, schema, "dim_step_spine"
-        ):
-            return schema
+        for name in canaries:
+            if await _schema_has_relation(session, schema, name):
+                return schema
     return None
+
+
+def _jsonable_cell(value: Any) -> Any:
+    """Coerce asyncpg/SQLAlchemy cell values to JSON-safe primitives."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, (bytes, memoryview)):
+        return bytes(value).decode("utf-8", errors="replace")
+    return str(value)
 
 
 async def _ic_identity_keys(
     session: AsyncSession, *, tenant_id: str, user_id: str
 ) -> set[str]:
     """Return external ids/logins for the user that may appear in person dims."""
-    from uuid import UUID
+    from uuid import UUID as _UUID
 
     from sqlalchemy import select
 
@@ -73,8 +92,8 @@ async def _ic_identity_keys(
     from app.models.external_identity import ExternalIdentity
 
     try:
-        uid = UUID(user_id)
-        tid = UUID(tenant_id)
+        uid = _UUID(user_id)
+        tid = _UUID(tenant_id)
     except ValueError:
         return set()
     result = await session.execute(
@@ -169,45 +188,72 @@ async def preview_definition(
             )
         by_docs[mid] = doc
 
-        flat = (
-            apply_extends(doc, by_docs)
-            if (doc.get("spec") or {}).get("extends")
-            else doc
-        )
-        flat = copy.deepcopy(flat)
-        flat["spec"] = bind_params(flat["spec"], None)
-
-        by_resolved: dict[str, ResolvedMetric] = {}
-        for rid, rdoc in by_docs.items():
-            rflat = (
-                apply_extends(rdoc, by_docs)
-                if (rdoc.get("spec") or {}).get("extends")
-                else rdoc
+        try:
+            flat = (
+                apply_extends(doc, by_docs)
+                if (doc.get("spec") or {}).get("extends")
+                else doc
             )
-            rspec = bind_params(copy.deepcopy(rflat["spec"]), None)
-            meta = rflat.get("metadata") or {}
-            by_resolved[rid] = ResolvedMetric(
-                metric_id=rid,
-                name=meta.get("name", rid),
-                status=meta.get("status", "active"),
+            flat = copy.deepcopy(flat)
+            flat["spec"] = bind_params(flat["spec"], None)
+
+            by_resolved: dict[str, ResolvedMetric] = {}
+            for rid, rdoc in by_docs.items():
+                rflat = (
+                    apply_extends(rdoc, by_docs)
+                    if (rdoc.get("spec") or {}).get("extends")
+                    else rdoc
+                )
+                rspec = bind_params(copy.deepcopy(rflat["spec"]), None)
+                meta = rflat.get("metadata") or {}
+                by_resolved[rid] = ResolvedMetric(
+                    metric_id=rid,
+                    name=meta.get("name", rid),
+                    status=meta.get("status", "active"),
+                    version=int(meta.get("version", 1)),
+                    definition_version=content_hash(rspec),
+                    spec=rspec,
+                    source_path=Path(f"<preview:{rid}>"),
+                )
+            meta = flat.get("metadata") or {}
+            by_resolved[mid] = ResolvedMetric(
+                metric_id=mid,
+                name=meta.get("name", mid),
+                status=meta.get("status", "draft"),
                 version=int(meta.get("version", 1)),
-                definition_version=content_hash(rspec),
-                spec=rspec,
-                source_path=Path(f"<preview:{rid}>"),
+                definition_version=content_hash(flat["spec"]),
+                spec=flat["spec"],
+                source_path=Path(f"<preview:{mid}>"),
             )
-        meta = flat.get("metadata") or {}
-        by_resolved[mid] = ResolvedMetric(
-            metric_id=mid,
-            name=meta.get("name", mid),
-            status=meta.get("status", "draft"),
-            version=int(meta.get("version", 1)),
-            definition_version=content_hash(flat["spec"]),
-            spec=flat["spec"],
-            source_path=Path(f"<preview:{mid}>"),
-        )
 
-        plan = build_compiled_plan(by_resolved[mid], by_resolved)
-        schema = await _pick_schema(session, "")
+            mapped = load_org_mappings(mem, org_slug)
+            # Index is by to_dimension name and mapping id; keep name keys only.
+            mapped_by_name = {
+                name: dim for name, dim in mapped.items() if name == dim.name
+            }
+            plan = build_compiled_plan(
+                by_resolved[mid],
+                by_resolved,
+                mapped_dimensions=mapped_by_name or None,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001 — surface as JSON 400 for the UI
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "PREVIEW_COMPILE_FAILED",
+                    "message": str(exc),
+                },
+            ) from exc
+
+        relation_names: set[str] = set()
+        for agg in plan.aggregations.values():
+            relation_names.add(agg.operand.dbt_model)
+        if plan.windows:
+            relation_names.add("dim_step_spine")
+
+        schema = await _pick_schema(session, relation_names=relation_names)
         relation_schema = schema or "analytics"
 
         t0 = time.perf_counter()
@@ -239,7 +285,7 @@ async def preview_definition(
                     await session.execute(text("SET LOCAL statement_timeout = '10s'"))
                     result = await session.execute(text(preview["sql"]))
                     mapping = result.mappings()
-                    fetched = [dict(r) for r in mapping.fetchall()]
+                    fetched = [_jsonable_cell_row(dict(r)) for r in mapping.fetchall()]
                     rows = fetched
                     executed = True
                     if len(rows) >= int(preview["row_limit"]):
@@ -373,3 +419,7 @@ async def preview_definition(
         }
     finally:
         _single_flight.pop(user_id, None)
+
+
+def _jsonable_cell_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {k: _jsonable_cell(v) for k, v in row.items()}

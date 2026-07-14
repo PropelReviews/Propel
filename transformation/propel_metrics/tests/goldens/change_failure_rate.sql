@@ -41,8 +41,8 @@ grain_day as (
  with num as (
  select
  r.tenant_id,
- r.dim_repo as dim_repo,
- r.dim_team as dim_team,
+ ''::text as dim_repo,
+ ''::text as dim_team,
  (date_trunc('day', r.t at time zone 'UTC')) as bucket,
  count(*)::float8 as v
  from num_rows r
@@ -51,8 +51,8 @@ grain_day as (
  den as (
  select
  r.tenant_id,
- r.dim_repo as dim_repo,
- r.dim_team as dim_team,
+ ''::text as dim_repo,
+ ''::text as dim_team,
  (date_trunc('day', r.t at time zone 'UTC')) as bucket,
  count(*)::float8 as v
  from den_rows r
@@ -80,8 +80,8 @@ grain_week as (
  with num as (
  select
  r.tenant_id,
- r.dim_repo as dim_repo,
- r.dim_team as dim_team,
+ ''::text as dim_repo,
+ ''::text as dim_team,
  (date_trunc('week', r.t at time zone 'UTC')) as bucket,
  count(*)::float8 as v
  from num_rows r
@@ -90,8 +90,8 @@ grain_week as (
  den as (
  select
  r.tenant_id,
- r.dim_repo as dim_repo,
- r.dim_team as dim_team,
+ ''::text as dim_repo,
+ ''::text as dim_team,
  (date_trunc('week', r.t at time zone 'UTC')) as bucket,
  count(*)::float8 as v
  from den_rows r
@@ -119,8 +119,8 @@ grain_month as (
  with num as (
  select
  r.tenant_id,
- r.dim_repo as dim_repo,
- r.dim_team as dim_team,
+ ''::text as dim_repo,
+ ''::text as dim_team,
  (date_trunc('month', r.t at time zone 'UTC')) as bucket,
  count(*)::float8 as v
  from num_rows r
@@ -129,8 +129,8 @@ grain_month as (
  den as (
  select
  r.tenant_id,
- r.dim_repo as dim_repo,
- r.dim_team as dim_team,
+ ''::text as dim_repo,
+ ''::text as dim_team,
  (date_trunc('month', r.t at time zone 'UTC')) as bucket,
  count(*)::float8 as v
  from den_rows r

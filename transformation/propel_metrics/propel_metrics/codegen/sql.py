@@ -108,10 +108,21 @@ def _mapped_case_sql(mapped: MappedDim, *, alias: str = "base") -> str:
     return f"(case {field} {whens} {else_sql} end)"
 
 
+def _plan_dim_columns(dimensions: tuple[str, ...]) -> tuple[str, ...]:
+    """Base serving columns plus any extra dims active on this plan.
+
+    Shipped metrics keep ``(repo, team)`` only so ``fct_metric_values``
+    ``SELECT *`` unions stay stable. Preview / org metrics may add catalog
+    dims (e.g. ``author_id``) as trailing columns.
+    """
+    extras = tuple(d for d in dimensions if d not in KNOWN_DIM_COLUMNS)
+    return KNOWN_DIM_COLUMNS + extras
+
+
 def _active_dims(dimensions: tuple[str, ...]) -> tuple[str, ...]:
-    """Known serving columns that are active for this plan (stable order)."""
+    """Plan dim columns that are active (stable order)."""
     active = set(dimensions)
-    return tuple(d for d in KNOWN_DIM_COLUMNS if d in active)
+    return tuple(d for d in _plan_dim_columns(dimensions) if d in active)
 
 
 def _dim_select_list(
@@ -120,10 +131,10 @@ def _dim_select_list(
     mapped: tuple[MappedDim, ...] = (),
     alias: str = "base",
 ) -> str:
-    """Always emit known dim columns for a stable UNION schema."""
+    """Emit plan dim columns (text) for a stable per-model schema."""
     mapped_by = {m.name: m for m in mapped}
     parts: list[str] = []
-    for name in KNOWN_DIM_COLUMNS:
+    for name in _plan_dim_columns(dimensions):
         col = _dim_col(name)
         if name not in dimensions:
             parts.append(f"''::text as {col}")
@@ -131,78 +142,87 @@ def _dim_select_list(
         if name in mapped_by:
             parts.append(f"{_mapped_case_sql(mapped_by[name], alias=alias)} as {col}")
         else:
-            parts.append(f"{alias}.{_quote_ident(name)} as {col}")
+            # Cast so boolean/int catalog fields match ''::text placeholders.
+            parts.append(f"{alias}.{_quote_ident(name)}::text as {col}")
     return ",\n        ".join(parts)
 
 
 def _dim_out_list(dimensions: tuple[str, ...], rows: str) -> str:
     parts: list[str] = []
     active = set(dimensions)
-    for name in KNOWN_DIM_COLUMNS:
+    for name in _plan_dim_columns(dimensions):
         col = _dim_col(name)
         if name in active:
             parts.append(f"coalesce({rows}.{col}, '') as {col}")
         else:
-            parts.append(f"{rows}.{col} as {col}")
+            # Constant — inactive dims are not in GROUP BY on the grouping-sets path.
+            parts.append(f"''::text as {col}")
     return ",\n    ".join(parts)
 
 
 def _dim_alias_select(alias: str, dimensions: tuple[str, ...]) -> str:
-    """Select known dims from rows alias ``r`` into aggregation CTE."""
+    """Select plan dims from rows alias ``r`` into aggregation CTE."""
     active = set(dimensions)
     parts: list[str] = []
-    for name in KNOWN_DIM_COLUMNS:
+    for name in _plan_dim_columns(dimensions):
         col = _dim_col(name)
         if name in active:
             parts.append(f"coalesce({alias}.{col}, '') as {col}")
         else:
-            parts.append(f"{alias}.{col} as {col}")
+            parts.append(f"''::text as {col}")
     return ",\n            ".join(parts)
 
 
-def _dim_names_csv() -> str:
-    return ", ".join(_dim_col(n) for n in KNOWN_DIM_COLUMNS)
+def _dim_names_csv(dimensions: tuple[str, ...]) -> str:
+    return ", ".join(_dim_col(n) for n in _plan_dim_columns(dimensions))
 
 
-def _join_using_dims(*extra: str) -> str:
-    parts = ["tenant_id", *(_dim_col(n) for n in KNOWN_DIM_COLUMNS), *extra]
+def _join_using_dims(dimensions: tuple[str, ...], *extra: str) -> str:
+    parts = [
+        "tenant_id",
+        *(_dim_col(n) for n in _plan_dim_columns(dimensions)),
+        *extra,
+    ]
     return ", ".join(parts)
 
 
 def _group_by_calendar(dimensions: tuple[str, ...], bucket_sql: str, rows: str) -> str:
     active = _active_dims(dimensions)
+    cols = _plan_dim_columns(dimensions)
     if active:
         dim_cols = ", ".join(f"{rows}.{_dim_col(d)}" for d in active)
         return f"""group by grouping sets (
     ({rows}.tenant_id, ({bucket_sql}), {dim_cols}),
     ({rows}.tenant_id, ({bucket_sql}))
 )"""
-    # No active dims: still group by known dim columns (all '') for schema stability
-    dim_cols = ", ".join(f"{rows}.{_dim_col(d)}" for d in KNOWN_DIM_COLUMNS)
+    # No active dims: still group by plan dim columns (all '') for schema stability
+    dim_cols = ", ".join(f"{rows}.{_dim_col(d)}" for d in cols)
     return f"group by {rows}.tenant_id, ({bucket_sql}), {dim_cols}"
 
 
 def _agg_group_from_r(dimensions: tuple[str, ...], bucket_sql: str) -> str:
     active = _active_dims(dimensions)
+    cols = _plan_dim_columns(dimensions)
     if active:
         dim_cols = ", ".join(f"r.{_dim_col(d)}" for d in active)
         return f"""group by grouping sets (
         (r.tenant_id, ({bucket_sql}), {dim_cols}),
         (r.tenant_id, ({bucket_sql}))
     )"""
-    dim_cols = ", ".join(f"r.{_dim_col(d)}" for d in KNOWN_DIM_COLUMNS)
+    dim_cols = ", ".join(f"r.{_dim_col(d)}" for d in cols)
     return f"group by r.tenant_id, ({bucket_sql}), {dim_cols}"
 
 
 def _window_group(dimensions: tuple[str, ...]) -> str:
     active = _active_dims(dimensions)
+    cols = _plan_dim_columns(dimensions)
     if active:
         dim_cols = ", ".join(f"r.{_dim_col(d)}" for d in active)
         return f"""group by grouping sets (
     (r.tenant_id, s.step_date, {dim_cols}),
     (r.tenant_id, s.step_date)
 )"""
-    dim_cols = ", ".join(f"r.{_dim_col(d)}" for d in KNOWN_DIM_COLUMNS)
+    dim_cols = ", ".join(f"r.{_dim_col(d)}" for d in cols)
     return f"group by r.tenant_id, s.step_date, {dim_cols}"
 
 
@@ -210,9 +230,9 @@ def _window_dim_out(dimensions: tuple[str, ...]) -> str:
     return _dim_out_list(dimensions, "r")
 
 
-def _den_dim_out() -> str:
+def _den_dim_out(dimensions: tuple[str, ...]) -> str:
     return ",\n        ".join(
-        f"den.{_dim_col(n)} as {_dim_col(n)}" for n in KNOWN_DIM_COLUMNS
+        f"den.{_dim_col(n)} as {_dim_col(n)}" for n in _plan_dim_columns(dimensions)
     )
 
 
@@ -300,8 +320,8 @@ def _ratio_grain_block(plan: CompiledPlan, grain: str) -> str:
     bs = f"date_trunc('{grain}', r.t at time zone 'UTC')"
     num_group = _agg_group_from_r(plan.dimensions, bs)
     dim_select = _dim_alias_select("r", plan.dimensions)
-    join_using = _join_using_dims("bucket")
-    dim_out = _den_dim_out()
+    join_using = _join_using_dims(plan.dimensions, "bucket")
+    dim_out = _den_dim_out(plan.dimensions)
 
     value_expr = _ratio_value_expr(plan.zero_denominator or "null")
     be = _bucket_end(grain, "den.bucket")
@@ -349,7 +369,7 @@ def _formula_grain_block(plan: CompiledPlan, grain: str) -> str:
     bs = f"date_trunc('{grain}', r.t at time zone 'UTC')"
     group = _agg_group_from_r(plan.dimensions, bs)
     dim_select = _dim_alias_select("r", plan.dimensions)
-    dims_csv = _dim_names_csv()
+    dims_csv = _dim_names_csv(plan.dimensions)
 
     input_ctes: list[str] = []
     for name in input_names:
@@ -373,11 +393,11 @@ def _formula_grain_block(plan: CompiledPlan, grain: str) -> str:
 
     columns = {n: f"in_{n}.v" for n in input_names}
     ast_sql = emit_sql(plan.expression, columns)
-    join_using = _join_using_dims("bucket")
+    join_using = _join_using_dims(plan.dimensions, "bucket")
     joins = "\n    ".join(f"left join in_{n} using ({join_using})" for n in input_names)
     be = _bucket_end(grain, "b.bucket")
     b_dims = ",\n        ".join(
-        f"b.{_dim_col(n)} as {_dim_col(n)}" for n in KNOWN_DIM_COLUMNS
+        f"b.{_dim_col(n)} as {_dim_col(n)}" for n in _plan_dim_columns(plan.dimensions)
     )
 
     return f"""grain_{grain} as (
@@ -460,8 +480,8 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
     cte = f"win_{window.days}d_{window.step}"
     group = _window_group(plan.dimensions)
     dim_select = _dim_alias_select("r", plan.dimensions)
-    dim_out = _den_dim_out()
-    join_using = _join_using_dims("bucket_end")
+    dim_out = _den_dim_out(plan.dimensions)
+    join_using = _join_using_dims(plan.dimensions, "bucket_end")
 
     value_expr = _ratio_value_expr(plan.zero_denominator or "null")
     bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
@@ -520,7 +540,7 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
     input_names = sorted(plan.aggregations.keys())
     group = _window_group(plan.dimensions)
     dim_select = _dim_alias_select("r", plan.dimensions)
-    dims_csv = _dim_names_csv()
+    dims_csv = _dim_names_csv(plan.dimensions)
 
     bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
     input_ctes: list[str] = []
@@ -550,10 +570,10 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
     buckets_sql = "\n        union\n        ".join(bucket_parts)
     columns = {n: f"in_{n}.v" for n in input_names}
     ast_sql = emit_sql(plan.expression, columns)
-    join_using = _join_using_dims("bucket_end")
+    join_using = _join_using_dims(plan.dimensions, "bucket_end")
     joins = "\n    ".join(f"left join in_{n} using ({join_using})" for n in input_names)
     b_dims = ",\n        ".join(
-        f"b.{_dim_col(n)} as {_dim_col(n)}" for n in KNOWN_DIM_COLUMNS
+        f"b.{_dim_col(n)} as {_dim_col(n)}" for n in _plan_dim_columns(plan.dimensions)
     )
 
     return f"""{cte} as (

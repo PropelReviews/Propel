@@ -30,6 +30,7 @@ import {
   isAdvancedDocument,
   parseYamlLoose,
 } from "@/features/metrics/document/advanced";
+import { MetricDefinitionSummary } from "@/features/metrics/components/metric-definition-summary";
 import { PreviewPanel } from "@/features/metrics/preview/preview-panel";
 
 type LoadState =
@@ -48,7 +49,9 @@ export function MetricDetailPage() {
   const { tenant } = useTenant();
   const canManage = usePermission("metrics:manage");
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const [defView, setDefView] = useState<"authored" | "resolved" | "sql">("authored");
+  const [defView, setDefView] = useState<"summary" | "authored" | "resolved" | "sql">(
+    "summary",
+  );
   const [sql, setSql] = useState<string | null>(null);
   const [sqlError, setSqlError] = useState<string | null>(null);
   const [diffFrom, setDiffFrom] = useState<number | null>(null);
@@ -158,8 +161,28 @@ export function MetricDetailPage() {
   }
 
   const { detail, versions } = state;
-  const meta = (detail.resolved_json?.metadata ?? {}) as Record<string, unknown>;
-  const spec = (detail.resolved_json?.spec ?? {}) as Record<string, unknown>;
+  // resolved_json usually holds the compiled query plan (aggregations,
+  // operands), not a metadata/spec document — only use it when it actually
+  // looks like a propel/v1 doc; otherwise the authored YAML is the source.
+  const summaryDoc: Record<string, unknown> = (() => {
+    const resolved = detail.resolved_json;
+    if (resolved && typeof resolved === "object" && "spec" in resolved) {
+      return resolved;
+    }
+    try {
+      const parsed = parseYaml(detail.yaml);
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* fall through to empty doc */
+    }
+    return {};
+  })();
+  const meta = (summaryDoc.metadata ?? {}) as Record<string, unknown>;
+  const spec = (summaryDoc.spec ?? {}) as Record<string, unknown>;
+  // Advanced/raw-SQL documents can't be summarized faithfully — show YAML.
+  const effectiveDefView = advanced && defView === "summary" ? "authored" : defView;
   const name =
     (typeof meta.name === "string" && meta.name) ||
     detail.metric_id.split(".").slice(1).join(".") ||
@@ -244,6 +267,7 @@ export function MetricDetailPage() {
           {typeof meta.description === "string" && (
             <p className="text-muted-foreground text-sm">{meta.description}</p>
           )}
+          {!advanced && <MetricDefinitionSummary doc={summaryDoc} />}
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted-foreground">Owner</dt>
@@ -278,23 +302,27 @@ export function MetricDetailPage() {
           <div className="flex flex-wrap gap-2">
             {(
               [
+                ...(advanced ? [] : ([["summary", "Summary"]] as const)),
                 ["authored", "Authored YAML"],
                 ["resolved", "Resolved YAML"],
                 ["sql", "Generated SQL"],
-              ] as const
+              ] as ReadonlyArray<readonly [typeof defView, string]>
             ).map(([key, label]) => (
               <Button
                 key={key}
                 size="sm"
-                variant={defView === key ? "default" : "outline"}
+                variant={effectiveDefView === key ? "default" : "outline"}
                 onClick={() => setDefView(key)}
               >
                 {label}
               </Button>
             ))}
           </div>
-          {defView === "authored" && <CodeBlock code={detail.yaml} />}
-          {defView === "resolved" && (
+          {effectiveDefView === "summary" && (
+            <MetricDefinitionSummary doc={summaryDoc} />
+          )}
+          {effectiveDefView === "authored" && <CodeBlock code={detail.yaml} />}
+          {effectiveDefView === "resolved" && (
             <CodeBlock
               code={
                 detail.resolved_json
@@ -303,7 +331,7 @@ export function MetricDetailPage() {
               }
             />
           )}
-          {defView === "sql" && (
+          {effectiveDefView === "sql" && (
             <>
               {sqlError && (
                 <p role="status" className="text-muted-foreground text-sm">

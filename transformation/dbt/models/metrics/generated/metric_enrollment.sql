@@ -1,0 +1,25 @@
+-- AUTO-GENERATED enrollment documentation model.
+{{ config(materialized='ephemeral') }}
+select
+    null::text as org_slug,
+    null::text as metric_id,
+    null::text as content_hash
+where false
+-- AUTO-GENERATED enrollment seed (org_id slug, metric_id, content_hash)
+-- Consumed by shared metric models / fct swap orchestration.
+-- acme	propel.change_failure_rate	4be861c6512e077ff878fdbc8f10e7fbe32153037a746abd695d0e5be7d1db30
+-- acme	propel.cycle_time	6bf2397f24175fb456fdc4a0e103e9255d6400c4f3864b6ce83acb02cba04391
+-- acme	propel.cycle_time_p90	12923b5c92fa6bba3a3cb15e60b12911a53889d258176ed9e9682686e88f3975
+-- acme	propel.cycle_time_trailing_30d	a64f46d70acf13637f70ba888c91e077fd224198035087b775c1934e9f6be33d
+-- acme	propel.deployment_frequency	eb8500e7be5dad52027010de7dafc2d6444fc226b122ecd9a3e155c3bd26594c
+-- acme	propel.merged_prs	4135739bff04aafcfef285f7a4cb7ef110d36ff1faf2c6d4c98765663829a548
+-- acme	propel.reverted_prs	a324649ec39eb0aa1d0250eff5cc6673db46f35fec6bbc30a3a8c82c95d1bf03
+-- acme	propel.review_latency	93f2b05b678dd9f54807d9e5070e9e0b478ed65fc3da642b4fec43839b7a5e8b
+-- propelreviews	propel.change_failure_rate	4be861c6512e077ff878fdbc8f10e7fbe32153037a746abd695d0e5be7d1db30
+-- propelreviews	propel.cycle_time	6bf2397f24175fb456fdc4a0e103e9255d6400c4f3864b6ce83acb02cba04391
+-- propelreviews	propel.cycle_time_p90	12923b5c92fa6bba3a3cb15e60b12911a53889d258176ed9e9682686e88f3975
+-- propelreviews	propel.cycle_time_trailing_30d	a64f46d70acf13637f70ba888c91e077fd224198035087b775c1934e9f6be33d
+-- propelreviews	propel.deployment_frequency	eb8500e7be5dad52027010de7dafc2d6444fc226b122ecd9a3e155c3bd26594c
+-- propelreviews	propel.merged_prs	4135739bff04aafcfef285f7a4cb7ef110d36ff1faf2c6d4c98765663829a548
+-- propelreviews	propel.reverted_prs	a324649ec39eb0aa1d0250eff5cc6673db46f35fec6bbc30a3a8c82c95d1bf03
+-- propelreviews	propel.review_latency	93f2b05b678dd9f54807d9e5070e9e0b478ed65fc3da642b4fec43839b7a5e8b

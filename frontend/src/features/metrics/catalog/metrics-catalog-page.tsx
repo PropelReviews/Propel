@@ -239,6 +239,15 @@ export function MetricsCatalogPage() {
                       {tag}
                     </span>
                   ))}
+                  {canManage &&
+                    !row.metric_id.startsWith("propel.") &&
+                    row.status !== "broken" && (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={`/metrics/${encodeURIComponent(row.metric_id)}/edit`}>
+                          Edit
+                        </Link>
+                      </Button>
+                    )}
                   {canManage && row.source.startsWith("standard") && (
                     <>
                       <Button
