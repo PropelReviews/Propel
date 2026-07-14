@@ -109,6 +109,137 @@ models:
         data_tests:
           - not_null
 
+  - name: fct_review_comments_daily
+    description: >
+      Daily GitHub pull-request review-comment counts (line-level PR discussion).
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: review_comments_created
+        data_tests:
+          - not_null
+
+  - name: fct_workflow_runs_daily
+    description: >
+      Daily GitHub Actions workflow-run primitives: started, completed, success,
+      and failure counts.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: runs_started
+        data_tests:
+          - not_null
+      - name: runs_completed
+        data_tests:
+          - not_null
+      - name: runs_success
+        data_tests:
+          - not_null
+      - name: runs_failure
+        data_tests:
+          - not_null
+
+  - name: fct_ticket_activity_daily
+    description: >
+      Daily ticket activity across issue trackers (GitHub Issues, Linear, …):
+      created, completed, and canceled counts. Grain includes `source` so new
+      tools (e.g. Jira) land in the same mart.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['github', 'linear']
+      - name: tickets_created
+        data_tests:
+          - not_null
+      - name: tickets_completed
+        data_tests:
+          - not_null
+      - name: tickets_canceled
+        data_tests:
+          - not_null
+
+  - name: fct_ticket_comments_daily
+    description: >
+      Daily ticket-comment counts across issue trackers (GitHub issue comments,
+      Linear comments, …). Excludes PR review comments.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['github', 'linear']
+      - name: comments_created
+        data_tests:
+          - not_null
+
+  - name: fct_project_activity_daily
+    description: >
+      Daily project activity across project trackers (Linear today; Jira later):
+      created, completed, and canceled counts.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['linear']
+      - name: projects_created
+        data_tests:
+          - not_null
+      - name: projects_completed
+        data_tests:
+          - not_null
+      - name: projects_canceled
+        data_tests:
+          - not_null
+
+  - name: fct_ticket_description_edits_daily
+    description: >
+      Daily ticket description-edit counts across issue trackers (Linear
+      IssueHistory today; structured for future Jira changelog).
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['linear']
+      - name: description_edits
+        data_tests:
+          - not_null
+
   - name: stg_github_pull_requests
     description: >
       Latest snapshot of every GitHub pull request (one row per PR), including

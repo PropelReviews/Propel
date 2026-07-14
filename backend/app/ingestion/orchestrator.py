@@ -93,10 +93,30 @@ JOBS: list[JobSpec] = [
     JobSpec("github_pull_requests_sync", "github.pull_requests", needs_repos=True),
     JobSpec("github_issues_sync", "github.issues", needs_repos=True),
     JobSpec("github_releases_sync", "github.releases", needs_repos=True),
+    JobSpec(
+        "github_workflow_runs_sync",
+        "github.workflow_runs",
+        needs_repos=True,
+    ),
     JobSpec("copilot_sync", "copilot.usage", needs_org=True, org_mode="copilot"),
     JobSpec(
         "linear_issues_sync",
         "linear.issues",
+        provider=IntegrationProvider.linear.value,
+    ),
+    JobSpec(
+        "linear_comments_sync",
+        "linear.comments",
+        provider=IntegrationProvider.linear.value,
+    ),
+    JobSpec(
+        "linear_projects_sync",
+        "linear.projects",
+        provider=IntegrationProvider.linear.value,
+    ),
+    JobSpec(
+        "linear_description_edits_sync",
+        "linear.description_edits",
         provider=IntegrationProvider.linear.value,
     ),
 ]

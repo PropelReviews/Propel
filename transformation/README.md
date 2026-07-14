@@ -17,7 +17,11 @@ Example metrics:
 - Cycle time (PR open to merge) — DORA lead-time proxy
 - Throughput — PR merge activity
 - Review latency (time to first review)
+- Review comments — line-level PR discussion
+- Action runs — GitHub Actions workflow run activity
 - Change-failure proxy (revert-titled merges)
+- Ticket activity / comments / description edits — normalized across trackers
+- Project activity — normalized across project trackers
 - Tooling activity signals
 
 ## Directory layout
@@ -36,14 +40,27 @@ transformation/
         ├── staging/
         │   ├── stg_github_pull_requests.sql
         │   ├── stg_github_reviews.sql
+        │   ├── stg_github_review_comments.sql
+        │   ├── stg_github_issue_comments.sql
+        │   ├── stg_github_workflow_runs.sql
+        │   ├── stg_github_releases.sql
         │   ├── stg_github_issues.sql
-        │   └── stg_linear_issues.sql
+        │   ├── stg_linear_issues.sql
+        │   ├── stg_linear_comments.sql
+        │   ├── stg_linear_projects.sql
+        │   └── stg_linear_description_edits.sql
         └── marts/
             ├── fct_deployment_frequency_daily.sql  # GitHub Releases
             ├── fct_pr_activity_daily.sql           # PR throughput
             ├── fct_pr_cycle_time_daily.sql         # lead-time proxy
             ├── fct_review_latency_daily.sql        # time to first review
+            ├── fct_review_comments_daily.sql       # PR review comments
+            ├── fct_workflow_runs_daily.sql         # Actions runs
             ├── fct_change_failure_daily.sql        # CFR proxy via reverts
+            ├── fct_ticket_activity_daily.sql       # tickets across trackers
+            ├── fct_ticket_comments_daily.sql
+            ├── fct_ticket_description_edits_daily.sql
+            ├── fct_project_activity_daily.sql
             ├── fct_tickets.sql
             └── schema.yml
 ```

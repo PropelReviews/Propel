@@ -35,3 +35,61 @@ models:
       - name: release_node_id
         data_tests:
           - not_null
+
+  - name: stg_github_review_comments
+    description: >
+      Latest snapshot of every GitHub pull-request review comment (one row per
+      comment). Line-level discussion on a PR diff.
+    columns:
+      - name: comment_node_id
+        data_tests:
+          - not_null
+      - name: created_at
+        data_tests:
+          - not_null
+
+  - name: stg_github_issue_comments
+    description: >
+      Latest snapshot of every GitHub issue comment (one row per comment).
+      Ticket discussion — excludes PR review comments.
+    columns:
+      - name: comment_node_id
+        data_tests:
+          - not_null
+      - name: created_at
+        data_tests:
+          - not_null
+
+  - name: stg_github_workflow_runs
+    description: >
+      Latest snapshot of every GitHub Actions workflow run (one row per run).
+    columns:
+      - name: run_node_id
+        data_tests:
+          - not_null
+
+  - name: stg_linear_comments
+    description: Latest snapshot of every Linear comment (one row per comment).
+    columns:
+      - name: comment_id
+        data_tests:
+          - not_null
+
+  - name: stg_linear_projects
+    description: Latest snapshot of every Linear project (one row per project).
+    columns:
+      - name: project_id
+        data_tests:
+          - not_null
+
+  - name: stg_linear_description_edits
+    description: >
+      Latest snapshot of every Linear issue description edit (IssueHistory row
+      where the description changed).
+    columns:
+      - name: edit_id
+        data_tests:
+          - not_null
+      - name: edited_at
+        data_tests:
+          - not_null

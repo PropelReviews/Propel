@@ -10,6 +10,14 @@ import {
   ReviewLatencyChart,
 } from "@/components/dora-metric-charts";
 import { PrActivityChart } from "@/components/pr-activity-chart";
+import {
+  ProjectActivityChart,
+  ReviewCommentsChart,
+  TicketActivityChart,
+  TicketCommentsChart,
+  TicketDescriptionEditsChart,
+  WorkflowRunsChart,
+} from "@/components/primitive-metric-charts";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -227,8 +235,50 @@ function Loaded({
       </section>
 
       <section>
+        <h2 className="mb-4 text-lg font-medium">Review comments</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Line-level discussion on pull-request reviews.
+        </p>
+        <ReviewCommentsChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Action runs</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          GitHub Actions workflow runs — started, succeeded, and failed.
+        </p>
+        <WorkflowRunsChart tenantId={tenantId} />
+      </section>
+
+      <section>
         <h2 className="mb-4 text-lg font-medium">Change failure</h2>
         <ChangeFailureChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Tickets</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Created, completed, and canceled across connected issue trackers.
+        </p>
+        <TicketActivityChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Ticket comments</h2>
+        <TicketCommentsChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Projects</h2>
+        <ProjectActivityChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Description edits</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Times ticket descriptions were edited.
+        </p>
+        <TicketDescriptionEditsChart tenantId={tenantId} />
       </section>
 
       {stats.by_kind.length > 0 && (

@@ -18,9 +18,10 @@ _EVENT_STREAM_NAMES: dict[str, str] = {
     "commits": "commit",
     "issues": "issue",
     "issue_comments": "comment",
-    "pull_request_review_comments": "comment",
+    "pull_request_review_comments": "review_comment",
     "reviews": "review",
     "releases": "release",
+    "workflow_runs": "workflow_run",
 }
 
 _TOOL_GITHUB = "github"
@@ -58,6 +59,11 @@ def _user_login(record: dict) -> str:
     author = record.get("author")
     if isinstance(author, dict) and author.get("login"):
         return str(author["login"])
+    # Actions workflow runs use actor / triggering_actor
+    for key in ("actor", "triggering_actor"):
+        actor = record.get(key)
+        if isinstance(actor, dict) and actor.get("login"):
+            return str(actor["login"])
     return "unknown"
 
 
@@ -90,6 +96,11 @@ def _occurred_at(stream: str, record: dict) -> datetime | None:
         return _parse_dt(record.get("published_at")) or _parse_dt(
             record.get("created_at")
         )
+    if stream == "workflow_runs":
+        # Prefer run completion (updated_at once finished); else created_at.
+        return _parse_dt(record.get("updated_at")) or _parse_dt(
+            record.get("created_at")
+        )
     return _parse_dt(record.get("created_at"))
 
 
@@ -118,6 +129,25 @@ def _metadata(stream: str, record: dict) -> dict:
         for key in ("tag_name", "name", "draft", "prerelease", "published_at"):
             if record.get(key) is not None:
                 meta[key] = record[key]
+    if stream == "workflow_runs":
+        for key in (
+            "name",
+            "status",
+            "conclusion",
+            "event",
+            "run_number",
+            "head_branch",
+            "head_sha",
+            "workflow_id",
+        ):
+            if record.get(key) is not None:
+                meta[key] = record[key]
+    if stream == "pull_request_review_comments":
+        for key in ("pull_request_review_id", "pull_request_url", "path", "commit_id"):
+            if record.get(key) is not None:
+                meta[key] = record[key]
+        if record.get("pull_request_number") is not None:
+            meta["pull_request_number"] = record["pull_request_number"]
     return meta
 
 

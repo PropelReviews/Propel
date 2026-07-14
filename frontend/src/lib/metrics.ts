@@ -65,6 +65,73 @@ export type DeploymentFrequencyResponse = {
   points: DeploymentFrequencyPoint[];
 };
 
+export type ReviewCommentsPoint = {
+  period_start: string;
+  review_comments_created: number;
+};
+
+export type ReviewCommentsResponse = {
+  granularity: Granularity;
+  points: ReviewCommentsPoint[];
+};
+
+export type WorkflowRunsPoint = {
+  period_start: string;
+  runs_started: number;
+  runs_completed: number;
+  runs_success: number;
+  runs_failure: number;
+};
+
+export type WorkflowRunsResponse = {
+  granularity: Granularity;
+  points: WorkflowRunsPoint[];
+};
+
+export type TicketActivityPoint = {
+  period_start: string;
+  tickets_created: number;
+  tickets_completed: number;
+  tickets_canceled: number;
+};
+
+export type TicketActivityResponse = {
+  granularity: Granularity;
+  points: TicketActivityPoint[];
+};
+
+export type TicketCommentsPoint = {
+  period_start: string;
+  comments_created: number;
+};
+
+export type TicketCommentsResponse = {
+  granularity: Granularity;
+  points: TicketCommentsPoint[];
+};
+
+export type ProjectActivityPoint = {
+  period_start: string;
+  projects_created: number;
+  projects_completed: number;
+  projects_canceled: number;
+};
+
+export type ProjectActivityResponse = {
+  granularity: Granularity;
+  points: ProjectActivityPoint[];
+};
+
+export type TicketDescriptionEditsPoint = {
+  period_start: string;
+  description_edits: number;
+};
+
+export type TicketDescriptionEditsResponse = {
+  granularity: Granularity;
+  points: TicketDescriptionEditsPoint[];
+};
+
 type MetricRange = { granularity: Granularity; start: Date; end: Date };
 
 function rangeParams(options: MetricRange): URLSearchParams {
@@ -131,6 +198,78 @@ export function getDeploymentFrequency(
   const params = rangeParams(options);
   return authedGet<DeploymentFrequencyResponse>(
     `/api/v1/tenants/${tenantId}/metrics/deployment-frequency?${params}`,
+    token,
+  );
+}
+
+export function getReviewComments(
+  token: string,
+  tenantId: string,
+  options: MetricRange,
+): Promise<ReviewCommentsResponse> {
+  const params = rangeParams(options);
+  return authedGet<ReviewCommentsResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/review-comments?${params}`,
+    token,
+  );
+}
+
+export function getWorkflowRuns(
+  token: string,
+  tenantId: string,
+  options: MetricRange,
+): Promise<WorkflowRunsResponse> {
+  const params = rangeParams(options);
+  return authedGet<WorkflowRunsResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/workflow-runs?${params}`,
+    token,
+  );
+}
+
+export function getTicketActivity(
+  token: string,
+  tenantId: string,
+  options: MetricRange,
+): Promise<TicketActivityResponse> {
+  const params = rangeParams(options);
+  return authedGet<TicketActivityResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/tickets?${params}`,
+    token,
+  );
+}
+
+export function getTicketComments(
+  token: string,
+  tenantId: string,
+  options: MetricRange,
+): Promise<TicketCommentsResponse> {
+  const params = rangeParams(options);
+  return authedGet<TicketCommentsResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/ticket-comments?${params}`,
+    token,
+  );
+}
+
+export function getProjectActivity(
+  token: string,
+  tenantId: string,
+  options: MetricRange,
+): Promise<ProjectActivityResponse> {
+  const params = rangeParams(options);
+  return authedGet<ProjectActivityResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/projects?${params}`,
+    token,
+  );
+}
+
+export function getTicketDescriptionEdits(
+  token: string,
+  tenantId: string,
+  options: MetricRange,
+): Promise<TicketDescriptionEditsResponse> {
+  const params = rangeParams(options);
+  return authedGet<TicketDescriptionEditsResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/ticket-description-edits?${params}`,
     token,
   );
 }
