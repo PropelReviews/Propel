@@ -1,8 +1,8 @@
 """In-memory metric preview for the authoring UI (M5.3).
 
-Validates → resolves → preview codegen. Warehouse execution is best-effort:
-when analytics tables are unavailable, return SQL + empty rows with a clear
-diagnostic (dry-run mode).
+Validates → resolves → preview codegen → optional warehouse execution
+(read-only, statement_timeout). Falls back to dry-run SQL when relations
+are missing.
 """
 
 from __future__ import annotations
@@ -19,11 +19,46 @@ from propel_metrics.ir.build import build_compiled_plan
 from propel_metrics.resolve import ResolvedMetric, apply_extends, content_hash
 from propel_metrics.resolve.lifecycle import validate_yaml_text
 from propel_metrics.resolve.params import bind_params
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.metric_definitions import _hydrate, ensure_system_imported
 
 _single_flight: dict[str, float] = {}
+
+# Prefer analytics schema (dbt); fall back to public for local stubs.
+_RELATION_SCHEMAS = ("analytics", "public")
+
+
+async def _schema_has_relation(
+    session: AsyncSession, schema: str, relation: str
+) -> bool:
+    result = await session.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = :schema AND table_name = :name
+            LIMIT 1
+            """
+        ),
+        {"schema": schema, "name": relation},
+    )
+    return result.scalar() is not None
+
+
+async def _pick_schema(session: AsyncSession, plan_sql: str) -> str | None:
+    """Choose a schema where rewritten refs exist; None → dry-run."""
+    # Collect relation names from rewritten SQL of form schema.name
+    # We probe for pull_request / dim_step_spine as canaries.
+    for schema in _RELATION_SCHEMAS:
+        if await _schema_has_relation(session, schema, "pull_request"):
+            return schema
+        if "dim_step_spine" in plan_sql and await _schema_has_relation(
+            session, schema, "dim_step_spine"
+        ):
+            return schema
+    return None
 
 
 async def preview_definition(
@@ -35,7 +70,6 @@ async def preview_definition(
     user_id: str,
 ) -> dict[str, Any]:
     now = time.monotonic()
-    # Drop stale locks (>30s)
     stale = [k for k, t0 in _single_flight.items() if now - t0 > 30]
     for k in stale:
         _single_flight.pop(k, None)
@@ -99,7 +133,6 @@ async def preview_definition(
                 spec=rspec,
                 source_path=Path(f"<preview:{rid}>"),
             )
-        # Ensure current doc wins
         meta = flat.get("metadata") or {}
         by_resolved[mid] = ResolvedMetric(
             metric_id=mid,
@@ -112,39 +145,117 @@ async def preview_definition(
         )
 
         plan = build_compiled_plan(by_resolved[mid], by_resolved)
+        schema = await _pick_schema(session, "")
+        relation_schema = schema or "analytics"
+
         t0 = time.perf_counter()
-        preview = render_preview_sql(plan, tenant_id=tenant_uuid)
+        preview = render_preview_sql(
+            plan,
+            tenant_id=tenant_uuid,
+            relation_schema=relation_schema,
+        )
         timing_ms = int((time.perf_counter() - t0) * 1000)
 
         rows: list[dict[str, Any]] = []
-        diagnostics = [
-            {
-                "cte": "preview",
-                "message": (
-                    "Dry-run preview: SQL generated. Warehouse execution is "
-                    "skipped when analytics tables are unavailable in this environment."
-                ),
-            }
-        ]
+        diagnostics: list[dict[str, Any]] = []
         executed = False
-        try:
-            from sqlalchemy import text
+        truncated = False
 
-            # Attempt a lightweight read-only probe; ignore failures.
-            async with session.begin_nested():
-                await session.execute(text("SET LOCAL statement_timeout = '10s'"))
-                # Don't actually run full preview SQL (dbt refs won't resolve here).
+        if schema is None:
+            diagnostics.append(
+                {
+                    "cte": "preview",
+                    "message": (
+                        "Dry-run preview: no analytics/public entity tables found. "
+                        "SQL generated; warehouse execution skipped."
+                    ),
+                }
+            )
+        else:
+            try:
+                async with session.begin_nested():
+                    await session.execute(text("SET LOCAL statement_timeout = '10s'"))
+                    result = await session.execute(text(preview["sql"]))
+                    mapping = result.mappings()
+                    fetched = [dict(r) for r in mapping.fetchall()]
+                    rows = fetched
+                    executed = True
+                    if len(rows) >= int(preview["row_limit"]):
+                        truncated = True
+
+                    diag_sql = preview.get("diagnostics_sql")
+                    if diag_sql:
+                        diag_result = await session.execute(text(diag_sql))
+                        for r in diag_result.mappings().fetchall():
+                            diagnostics.append(
+                                {
+                                    "cte": r["cte"],
+                                    "rows_out": int(r["row_count"]),
+                                }
+                            )
+                    if not rows:
+                        if diagnostics:
+                            ordered = sorted(
+                                diagnostics,
+                                key=lambda d: d.get("rows_out", 0),
+                                reverse=True,
+                            )
+                            zero = next(
+                                (
+                                    d
+                                    for d in diagnostics
+                                    if int(d.get("rows_out", -1)) == 0
+                                ),
+                                None,
+                            )
+                            if zero:
+                                before = next(
+                                    (
+                                        d
+                                        for d in ordered
+                                        if int(d.get("rows_out", 0)) > 0
+                                    ),
+                                    None,
+                                )
+                                msg = f"0 rows after CTE `{zero['cte']}`"
+                                if before:
+                                    msg += (
+                                        f" ({before['rows_out']} before in "
+                                        f"`{before['cte']}`)"
+                                    )
+                                diagnostics.insert(
+                                    0, {"cte": zero["cte"], "message": msg}
+                                )
+                        else:
+                            diagnostics.append(
+                                {
+                                    "cte": "preview",
+                                    "message": (
+                                        "Query returned 0 rows in the preview window."
+                                    ),
+                                }
+                            )
+            except Exception as exc:  # noqa: BLE001 — surface as diagnostic
+                diagnostics.append(
+                    {
+                        "cte": "preview",
+                        "message": (
+                            f"Execution failed ({type(exc).__name__}: {exc}); "
+                            "returning generated SQL only."
+                        ),
+                    }
+                )
                 executed = False
-        except Exception:
-            executed = False
+                rows = []
 
+        timing_ms = int((time.perf_counter() - t0) * 1000)
         return {
             "rows": rows,
             "timing_ms": timing_ms,
             "sql": preview["sql"],
             "grain": preview["grain"],
             "diagnostics": diagnostics,
-            "truncated": False,
+            "truncated": truncated,
             "sampled": False,
             "executed": executed,
             "metric_id": mid,

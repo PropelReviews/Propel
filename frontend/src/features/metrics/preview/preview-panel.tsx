@@ -61,7 +61,11 @@ export function PreviewPanel({
           </p>
           {result.diagnostics.map((d, i) => (
             <p key={i} className="text-muted-foreground text-xs">
-              {String(d.message ?? JSON.stringify(d))}
+              {typeof d.message === "string"
+                ? d.message
+                : d.cte
+                  ? `${d.cte}: ${d.rows_out ?? d.rows_in ?? "?"} rows`
+                  : JSON.stringify(d)}
             </p>
           ))}
           {result.rows.length === 0 ? (
