@@ -27,6 +27,7 @@ _SIMPLE_TYPES = {
     "interval",
 }
 
+
 def _all_catalog_dims() -> frozenset[str]:
     """Entity fields with role=dimension (native columns; no mapping required)."""
     catalog = load_catalog()
