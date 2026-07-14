@@ -384,11 +384,11 @@ begin
 
     raise notice 'fct_metric_values propel.change_failure_rate matches expected fixture output';
 
-    -- Trailing-30d cycle time: window ending 2026-01-06 covers the same three
-    -- merges as the day grain (fixture has no earlier merges in-window).
+    -- Trailing-30d cycle time: window whose last included calendar day is
+    -- 2026-01-06 (bucket_end is exclusive midnight of the next day).
     with trail as (
         select
-            bucket_end::date as window_end,
+            (bucket_end - interval '1 day')::date as report_day,
             value as median_seconds
         from analytics.fct_metric_values
         where
@@ -396,20 +396,20 @@ begin
             and metric_id = 'propel.cycle_time_trailing_30d'
             and grain = 'rolling_30d'
             and dim_repo = ''
-            and bucket_end::date = '2026-01-06'::date
+            and (bucket_end - interval '1 day')::date = '2026-01-06'::date
     ),
-    expected (window_end, median_seconds) as (
+    expected (report_day, median_seconds) as (
         values
             ('2026-01-06'::date, 7200.0::float8)
     )
     select count(*) into bad_rows
     from expected e
     full outer join trail f
-        on f.window_end = e.window_end
+        on f.report_day = e.report_day
     where
         abs(f.median_seconds - e.median_seconds) > 0.001
-        or e.window_end is null
-        or f.window_end is null;
+        or e.report_day is null
+        or f.report_day is null;
 
     if bad_rows > 0 then
         raise exception

@@ -317,12 +317,32 @@ def _window_dim_out(dimensions: tuple[str, ...]) -> str:
     return "r.dim_repo"
 
 
+def _window_bound_sql(window: Window) -> tuple[str, str, str, str]:
+    """Calendar-day inclusive window bounds for ``step_date``.
+
+    ``step_date`` is the last calendar day included. ``bucket_end`` is midnight
+    at the start of the *next* day (matches calendar-grain half-open ends), so
+    events during ``step_date`` are included via ``r.t < step_date + 1 day``.
+    """
+    bucket_end = "((s.step_date + interval '1 day')::timestamptz)"
+    bucket_start = (
+        f"(((s.step_date + interval '1 day') "
+        f"- interval '{window.days} days')::timestamptz)"
+    )
+    join_lower = (
+        f"r.t > ((s.step_date + interval '1 day') - interval '{window.days} days')"
+    )
+    join_upper = "r.t < (s.step_date + interval '1 day')"
+    return bucket_start, bucket_end, join_lower, join_upper
+
+
 def _simple_window_block(plan: CompiledPlan, window: Window) -> str:
     ap = plan.aggregations["value"]
     label = f"rolling_{window.days}d"
     cte = f"win_{window.days}d_{window.step}"
     dim_out = _window_dim_out(plan.dimensions)
     group = _window_group(plan.dimensions)
+    bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
     return f"""{cte} as (
 
     select
@@ -330,17 +350,17 @@ def _simple_window_block(plan: CompiledPlan, window: Window) -> str:
         '{plan.metric_id}'::text as metric_id,
         '{plan.definition_version}'::text as definition_version,
         '{label}'::text as grain,
-        (s.step_date - interval '{window.days} days')::timestamptz as bucket_start,
-        s.step_date::timestamptz as bucket_end,
-        (s.step_date::date <= current_date) as is_complete,
+        {bucket_start} as bucket_start,
+        {bucket_end} as bucket_end,
+        ({bucket_end} <= current_timestamp) as is_complete,
         {dim_out} as dim_repo,
         {_agg_sql(ap.agg)} as "value",
         null::float8 as numerator,
         null::float8 as denominator
     from {{{{ ref('dim_step_spine') }}}} s
     inner join m_rows r
-        on r.t > (s.step_date - interval '{window.days} days')
-       and r.t <= s.step_date
+        on {join_lower}
+       and {join_upper}
     where s.step = '{window.step}'
     {group}
 
@@ -366,19 +386,20 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
         join_using = "tenant_id, dim_repo, bucket_end"
 
     value_expr = _ratio_value_expr(plan.zero_denominator or "null")
+    bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
     return f"""{cte} as (
 
     with num as (
         select
             r.tenant_id,
             {dim_select},
-            s.step_date as bucket_end,
-            (s.step_date - interval '{window.days} days') as bucket_start,
+            {bucket_end} as bucket_end,
+            {bucket_start} as bucket_start,
             {_agg_sql(plan.aggregations["num"].agg)} as v
         from {{{{ ref('dim_step_spine') }}}} s
         inner join num_rows r
-            on r.t > (s.step_date - interval '{window.days} days')
-           and r.t <= s.step_date
+            on {join_lower}
+           and {join_upper}
         where s.step = '{window.step}'
         {group}
     ),
@@ -386,13 +407,13 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
         select
             r.tenant_id,
             {dim_select},
-            s.step_date as bucket_end,
-            (s.step_date - interval '{window.days} days') as bucket_start,
+            {bucket_end} as bucket_end,
+            {bucket_start} as bucket_start,
             {_agg_sql(plan.aggregations["den"].agg)} as v
         from {{{{ ref('dim_step_spine') }}}} s
         inner join den_rows r
-            on r.t > (s.step_date - interval '{window.days} days')
-           and r.t <= s.step_date
+            on {join_lower}
+           and {join_upper}
         where s.step = '{window.step}'
         {group}
     )
@@ -403,7 +424,7 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
         '{label}'::text as grain,
         den.bucket_start::timestamptz as bucket_start,
         den.bucket_end::timestamptz as bucket_end,
-        (den.bucket_end::date <= current_date) as is_complete,
+        (den.bucket_end <= current_timestamp) as is_complete,
         {dim_out} as dim_repo,
         {value_expr} as "value",
         coalesce(num.v, 0)::float8 as numerator,
@@ -430,6 +451,7 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
         group = "group by r.tenant_id, s.step_date, r.dim_repo"
         dim_select = "r.dim_repo as dim_repo"
 
+    bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
     input_ctes: list[str] = []
     for name in input_names:
         ap = plan.aggregations[name]
@@ -438,13 +460,13 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
         select
             r.tenant_id,
             {dim_select},
-            s.step_date as bucket_end,
-            (s.step_date - interval '{window.days} days') as bucket_start,
+            {bucket_end} as bucket_end,
+            {bucket_start} as bucket_start,
             {_agg_sql(ap.agg)} as v
         from {{{{ ref('dim_step_spine') }}}} s
         inner join rows_{name} r
-            on r.t > (s.step_date - interval '{window.days} days')
-           and r.t <= s.step_date
+            on {join_lower}
+           and {join_upper}
         where s.step = '{window.step}'
         {group}
     )"""
@@ -475,7 +497,7 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
         '{label}'::text as grain,
         b.bucket_start::timestamptz as bucket_start,
         b.bucket_end::timestamptz as bucket_end,
-        (b.bucket_end::date <= current_date) as is_complete,
+        (b.bucket_end <= current_timestamp) as is_complete,
         b.dim_repo as dim_repo,
         {ast_sql} as "value",
         null::float8 as numerator,

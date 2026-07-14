@@ -31,17 +31,17 @@ win_30d_day as (
         'propel.cycle_time_trailing_30d'::text as metric_id,
         '54a76d5e880a'::text as definition_version,
         'rolling_30d'::text as grain,
-        (s.step_date - interval '30 days')::timestamptz as bucket_start,
-        s.step_date::timestamptz as bucket_end,
-        (s.step_date::date <= current_date) as is_complete,
+        (((s.step_date + interval '1 day') - interval '30 days')::timestamptz) as bucket_start,
+        ((s.step_date + interval '1 day')::timestamptz) as bucket_end,
+        (((s.step_date + interval '1 day')::timestamptz) <= current_timestamp) as is_complete,
         r.dim_repo as dim_repo,
         percentile_cont(0.5) within group (order by _value)::float8 as "value",
         null::float8 as numerator,
         null::float8 as denominator
     from {{ ref('dim_step_spine') }} s
     inner join m_rows r
-        on r.t > (s.step_date - interval '30 days')
-       and r.t <= s.step_date
+        on r.t > ((s.step_date + interval '1 day') - interval '30 days')
+       and r.t < (s.step_date + interval '1 day')
     where s.step = 'day'
     group by r.tenant_id, s.step_date, r.dim_repo
 
