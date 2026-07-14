@@ -35,6 +35,12 @@ docs live here under `docs/`.
 - [Transformation](../transformation/README.md) — data transformation.
 - [Contributing](../CONTRIBUTING.md) — contribution guidelines.
 
+## Development
+
+| Doc | What it covers |
+|-----|----------------|
+| [development/cursor.md](development/cursor.md) | **Cursor hooks** — format/lint on edit, tests + doc follow-up on each agent turn, cloud agent setup. |
+
 ## Quick links
 
 - Self-host with Docker Compose → [self-hosting guide](self-hosting.md)

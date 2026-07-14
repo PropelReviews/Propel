@@ -1,0 +1,18 @@
+---
+description: Agent verification hooks — tests after each turn and documentation updates for feature work
+globs:
+alwaysApply: true
+---
+
+# Agent verification (Cursor hooks)
+
+This repo runs automated checks via `.cursor/hooks.json`:
+
+1. **On each edit** (`postToolUse`): Prettier (frontend) and ruff (backend) — fix failures before continuing.
+2. **On each agent turn** (`stop`): `stop-verify.sh` runs targeted tests and may loop with a `followup_message`.
+
+When the stop hook reports test failures, fix them and continue — do not skip tests.
+
+When the stop hook asks for documentation updates, add or update relevant files under `docs/`, component READMEs, or `CONTRIBUTING.md` as appropriate. See `docs/development/cursor.md` for details.
+
+For new or changed React components under `frontend/src/components/` or `frontend/src/pages/`, add colocated `*.browser.test.tsx` files (see `.cursor/agents/visual-test-writer.md`).
