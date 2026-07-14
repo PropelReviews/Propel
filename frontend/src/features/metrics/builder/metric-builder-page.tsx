@@ -18,8 +18,6 @@ import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { useTenant } from "@/providers/tenant-provider";
 import {
-  activateMetricDefinition,
-  classifyMetricDefinition,
   createMetricDefinition,
   getMetricCatalog,
   getMetricDefinition,
@@ -27,6 +25,7 @@ import {
   validateMetricDefinition,
   type MetricCatalogResponse,
 } from "@/features/metrics/api/metric-definitions";
+import { ActivateReviewSheet } from "@/features/metrics/builder/activate-sheet";
 import { FilterBuilder } from "@/features/metrics/builder/filter-builder";
 import { DerivedMeasureEditor } from "@/features/metrics/builder/derived-measure-editor";
 import { AdvancedBanner } from "@/features/metrics/components/metric-badges";
@@ -89,6 +88,7 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
     Array<{ code: string; path: string; message: string }>
   >([]);
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
+  const [activateOpen, setActivateOpen] = useState(false);
   const [loading, setLoading] = useState(mode === "edit");
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -255,37 +255,8 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   }, [doc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onActivate() {
-    if (!token || !tenant) return;
     setActivateMsg(null);
-    const yaml = documentToYaml(doc);
-    try {
-      if (storeVersion == null) {
-        const created = await createMetricDefinition(token, tenant.id, yaml);
-        setStoreVersion(created.version);
-        setStoreRevision(created.revision);
-      } else {
-        await putMetricDefinitionDraft(token, tenant.id, {
-          yaml,
-          expected_version: storeVersion,
-          expected_revision: storeRevision,
-        });
-      }
-      const classification = await classifyMetricDefinition(token, tenant.id, {
-        yaml,
-      });
-      const mid = String(meta.id);
-      await activateMetricDefinition(token, tenant.id, mid, {
-        version: classification.next_version,
-      });
-      setActivateMsg(
-        classification.kind === "semantic"
-          ? `Activated as version ${classification.next_version} (semantic change — history recompute).`
-          : `Activated (display/revision change).`,
-      );
-      navigate(`/metrics/${encodeURIComponent(mid)}`);
-    } catch (err) {
-      setActivateMsg(err instanceof ApiError ? err.message : "Activate failed");
-    }
+    setActivateOpen(true);
   }
 
   function enterYaml() {
@@ -504,6 +475,24 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                 )}
               </section>
 
+              {extendsParent && (
+                <section className="border-border space-y-2 rounded-lg border border-dashed p-4">
+                  <h2 className="text-lg font-medium">Inherited from parent</h2>
+                  <ul className="text-muted-foreground space-y-1 text-sm">
+                    <li>
+                      🔒 Entity / measure type / time.field — locked (not overridable)
+                    </li>
+                    <li>
+                      ⤴ Grains, dimensions, display, visibility — inherited; override
+                      below
+                    </li>
+                    <li>
+                      ➕ Filters — parent filters stay; your additions only narrow
+                    </li>
+                  </ul>
+                </section>
+              )}
+
               <section className="space-y-3">
                 <h2 className="text-lg font-medium">② Basics</h2>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -539,126 +528,136 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
 
               <section className="space-y-3">
                 <h2 className="text-lg font-medium">③ Data</h2>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {entities.map((ent) => (
-                    <button
-                      key={ent.name}
-                      type="button"
-                      className={
-                        entity === ent.name
-                          ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
-                          : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
-                      }
-                      onClick={() => setSpec("entity", ent.name)}
-                    >
-                      <div className="font-medium">{ent.name}</div>
-                      <div className="text-muted-foreground text-xs">{ent.grain}</div>
-                    </button>
-                  ))}
-                </div>
-                <div>
-                  <Label>Measure type</Label>
-                  <Select
-                    value={String(measure.type ?? "count")}
-                    onValueChange={(type) => setSpec("measure", { type })}
-                  >
-                    <SelectTrigger className="mt-1 w-56">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MEASURE_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {(measure.type === "ratio" || measure.type === "formula") &&
-                  token &&
-                  tenant && (
-                    <DerivedMeasureEditor
-                      token={token}
-                      tenantId={tenant.id}
-                      measure={measure}
-                      onChange={(next) => setSpec("measure", next)}
-                    />
-                  )}
-                {(measure.type === "sum" ||
-                  measure.type === "avg" ||
-                  measure.type === "min" ||
-                  measure.type === "max" ||
-                  measure.type === "percentile" ||
-                  measure.type === "count_distinct") && (
-                  <div>
-                    <Label>Field</Label>
-                    <Select
-                      value={String(measure.field ?? "")}
-                      onValueChange={(field) =>
-                        setSpec("measure", { ...measure, field })
-                      }
-                    >
-                      <SelectTrigger className="mt-1 w-56">
-                        <SelectValue placeholder="Pick field" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {measureFields.map((f) => (
-                          <SelectItem key={f.name} value={f.name}>
-                            {f.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                {!extendsParent && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {entities.map((ent) => (
+                      <button
+                        key={ent.name}
+                        type="button"
+                        className={
+                          entity === ent.name
+                            ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
+                            : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
+                        }
+                        onClick={() => setSpec("entity", ent.name)}
+                      >
+                        <div className="font-medium">{ent.name}</div>
+                        <div className="text-muted-foreground text-xs">{ent.grain}</div>
+                      </button>
+                    ))}
                   </div>
                 )}
-                {measure.type === "interval" && (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                {extendsParent ? (
+                  <p className="text-muted-foreground text-sm">
+                    Entity and measure type are locked from the parent.
+                  </p>
+                ) : (
+                  <>
                     <div>
-                      <Label>From</Label>
+                      <Label>Measure type</Label>
                       <Select
-                        value={String(measure.from ?? "")}
-                        onValueChange={(from) =>
-                          setSpec("measure", { ...measure, type: "interval", from })
-                        }
+                        value={String(measure.type ?? "count")}
+                        onValueChange={(type) => setSpec("measure", { type })}
                       >
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="from" />
+                        <SelectTrigger className="mt-1 w-56">
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {eventTimeFields.map((f) => (
-                            <SelectItem key={f.name} value={f.name}>
-                              {f.name}
+                          {MEASURE_TYPES.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
-                      <Label>To</Label>
-                      <Select
-                        value={String(measure.to ?? "")}
-                        onValueChange={(to) =>
-                          setSpec("measure", {
-                            ...measure,
-                            type: "interval",
-                            to,
-                            agg: measure.agg ?? "median",
-                          })
-                        }
-                      >
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="to" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {eventTimeFields.map((f) => (
-                            <SelectItem key={f.name} value={f.name}>
-                              {f.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                    {(measure.type === "ratio" || measure.type === "formula") &&
+                      token &&
+                      tenant && (
+                        <DerivedMeasureEditor
+                          token={token}
+                          tenantId={tenant.id}
+                          measure={measure}
+                          onChange={(next) => setSpec("measure", next)}
+                        />
+                      )}
+                    {(measure.type === "sum" ||
+                      measure.type === "avg" ||
+                      measure.type === "min" ||
+                      measure.type === "max" ||
+                      measure.type === "percentile" ||
+                      measure.type === "count_distinct") && (
+                      <div>
+                        <Label>Field</Label>
+                        <Select
+                          value={String(measure.field ?? "")}
+                          onValueChange={(field) =>
+                            setSpec("measure", { ...measure, field })
+                          }
+                        >
+                          <SelectTrigger className="mt-1 w-56">
+                            <SelectValue placeholder="Pick field" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {measureFields.map((f) => (
+                              <SelectItem key={f.name} value={f.name}>
+                                {f.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {measure.type === "interval" && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <Label>From</Label>
+                          <Select
+                            value={String(measure.from ?? "")}
+                            onValueChange={(from) =>
+                              setSpec("measure", { ...measure, type: "interval", from })
+                            }
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="from" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {eventTimeFields.map((f) => (
+                                <SelectItem key={f.name} value={f.name}>
+                                  {f.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>To</Label>
+                          <Select
+                            value={String(measure.to ?? "")}
+                            onValueChange={(to) =>
+                              setSpec("measure", {
+                                ...measure,
+                                type: "interval",
+                                to,
+                                agg: measure.agg ?? "median",
+                              })
+                            }
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="to" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {eventTimeFields.map((f) => (
+                                <SelectItem key={f.name} value={f.name}>
+                                  {f.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </section>
 
@@ -806,6 +805,25 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
           <PreviewPanel token={token} tenantId={tenant.id} doc={doc} />
         )}
       </div>
+      {token && tenant && (
+        <ActivateReviewSheet
+          open={activateOpen}
+          onOpenChange={setActivateOpen}
+          token={token}
+          tenantId={tenant.id}
+          doc={doc}
+          storeVersion={storeVersion}
+          storeRevision={storeRevision}
+          onStoreMeta={(version, revision) => {
+            setStoreVersion(version);
+            setStoreRevision(revision);
+          }}
+          onActivated={(mid) => {
+            setActivateMsg("Activated.");
+            navigate(`/metrics/${encodeURIComponent(mid)}`);
+          }}
+        />
+      )}
     </main>
   );
 }

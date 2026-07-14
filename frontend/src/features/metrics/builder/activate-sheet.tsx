@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,8 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState } from "react";
-
 import { ApiError } from "@/lib/api";
 import {
   activateMetricDefinition,
@@ -47,42 +47,50 @@ export function ActivateReviewSheet({
   const [nextVersion, setNextVersion] = useState<number | null>(null);
   const [diff, setDiff] = useState<DiffResponse | null>(null);
 
-  async function prepare() {
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
     setError(null);
+    setKind(null);
+    setDiff(null);
     setLoading(true);
-    try {
-      const yaml = documentToYaml(doc);
-      const classification = await classifyMetricDefinition(token, tenantId, {
-        yaml,
-      });
-      setKind(classification.kind);
-      setNextVersion(classification.next_version);
-      if (classification.previous_version != null) {
-        const d = await diffMetricDefinitions(token, tenantId, {
-          metric_id: String((doc.metadata as { id?: string })?.id ?? ""),
-          from_version: classification.previous_version,
-          to_yaml: yaml,
+    const yaml = documentToYaml(doc);
+    const mid = String((doc.metadata as { id?: string })?.id ?? "");
+    void (async () => {
+      try {
+        const classification = await classifyMetricDefinition(token, tenantId, {
+          yaml,
         });
-        setDiff(d);
-      } else {
-        setDiff({
-          changes: [],
-          summary: ["New metric"],
-          from_resolved: null,
-          to_resolved: null,
-        });
+        if (cancelled) return;
+        setKind(classification.kind);
+        setNextVersion(classification.next_version);
+        if (classification.previous_version != null && mid) {
+          const d = await diffMetricDefinitions(token, tenantId, {
+            metric_id: mid,
+            from_version: classification.previous_version,
+            to_yaml: yaml,
+          });
+          if (!cancelled) setDiff(d);
+        } else if (!cancelled) {
+          setDiff({
+            changes: [],
+            summary: ["New metric"],
+            from_resolved: null,
+            to_resolved: null,
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : "Classify failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Classify failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Load classification when opened
-  useState(() => {
-    if (open) void prepare();
-  });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, token, tenantId, doc]);
 
   async function confirm() {
     setLoading(true);
@@ -117,19 +125,13 @@ export function ActivateReviewSheet({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (next) void prepare();
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Activate metric</DialogTitle>
           <DialogDescription>
-            Review the change class before activating. Semantic edits mint a new
-            version and recompute history; display-only edits bump a revision.
+            Review the change class before activating. Semantic edits mint a new version
+            and recompute history; display-only edits bump a revision.
           </DialogDescription>
         </DialogHeader>
         {loading && !kind && (
@@ -142,7 +144,7 @@ export function ActivateReviewSheet({
               {kind === "semantic"
                 ? `Semantic change → version ${nextVersion}, full history recompute`
                 : kind === "non_semantic"
-                  ? `Display-only change → revision bump, no recompute`
+                  ? "Display-only change → revision bump, no recompute"
                   : "No change"}
             </p>
             {diff && (

@@ -304,6 +304,20 @@ export function repinMetricDefinition(
   );
 }
 
+export function archiveMetricDefinition(
+  token: string,
+  tenantId: string,
+  metricId: string,
+): Promise<MetricDefinitionDetail> {
+  const params = new URLSearchParams({ metric_id: metricId });
+  return authedRequest(
+    "POST",
+    `${base(tenantId)}/metric-definitions:archive?${params}`,
+    token,
+    {},
+  );
+}
+
 export type PreviewResponse = {
   rows: Array<Record<string, unknown>>;
   timing_ms: number;

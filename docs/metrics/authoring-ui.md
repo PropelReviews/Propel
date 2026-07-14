@@ -30,7 +30,14 @@ UI-only semantic state.
 5. View as YAML + generated SQL / preview SQL
 6. Visibility copy + person-dimension nudge
 
-## API companions
+## Client validation
 
-See [definition-store.md](./definition-store.md) for catalog, draft PUT,
-classify, diff, preview, and health endpoints.
+- Generated types: `npm run metrics:gen-types` (from `transformation/propel_metrics/.../schema`)
+- Tier-1: ajv JSON Schema + cheap semantic mirrors (`schema/client-validate.ts`)
+- Tier-2: debounced `POST …/metric-definitions:validate` (server wins)
+
+## Formula parser
+
+TypeScript port of `propel_metrics.expr.parse` with a shared corpus at
+`transformation/propel_metrics/tests/fixtures/formula_corpus.json`.
+

@@ -19,6 +19,7 @@ import {
   type MetricDefinitionDetail,
   type MetricVersion,
 } from "@/features/metrics/api/metric-definitions";
+import { ArchiveMetricDialog } from "@/features/metrics/detail/archive-dialog";
 import {
   AdvancedBanner,
   StatusChip,
@@ -52,6 +53,7 @@ export function MetricDetailPage() {
   const [diffTo, setDiffTo] = useState<number | null>(null);
   const [diff, setDiff] = useState<DiffResponse | null>(null);
   const [diffError, setDiffError] = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   useEffect(() => {
     if (!token || !tenant || !metricId) return;
@@ -180,9 +182,18 @@ export function MetricDetailPage() {
           </div>
         </div>
         {canManage && !advanced && (
-          <Button asChild variant="outline" analyticsName="metrics_edit">
-            <Link to={`/metrics/${encodeURIComponent(metricId)}/edit`}>Edit</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" analyticsName="metrics_edit">
+              <Link to={`/metrics/${encodeURIComponent(metricId)}/edit`}>Edit</Link>
+            </Button>
+            <Button
+              variant="destructive"
+              size="default"
+              onClick={() => setArchiveOpen(true)}
+            >
+              Archive
+            </Button>
+          </div>
         )}
       </header>
 
@@ -377,6 +388,18 @@ export function MetricDetailPage() {
           )}
         </TabsContent>
       </Tabs>
+      {canManage && token && tenant && (
+        <ArchiveMetricDialog
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          token={token}
+          tenantId={tenant.id}
+          metricId={metricId}
+          onArchived={() => {
+            window.location.href = "/metrics";
+          }}
+        />
+      )}
     </main>
   );
 }
