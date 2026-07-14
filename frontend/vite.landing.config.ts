@@ -46,7 +46,10 @@ export default defineConfig(({ mode }) => {
         env.VITE_POSTHOG_KEY ?? env.POSTHOG_TOKEN ?? "",
       ),
       "import.meta.env.VITE_POSTHOG_HOST": JSON.stringify(
-        env.VITE_POSTHOG_HOST ?? env.POSTHOG_HOST ?? "https://us.i.posthog.com",
+        env.VITE_POSTHOG_HOST ?? env.POSTHOG_HOST ?? "https://metrics.propelreview.com",
+      ),
+      "import.meta.env.VITE_POSTHOG_UI_HOST": JSON.stringify(
+        env.VITE_POSTHOG_UI_HOST ?? env.POSTHOG_UI_HOST ?? "https://us.posthog.com",
       ),
       // Where the "Open app" / "Get started" CTAs point. The deploy script sets
       // this per environment (e.g. https://app.beta.propel.ninja).

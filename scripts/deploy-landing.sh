@@ -41,7 +41,7 @@ export VITE_APP_URL="$APP_URL"
 export VITE_API_URL="$API_URL"
 export VITE_GITHUB_URL="${VITE_GITHUB_URL:-https://github.com/PropelReviews/Propel}"
 export VITE_POSTHOG_KEY="${VITE_POSTHOG_KEY:-${POSTHOG_TOKEN:-}}"
-export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://us.i.posthog.com}}"
+export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://metrics.propelreview.com}}"
 
 echo "==> Building landing site (VITE_APP_URL=$VITE_APP_URL, release=$SHA)"
 npm --prefix "$FRONTEND_DIR" ci

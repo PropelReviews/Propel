@@ -21,7 +21,7 @@ dependencies = [
     "pydantic-settings",
     "python-dotenv",
     "email-validator",
-    "posthog",
+    "posthog>=7.22.2",
 ]
 
 [dependency-groups]
