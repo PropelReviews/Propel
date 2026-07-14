@@ -207,3 +207,29 @@ async def list_metric_compile_runs(
     _ = ctx
     rows = await svc.list_compile_runs(session)
     return [CompileRunRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/tenants/{tenant_id}/metric-compile-runs:enqueue",
+    response_model=CompileRunRead | dict,
+)
+async def enqueue_metric_compile(
+    ctx=Depends(require_permission("metrics:manage")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Enqueue a single-flight dirty-set compile (no-op when source=files)."""
+    from app.services import metric_compile as compile_svc
+
+    _ = ctx
+    run = await compile_svc.enqueue_compile(session, trigger="api")
+    await session.commit()
+    if run is None:
+        return {"status": "already_running"}
+    return CompileRunRead(
+        id=str(run.id),
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        status=run.status,
+        trigger=run.trigger,
+        report_json=run.report_json,
+    )

@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     oauth_linear_client_id: str = ""
     oauth_linear_client_secret: str = ""
 
+    # Metric compile input: "files" (CI committed SQL / propel-metrics compile)
+    # or "db" (resolve orgs from metric_definitions and emit shared-hash models).
+    metrics_compile_source: str = "files"
+
     @property
     def linear_oauth_enabled(self) -> bool:
         return bool(self.oauth_linear_client_id and self.oauth_linear_client_secret)

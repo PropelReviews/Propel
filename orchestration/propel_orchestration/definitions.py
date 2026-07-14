@@ -32,6 +32,10 @@ from propel_orchestration.jobs import (
     org_ingestion_job,
 )
 from propel_orchestration.logging import configure_logging
+from propel_orchestration.metrics_compile import (
+    metrics_compile_build_job,
+    metrics_compile_hourly,
+)
 
 configure_logging()
 
@@ -42,8 +46,9 @@ defs = Definitions(
         org_ingestion_job,
         linear_ingestion_job,
         analytics_assets_job,
+        metrics_compile_build_job,
     ],
-    schedules=[discovery_schedule],
+    schedules=[discovery_schedule, metrics_compile_hourly],
     sensors=[
         org_fanout_sensor,
         linear_fanout_sensor,

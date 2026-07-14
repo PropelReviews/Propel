@@ -33,6 +33,7 @@ uv run propel-metrics pull --org acme --store .propel-store.json ./metrics-out
 uv run propel-metrics push --org acme --store .propel-store.json ./metrics-out --activate
 uv run propel-metrics repin --org acme --id acme.child --store .propel-store.json
 uv run propel-metrics archive --org acme --id acme.old --store .propel-store.json
+uv run propel-metrics resolve-parity --org acme --store .propel-store.json
 ```
 
 CI (`.github/workflows/ci.yml` job **Metric config checks**) runs lockfile check,

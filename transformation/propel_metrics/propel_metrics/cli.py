@@ -127,6 +127,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path(os.environ.get("PROPEL_METRICS_STORE", ".propel-store.json")),
     )
 
+    parity = sub.add_parser(
+        "resolve-parity",
+        help="Compare file-pipeline hashes vs store resolve for an org",
+    )
+    parity.add_argument("--org", required=True, help="Org slug")
+    parity.add_argument(
+        "--store",
+        type=Path,
+        default=Path(os.environ.get("PROPEL_METRICS_STORE", ".propel-store.json")),
+    )
+
     return parser
 
 
@@ -272,6 +283,31 @@ def _cmd_archive(store_path: Path, org: str, metric_id: str) -> int:
     return 0
 
 
+def _cmd_resolve_parity(store_path: Path, org: str) -> int:
+    from propel_metrics.resolve.parity import resolve_parity
+    from propel_metrics.store.import_system import import_system_metrics
+    from propel_metrics.store.protocol import METRIC_SET_ID
+
+    store = _open_store(store_path)
+    if not store.list_active_system_metrics():
+        import_system_metrics(store)
+    if store.get_definition(org, METRIC_SET_ID, status="active") is None:
+        # Implicit default_on via resolve_org; ensure org exists in lock sense
+        pass
+    mismatches = resolve_parity(store, org)
+    if mismatches:
+        for m in mismatches:
+            print(
+                f"MISMATCH {m.metric_id}: file={m.file_hash[:12]}… "
+                f"store={m.store_hash[:12]}…",
+                file=sys.stderr,
+            )
+        print(f"resolve-parity failed: {len(mismatches)} mismatch(es)", file=sys.stderr)
+        return 1
+    print(f"resolve-parity ok for org={org}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -301,6 +337,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "archive":
         return _cmd_archive(args.store, args.org, args.metric_id)
+    if args.command == "resolve-parity":
+        return _cmd_resolve_parity(args.store, args.org)
 
     parser.error(f"unknown command {args.command}")
     return 2

@@ -79,8 +79,27 @@ Permission `metrics:manage` (admin default) for writes; `metrics:read` for reads
 - `GET/PUT .../dimension-mappings`
 - `GET .../metric-compile-runs`
 
+## Compile source
+
+| `METRICS_COMPILE_SOURCE` | Behavior |
+|---|---|
+| `files` (default) | CI / `propel-metrics compile` owns committed SQL |
+| `db` | Resolve orgs from `metric_definitions`, emit shared-hash models |
+
+Parity gate:
+
+```bash
+uv run propel-metrics import-system --store .propel-store.json
+uv run propel-metrics resolve-parity --org acme --store .propel-store.json
+```
+
+Activation dirties content hashes and enqueues a single-flight compile run
+(`metric_compile_runs`). Dagster job `metrics_compile_build` (hourly schedule,
+stopped by default) drains the dirty set when `METRICS_COMPILE_SOURCE=db`.
+
 ## Serving swap
 
 `fct_metric_values` is a **table**. After rebuilding a metric model, the compile
 job runs `swap_metric_values` (see `transformation/dbt/macros/swap_metric_values.sql`)
 so readers never see mixed `definition_version` rows for a metric.
+

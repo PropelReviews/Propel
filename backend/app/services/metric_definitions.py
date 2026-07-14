@@ -187,6 +187,14 @@ async def activate_definition(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     await _persist(sql, mem, [org_slug, SYSTEM_ORG])
+    from app.services import metric_compile as compile_svc
+
+    await compile_svc.enqueue_compile(
+        session,
+        trigger="activate",
+        content_hashes=[row.content_hash] if row.content_hash else [],
+        reason=f"activate:{org_slug}/{metric_id}",
+    )
     await session.commit()
     return row
 
