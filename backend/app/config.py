@@ -23,11 +23,11 @@ class Settings(BaseSettings):
     auth_rate_limit_max_requests: int = 10
     auth_rate_limit_window_seconds: int = 60
 
-    # PostHog server-side SDK. POSTHOG_TOKEN (project key) + POSTHOG_HOST are shared
-    # with tracing; the personal API key enables fast local flag evaluation (no
-    # per-request network call).
+    # PostHog server-side SDK. POSTHOG_TOKEN (project key) + POSTHOG_HOST (managed
+    # reverse proxy) are shared with tracing; the personal API key enables fast local
+    # flag evaluation (no per-request network call).
     posthog_token: str = ""
-    posthog_host: str = "https://us.i.posthog.com"
+    posthog_host: str = "https://metrics.propelreview.com"
     posthog_personal_api_key: str = ""
 
     oauth_google_client_id: str = ""

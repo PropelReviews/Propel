@@ -50,7 +50,7 @@ def setup_logging() -> bool:
     except ImportError:
         return False
 
-    host = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com").rstrip("/")
+    host = os.getenv("POSTHOG_HOST", "https://metrics.propelreview.com").rstrip("/")
     service_name = os.getenv("OTEL_SERVICE_NAME", "propel-backend")
 
     provider = LoggerProvider(resource=_otel_resource(service_name))

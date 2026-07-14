@@ -4,7 +4,7 @@
 # `app_environment` (written to app.auto.tfvars.json at deploy time), so adding
 # a key in the GitHub org/repo Actions variables is enough -- no code changes.
 # For local runs you can set it inline, e.g.:
-#   app_environment = { POSTHOG_TOKEN = "phc_...", POSTHOG_HOST = "https://us.i.posthog.com" }
+#   app_environment = { POSTHOG_TOKEN = "phc_...", POSTHOG_HOST = "https://metrics.propelreview.com" }
 # Sensitive values go in app_secrets (stored in Secrets Manager) instead.
 
 environment       = "beta"

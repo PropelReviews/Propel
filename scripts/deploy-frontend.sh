@@ -34,7 +34,7 @@ API_URL="$(terraform -chdir="$TF_DIR" output -raw api_url)"
 
 export VITE_API_URL="$API_URL"
 export VITE_POSTHOG_KEY="${VITE_POSTHOG_KEY:-${POSTHOG_TOKEN:-}}"
-export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://us.i.posthog.com}}"
+export VITE_POSTHOG_HOST="${VITE_POSTHOG_HOST:-${POSTHOG_HOST:-https://metrics.propelreview.com}}"
 # Build-time analytics metadata so beta/prod builds are distinguishable in PostHog.
 export VITE_APP_ENV="$ENV"
 export VITE_GIT_SHA="${SHA:0:12}"

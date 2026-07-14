@@ -235,7 +235,7 @@ key is just adding an Actions variable; no Terraform or workflow edits needed.
    |----------|---------|-------------|
    | `APP_ENV` | `beta` / `production` | API (startup validation) |
    | `POSTHOG_TOKEN` | `phc_...` | API (OTEL → PostHog) + SPA |
-   | `POSTHOG_HOST` | `https://us.i.posthog.com` | API + SPA |
+   | `POSTHOG_HOST` | `https://metrics.propelreview.com` | API + SPA |
    | `POSTHOG_PROJECT_ID` | `245238` | SPA build (source map upload) |
    | `POSTHOG_PERSONAL_API_KEY` | `phx_...` | SPA build (source map upload; keep secret) |
    | `AUTH_REGISTRATION_ENABLED` | `true` | API (allow signup when ready) |

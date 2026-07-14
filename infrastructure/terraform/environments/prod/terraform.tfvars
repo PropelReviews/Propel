@@ -3,7 +3,7 @@
 # App config is generic: CI forwards every GitHub Actions variable into
 # `app_environment` (app.auto.tfvars.json). Sensitive values go in app_secrets.
 # Local example:
-#   app_environment = { POSTHOG_TOKEN = "phc_...", POSTHOG_HOST = "https://us.i.posthog.com" }
+#   app_environment = { POSTHOG_TOKEN = "phc_...", POSTHOG_HOST = "https://metrics.propelreview.com" }
 
 environment       = "prod"
 zone_name         = "propel.ninja"

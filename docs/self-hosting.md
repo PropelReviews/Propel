@@ -280,7 +280,7 @@ disabled.
 | Variable | Secret? | Consumed by | Description |
 |----------|---------|-------------|-------------|
 | `POSTHOG_TOKEN` | No* | API + frontend | Project API key (write-only; safe in frontend builds) |
-| `POSTHOG_HOST` | No | API + frontend | PostHog host (default `https://us.i.posthog.com`) |
+| `POSTHOG_HOST` | No | API + frontend | PostHog ingest host via managed reverse proxy (default `https://metrics.propelreview.com`) |
 | `POSTHOG_PERSONAL_API_KEY` | **Yes** | API (server) + frontend build | Personal API key for fast feature-flag evaluation and source-map upload |
 | `POSTHOG_PROJECT_ID` | No | Frontend build | Project ID for source-map upload |
 | `OTEL_SERVICE_NAME` | No | API | OpenTelemetry service name (default `propel-backend`) |

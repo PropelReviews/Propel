@@ -10,7 +10,9 @@ import {
 } from "@/lib/posthog-persistence";
 
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY;
-const posthogHost = import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com";
+const posthogHost =
+  import.meta.env.VITE_POSTHOG_HOST ?? "https://metrics.propelreview.com";
+const posthogUiHost = import.meta.env.VITE_POSTHOG_UI_HOST ?? "https://us.posthog.com";
 
 const isPostHogEnabled = Boolean(posthogKey);
 
@@ -19,6 +21,7 @@ if (isPostHogEnabled && !posthog.__loaded) {
 
   posthog.init(posthogKey!, {
     api_host: posthogHost,
+    ui_host: posthogUiHost,
     person_profiles: "identified_only",
     autocapture: true, // intentional: capture all element clicks
     capture_pageview: "history_change",
