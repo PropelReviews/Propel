@@ -50,13 +50,15 @@ export function ActivateReviewSheet({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setError(null);
-    setKind(null);
-    setDiff(null);
-    setLoading(true);
     const yaml = documentToYaml(doc);
     const mid = String((doc.metadata as { id?: string })?.id ?? "");
     void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setError(null);
+      setKind(null);
+      setDiff(null);
+      setLoading(true);
       try {
         const classification = await classifyMetricDefinition(token, tenantId, {
           yaml,

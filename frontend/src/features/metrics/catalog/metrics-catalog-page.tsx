@@ -49,17 +49,20 @@ export function MetricsCatalogPage() {
   useEffect(() => {
     if (!token || !tenant) return;
     let cancelled = false;
-    setState({ status: "loading" });
-    listMetricDefinitions(token, tenant.id)
-      .then((rows) => {
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setState({ status: "loading" });
+      try {
+        const rows = await listMetricDefinitions(token, tenant.id);
         if (!cancelled) setState({ status: "ready", rows });
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         const message =
           err instanceof ApiError ? err.message : "Failed to load metrics.";
         setState({ status: "error", message });
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

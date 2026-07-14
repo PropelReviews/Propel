@@ -85,9 +85,6 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   const [validateErrors, setValidateErrors] = useState<
     Array<{ code?: string; path?: string; message?: string }>
   >([]);
-  const [clientIssues, setClientIssues] = useState<
-    Array<{ code: string; path: string; message: string }>
-  >([]);
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
   const [activateOpen, setActivateOpen] = useState(false);
   const [yamlReformatWarn, setYamlReformatWarn] = useState(false);
@@ -101,6 +98,27 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   const measure = (spec.measure ?? {}) as Record<string, unknown>;
   const time = (spec.time ?? {}) as Record<string, unknown>;
   const advanced = isAdvancedDocument(doc as never);
+  const clientIssues = useMemo(
+    () =>
+      advanced || yamlMode
+        ? []
+        : validateMetricDocument(
+            doc,
+            catalog
+              ? {
+                  entities: catalog.entities.map((e) => ({
+                    name: e.name,
+                    fields: e.fields.map((f) => ({
+                      name: f.name,
+                      type: f.type,
+                      role: f.role,
+                    })),
+                  })),
+                }
+              : undefined,
+          ),
+    [doc, advanced, yamlMode, catalog],
+  );
 
   useEffect(() => {
     if (!token || !tenant) return;
@@ -112,9 +130,12 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   useEffect(() => {
     if (mode !== "edit" || !token || !tenant || !metricIdParam) return;
     let cancelled = false;
-    setLoading(true);
-    getMetricDefinition(token, tenant.id, metricIdParam)
-      .then((detail) => {
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setLoading(true);
+      try {
+        const detail = await getMetricDefinition(token, tenant.id, metricIdParam);
         if (cancelled) return;
         const parsed = parseYaml(detail.yaml);
         if (parsed && typeof parsed === "object") {
@@ -126,12 +147,12 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
         setStoreVersion(detail.version);
         setStoreRevision(detail.revision);
         setLoading(false);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         setLoadError(err instanceof ApiError ? err.message : "Failed to load");
         setLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -219,22 +240,6 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
 
   useEffect(() => {
     if (advanced || yamlMode) return;
-    const issues = validateMetricDocument(
-      doc,
-      catalog
-        ? {
-            entities: catalog.entities.map((e) => ({
-              name: e.name,
-              fields: e.fields.map((f) => ({
-                name: f.name,
-                type: f.type,
-                role: f.role,
-              })),
-            })),
-          }
-        : undefined,
-    );
-    setClientIssues(issues);
     const t = window.setTimeout(() => void runValidate(), 500);
     return () => window.clearTimeout(t);
   }, [doc, advanced, yamlMode, runValidate, catalog]);

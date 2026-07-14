@@ -156,16 +156,21 @@ async def test_m5_preview_executes_against_stub_table(client: AsyncClient, db_en
             {"t": tenant_id},
         )
 
-    yaml_text = SAMPLE.replace("acmem5.sample_count", "previewco.sample_count")
-    resp = await client.post(
-        f"/api/v1/tenants/{tenant_id}/metric-definitions:preview",
-        headers=headers,
-        json={"yaml": yaml_text},
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["executed"] is True, body.get("diagnostics")
-    assert body["grain"] == "month"
-    assert len(body["rows"]) >= 1
-    cte_names = {d.get("cte") for d in body["diagnostics"]}
-    assert "m_rows" in cte_names or any(c and "grain" in str(c) for c in cte_names)
+    try:
+        yaml_text = SAMPLE.replace("acmem5.sample_count", "previewco.sample_count")
+        resp = await client.post(
+            f"/api/v1/tenants/{tenant_id}/metric-definitions:preview",
+            headers=headers,
+            json={"yaml": yaml_text},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["executed"] is True, body.get("diagnostics")
+        assert body["grain"] == "month"
+        assert len(body["rows"]) >= 1
+        cte_names = {d.get("cte") for d in body["diagnostics"]}
+        assert "m_rows" in cte_names or any(c and "grain" in str(c) for c in cte_names)
+    finally:
+        # Stub is not an ORM model — remove so schema-parity tests stay green.
+        async with db_engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS pull_request"))

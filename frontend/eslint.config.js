@@ -6,7 +6,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "dist-landing", "storybook-static", "coverage", ".vitest-cache"],
+    ignores: [
+      "dist",
+      "dist-landing",
+      "storybook-static",
+      "coverage",
+      ".vitest-cache",
+      "scripts/**",
+      "src/features/metrics/schema/generated/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

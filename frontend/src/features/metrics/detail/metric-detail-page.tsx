@@ -60,26 +60,29 @@ export function MetricDetailPage() {
   useEffect(() => {
     if (!token || !tenant || !metricId) return;
     let cancelled = false;
-    setState({ status: "loading" });
-    Promise.all([
-      getMetricDefinition(token, tenant.id, metricId),
-      listMetricVersions(token, tenant.id, metricId),
-    ])
-      .then(([detail, versions]) => {
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setState({ status: "loading" });
+      try {
+        const [detail, versions] = await Promise.all([
+          getMetricDefinition(token, tenant.id, metricId),
+          listMetricVersions(token, tenant.id, metricId),
+        ]);
         if (cancelled) return;
         setState({ status: "ready", detail, versions });
         if (versions.length >= 2) {
           setDiffTo(versions[0]?.version ?? null);
           setDiffFrom(versions[1]?.version ?? null);
         }
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         setState({
           status: "error",
           message: err instanceof ApiError ? err.message : "Failed to load metric.",
         });
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -88,18 +91,21 @@ export function MetricDetailPage() {
   useEffect(() => {
     if (!token || !tenant || !metricId || defView !== "sql") return;
     let cancelled = false;
-    setSqlError(null);
-    getMetricSql(token, tenant.id, metricId)
-      .then((res) => {
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setSqlError(null);
+      try {
+        const res = await getMetricSql(token, tenant.id, metricId);
         if (!cancelled) setSql(res.sql);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         setSql(null);
         setSqlError(
           err instanceof ApiError ? err.message : "Generated SQL unavailable.",
         );
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
