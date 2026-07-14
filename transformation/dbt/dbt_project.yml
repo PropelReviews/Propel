@@ -15,6 +15,8 @@ vars:
   # When set (by the Dagster analytics run), incremental marts only recompute
   # this tenant's rows. Unset (manual / full-refresh) builds every tenant.
   tenant_id: null
+  # Rolling-window spine horizon (dim_step_spine); compile-level, deployment-global.
+  history_days: 730
 
 models:
   propel:

@@ -4,88 +4,86 @@
 -- source: merged_prs.yaml
 
 {{ config(
-    materialized='incremental',
-    incremental_strategy='delete+insert',
-    unique_key=[
-        'tenant_id',
-        'metric_id',
-        'definition_version',
-        'grain',
-        'bucket_start',
-        'dim_repo',
-    ],
+    materialized='table',
 ) }}
 
-with base as (
-
-    select *
-    from {{ ref('pull_request') }}
-
-),
-
-filtered as (
+with
+m_rows as (
 
     select
         base.tenant_id,
-        base.merged_at,
+        base.merged_at as t,
         ''::text as dim_repo,
         1 as _value
-    from base
+    from {{ ref('pull_request') }} as base
     where (base.merged_at is not null)
       and {% if var('tenant_id', none) %} (base.tenant_id = '{{ var("tenant_id") }}'::uuid) {% else %} true {% endif %}
+      and base.merged_at is not null
 
-)
+),
+grain_day as (
 
-(
 select
-    filtered.tenant_id,
+    m_rows.tenant_id,
     'propel.merged_prs'::text as metric_id,
     'fab942ca78d7'::text as definition_version,
     'day'::text as grain,
-    (date_trunc('day', filtered.merged_at at time zone 'UTC'))::timestamptz as bucket_start,
-    (((date_trunc('day', filtered.merged_at at time zone 'UTC')) + interval '1 day'))::timestamptz as bucket_end,
-    ((((date_trunc('day', filtered.merged_at at time zone 'UTC')) + interval '1 day')) <= current_timestamp) as is_complete,
-    filtered.dim_repo as dim_repo,
+    (date_trunc('day', m_rows.t at time zone 'UTC'))::timestamptz as bucket_start,
+    (((date_trunc('day', m_rows.t at time zone 'UTC')) + interval '1 day'))::timestamptz as bucket_end,
+    ((((date_trunc('day', m_rows.t at time zone 'UTC')) + interval '1 day')) <= current_timestamp) as is_complete,
+    m_rows.dim_repo as dim_repo,
     count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
-from filtered
-where filtered.merged_at is not null
-group by filtered.tenant_id, (date_trunc('day', filtered.merged_at at time zone 'UTC')), filtered.dim_repo
-)
-union all
-(
+from m_rows
+group by m_rows.tenant_id, (date_trunc('day', m_rows.t at time zone 'UTC')), m_rows.dim_repo
+
+),
+grain_week as (
+
 select
-    filtered.tenant_id,
+    m_rows.tenant_id,
     'propel.merged_prs'::text as metric_id,
     'fab942ca78d7'::text as definition_version,
     'week'::text as grain,
-    (date_trunc('week', filtered.merged_at at time zone 'UTC'))::timestamptz as bucket_start,
-    (((date_trunc('week', filtered.merged_at at time zone 'UTC')) + interval '7 days'))::timestamptz as bucket_end,
-    ((((date_trunc('week', filtered.merged_at at time zone 'UTC')) + interval '7 days')) <= current_timestamp) as is_complete,
-    filtered.dim_repo as dim_repo,
+    (date_trunc('week', m_rows.t at time zone 'UTC'))::timestamptz as bucket_start,
+    (((date_trunc('week', m_rows.t at time zone 'UTC')) + interval '7 days'))::timestamptz as bucket_end,
+    ((((date_trunc('week', m_rows.t at time zone 'UTC')) + interval '7 days')) <= current_timestamp) as is_complete,
+    m_rows.dim_repo as dim_repo,
     count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
-from filtered
-where filtered.merged_at is not null
-group by filtered.tenant_id, (date_trunc('week', filtered.merged_at at time zone 'UTC')), filtered.dim_repo
-)
-union all
-(
+from m_rows
+group by m_rows.tenant_id, (date_trunc('week', m_rows.t at time zone 'UTC')), m_rows.dim_repo
+
+),
+grain_month as (
+
 select
-    filtered.tenant_id,
+    m_rows.tenant_id,
     'propel.merged_prs'::text as metric_id,
     'fab942ca78d7'::text as definition_version,
     'month'::text as grain,
-    (date_trunc('month', filtered.merged_at at time zone 'UTC'))::timestamptz as bucket_start,
-    (((date_trunc('month', filtered.merged_at at time zone 'UTC')) + interval '1 month'))::timestamptz as bucket_end,
-    ((((date_trunc('month', filtered.merged_at at time zone 'UTC')) + interval '1 month')) <= current_timestamp) as is_complete,
-    filtered.dim_repo as dim_repo,
+    (date_trunc('month', m_rows.t at time zone 'UTC'))::timestamptz as bucket_start,
+    (((date_trunc('month', m_rows.t at time zone 'UTC')) + interval '1 month'))::timestamptz as bucket_end,
+    ((((date_trunc('month', m_rows.t at time zone 'UTC')) + interval '1 month')) <= current_timestamp) as is_complete,
+    m_rows.dim_repo as dim_repo,
     count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
-from filtered
-where filtered.merged_at is not null
-group by filtered.tenant_id, (date_trunc('month', filtered.merged_at at time zone 'UTC')), filtered.dim_repo
+from m_rows
+group by m_rows.tenant_id, (date_trunc('month', m_rows.t at time zone 'UTC')), m_rows.dim_repo
+
+),
+
+final as (
+
+    select * from grain_day
+    union all
+    select * from grain_week
+    union all
+    select * from grain_month
+
 )
+
+select * from final

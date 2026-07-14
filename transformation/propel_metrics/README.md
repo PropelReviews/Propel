@@ -1,8 +1,9 @@
 # propel-metrics
 
 Declarative metric configuration for Propel: validate Metric / MetricSet /
-DimensionMapping YAML against the entity catalog, and compile active metrics to
-dbt models that populate `analytics.fct_metric_values`.
+DimensionMapping YAML against the entity catalog, resolve to a `CompiledPlan`
+IR, and compile active metrics to dbt models that populate
+`analytics.fct_metric_values`.
 
 ## Install
 
@@ -30,7 +31,8 @@ uv run pytest -v
 ```
 
 CI (`.github/workflows/ci.yml` job **Metric config checks**) runs lockfile check,
-ruff, pytest (including `tests/fixtures/invalid/`), and `propel-metrics ci`.
+ruff, pytest (including `tests/fixtures/invalid/`, IR/expr/property tests), and
+`propel-metrics ci`.
 
 ## Layout
 
@@ -41,7 +43,9 @@ ruff, pytest (including `tests/fixtures/invalid/`), and `propel-metrics ci`.
 | `propel_metrics/configs/propel/` | Shipped standard metric definitions |
 | `propel_metrics/validate/` | Structural → semantic → graph validation |
 | `propel_metrics/resolve/` | Flatten `extends`, content-hash resolved defs |
-| `propel_metrics/codegen/` | Emit dbt SQL |
+| `propel_metrics/ir/` | `CompiledPlan` IR (resolve → codegen) |
+| `propel_metrics/expr/` | Formula tokenizer / parser / SQL emit |
+| `propel_metrics/codegen/` | Emit dbt SQL (simple, ratio, formula, windows) |
 
 See [docs/metrics/config-system.md](../../docs/metrics/config-system.md) for the
 design summary.

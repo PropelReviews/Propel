@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.cycle_time_trailing_30d
+  name: PR Cycle Time (trailing 30d)
+  description: >
+    Median PR open→merge duration over a trailing 30-day window, stepped daily.
+    Dogfood metric for M3 rolling-window codegen (MTTR stays draft until incidents).
+  tags: [dora, flow]
+  status: active
+  version: 1
+spec:
+  extends: propel.cycle_time
+  overrides:
+    time:
+      grains: []
+      windows:
+        - days: 30
+          step: day
+    display:
+      unit: duration
+      format: humanize_duration
+      direction: lower_is_better

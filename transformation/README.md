@@ -28,9 +28,11 @@ Example metrics:
 
 ```
 transformation/
-├── propel_metrics/                         # Metric YAML → validate + compile to dbt
+├── propel_metrics/                         # Metric YAML → IR → compile to dbt
 │   ├── propel_metrics/configs/propel/      # shipped L1 Metric configs
 │   ├── propel_metrics/catalog/             # L0 entity catalog
+│   ├── propel_metrics/ir/                  # CompiledPlan intermediate representation
+│   ├── propel_metrics/expr/                # formula parser
 │   └── README.md
 └── dbt/                                    # dbt project root
     ├── dbt_project.yml
@@ -43,7 +45,9 @@ transformation/
         ├── sources.yml                     # public.raw_record (+ github/linear source aliases)
         ├── staging/                        # tool-specific latest-snapshot views
         ├── canonical/                      # L0 entities (pull_request, release, …)
-        ├── metrics/generated/              # propel-metrics compile output (committed)
+        ├── metrics/
+        │   ├── dim_step_spine.sql          # shared rolling-window spine
+        │   └── generated/                  # propel-metrics compile output (committed)
         └── marts/                          # legacy daily primitives (dual-run with generated)
 ```
 

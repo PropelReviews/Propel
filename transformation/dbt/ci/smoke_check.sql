@@ -346,4 +346,76 @@ begin
     end if;
 
     raise notice 'fct_metric_values propel.cycle_time matches expected fixture output';
+
+    -- Declarative CFR (ratio): 1 revert / 3 merges on 2026-01-06
+    with cfr_day as (
+        select
+            bucket_start::date as bucket_day,
+            value as cfr,
+            numerator,
+            denominator
+        from analytics.fct_metric_values
+        where
+            tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+            and metric_id = 'propel.change_failure_rate'
+            and grain = 'day'
+            and dim_repo = ''
+    ),
+    expected (bucket_day, cfr, numerator, denominator) as (
+        values
+            ('2026-01-06'::date, (1.0 / 3.0)::float8, 1.0::float8, 3.0::float8)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join cfr_day f
+        on f.bucket_day = e.bucket_day
+    where
+        abs(f.cfr - e.cfr) > 0.001
+        or f.numerator is distinct from e.numerator
+        or f.denominator is distinct from e.denominator
+        or e.bucket_day is null
+        or f.bucket_day is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_metric_values propel.change_failure_rate day does not match expected (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_metric_values propel.change_failure_rate matches expected fixture output';
+
+    -- Trailing-30d cycle time: window ending 2026-01-06 covers the same three
+    -- merges as the day grain (fixture has no earlier merges in-window).
+    with trail as (
+        select
+            bucket_end::date as window_end,
+            value as median_seconds
+        from analytics.fct_metric_values
+        where
+            tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+            and metric_id = 'propel.cycle_time_trailing_30d'
+            and grain = 'rolling_30d'
+            and dim_repo = ''
+            and bucket_end::date = '2026-01-06'::date
+    ),
+    expected (window_end, median_seconds) as (
+        values
+            ('2026-01-06'::date, 7200.0::float8)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join trail f
+        on f.window_end = e.window_end
+    where
+        abs(f.median_seconds - e.median_seconds) > 0.001
+        or e.window_end is null
+        or f.window_end is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_metric_values propel.cycle_time_trailing_30d does not match expected (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_metric_values propel.cycle_time_trailing_30d matches expected fixture output';
 end $$;
