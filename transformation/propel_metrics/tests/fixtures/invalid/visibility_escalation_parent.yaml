@@ -1,0 +1,15 @@
+# expect: (parent — loaded with visibility_escalation.yaml)
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.vis_parent
+  name: Visibility Parent
+  status: active
+spec:
+  entity: pull_request
+  measure:
+    type: count
+  time:
+    field: merged_at
+    grains: [day]
+  visibility: ic

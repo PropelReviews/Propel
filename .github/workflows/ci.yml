@@ -144,9 +144,46 @@ jobs:
       - name: Run target-propel tests
         run: uv run --no-sync pytest meltano/target-propel/tests -v --tb=short
 
+  propel-metrics:
+    name: Metric config checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: transformation/propel_metrics
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "transformation/propel_metrics/uv.lock"
+
+      - name: Lockfile up to date
+        run: uv lock --check
+
+      - name: Install propel-metrics
+        run: uv sync --frozen --extra dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      # Unit + fixture tests: schema/catalog self-check, invalid YAML corpus,
+      # semantic/graph edge cases, compile determinism + inventory.
+      - name: Pytest
+        run: uv run pytest -v --tb=short
+
+      # Aggregate gate: validate --strict + compile --check (drift + inventory)
+      - name: propel-metrics ci
+        run: uv run propel-metrics ci
+
   dbt:
     name: dbt checks
     runs-on: ubuntu-latest
+    needs:
+      - propel-metrics
     services:
       postgres:
         image: postgres:18.3
@@ -362,6 +399,7 @@ jobs:
       - terraform
       - backend
       - ingestion-integration
+      - propel-metrics
       - dbt
       - frontend
       - scripts

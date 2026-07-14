@@ -1,0 +1,15 @@
+# expect: E_SCHEMA
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.bad_unknown_key
+  name: Bad Unknown Key
+  status: active
+spec:
+  entity: pull_request
+  measure:
+    type: count
+  time:
+    field: merged_at
+    grains: [day]
+  filtres: []

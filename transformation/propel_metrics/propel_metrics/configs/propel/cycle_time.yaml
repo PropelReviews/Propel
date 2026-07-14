@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.cycle_time
+  name: PR Cycle Time
+  description: >
+    Median time from PR open to merge (seconds). DORA lead-time-for-changes
+    proxy until commit→deploy is available.
+  tags: [dora, flow]
+  status: active
+  version: 1
+spec:
+  entity: pull_request
+  measure:
+    type: interval
+    from: opened_at
+    to: merged_at
+    agg: median
+    null_handling: exclude
+    negative_handling: exclude
+  filters:
+    - field: merged_at
+      op: is_not_null
+  time:
+    field: merged_at
+    grains: [day, week, month]
+  dimensions: []
+  display:
+    unit: duration
+    format: humanize_duration
+    direction: lower_is_better
+  visibility: ic

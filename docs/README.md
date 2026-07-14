@@ -32,7 +32,8 @@ docs live here under `docs/`.
 - [Backend data model](backend/data-model.md) — users, tenants, memberships, invites.
 - [Frontend](../frontend/README.md) — Vite + React SPA.
 - [Frontend analytics](frontend/analytics.md) — PostHog event taxonomy & super properties.
-- [Transformation](../transformation/README.md) — data transformation.
+- [Transformation](../transformation/README.md) — data transformation (dbt + metrics).
+- [Metric config system](metrics/config-system.md) — declarative Metric YAML, validate/compile, `fct_metric_values`.
 - [Contributing](../CONTRIBUTING.md) — contribution guidelines.
 
 ## Development

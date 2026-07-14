@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.reverted_prs
+  name: Reverted Pull Requests
+  description: >
+    Merged PRs whose title matches the revert heuristic (numerator for the
+    change-failure proxy).
+  tags: [dora]
+  status: active
+  version: 1
+spec:
+  entity: pull_request
+  measure:
+    type: count
+  filters:
+    - field: merged_at
+      op: is_not_null
+    - field: is_revert
+      op: eq
+      value: true
+  time:
+    field: merged_at
+    grains: [day, week, month]
+  dimensions: []
+  display:
+    unit: count
+    format: integer
+    direction: lower_is_better
+  visibility: team

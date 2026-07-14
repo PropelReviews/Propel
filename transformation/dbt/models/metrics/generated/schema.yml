@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: fct_metric_values
+    description: >
+      Uniform metric values table generated from declarative Metric YAML.
+      Dual-runs alongside legacy fct_*_daily marts until API cutover.
+    columns:
+      - name: tenant_id
+        data_tests: [not_null]
+      - name: metric_id
+        data_tests: [not_null]
+      - name: grain
+        data_tests: [not_null]
+      - name: bucket_start
+        data_tests: [not_null]
+      - name: value
+        data_tests: [not_null]
+  - name: metric_propel_cycle_time
+    description: Generated model for propel.cycle_time.
+  - name: metric_propel_cycle_time_p90
+    description: Generated model for propel.cycle_time_p90.
+  - name: metric_propel_deployment_frequency
+    description: Generated model for propel.deployment_frequency.
+  - name: metric_propel_merged_prs
+    description: Generated model for propel.merged_prs.
+  - name: metric_propel_reverted_prs
+    description: Generated model for propel.reverted_prs.
+  - name: metric_propel_review_latency
+    description: Generated model for propel.review_latency.

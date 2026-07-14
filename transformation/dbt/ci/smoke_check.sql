@@ -312,4 +312,38 @@ begin
     end if;
 
     raise notice 'fct_ticket_description_edits_daily matches expected fixture output';
+
+    -- Declarative metrics (fct_metric_values): cycle_time median on 2026-01-06
+    -- is 2h = 7200 seconds (same PR set as fct_pr_cycle_time_daily).
+    with cycle_day as (
+        select
+            bucket_start::date as bucket_day,
+            value as median_seconds
+        from analytics.fct_metric_values
+        where
+            tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+            and metric_id = 'propel.cycle_time'
+            and grain = 'day'
+            and dim_repo = ''
+    ),
+    expected (bucket_day, median_seconds) as (
+        values
+            ('2026-01-06'::date, 7200.0::float8)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join cycle_day f
+        on f.bucket_day = e.bucket_day
+    where
+        abs(f.median_seconds - e.median_seconds) > 0.001
+        or e.bucket_day is null
+        or f.bucket_day is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_metric_values propel.cycle_time day does not match expected (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_metric_values propel.cycle_time matches expected fixture output';
 end $$;

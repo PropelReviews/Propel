@@ -1,0 +1,18 @@
+# expect: E_ENUM_VALUE
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.bad_enum
+  name: Bad Enum
+  status: active
+spec:
+  entity: pull_request
+  measure:
+    type: count
+  filters:
+    - field: state
+      op: eq
+      value: yeeted
+  time:
+    field: merged_at
+    grains: [day]

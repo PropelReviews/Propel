@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.review_latency
+  name: Time to First Review
+  description: >
+    Median time from PR open to first non-author submitted review (seconds).
+  tags: [dora, flow]
+  status: active
+  version: 1
+spec:
+  entity: pull_request
+  measure:
+    type: interval
+    from: opened_at
+    to: first_review_at
+    agg: median
+    null_handling: exclude
+    negative_handling: exclude
+  filters:
+    - field: first_review_at
+      op: is_not_null
+  time:
+    field: first_review_at
+    grains: [day, week, month]
+  dimensions: []
+  display:
+    unit: duration
+    format: humanize_duration
+    direction: lower_is_better
+  visibility: ic
