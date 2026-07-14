@@ -63,6 +63,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-propel}:${POSTGRES_PASSWORD:-propel}@postgres:5432/${POSTGRES_DB:-propel}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-propel-backend}
+      METRICS_COMPILE_SOURCE: ${METRICS_COMPILE_SOURCE:-db}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -103,6 +104,7 @@ services:
       DBT_USER: ${POSTGRES_USER:-propel}
       DBT_PASSWORD: ${POSTGRES_PASSWORD:-propel}
       DBT_DBNAME: ${POSTGRES_DB:-propel}
+      METRICS_COMPILE_SOURCE: ${METRICS_COMPILE_SOURCE:-db}
       # Run Dagster from its own venv; import bind-mounted `app` + orchestration.
       PATH: /opt/orchestration-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       PYTHONPATH: /app:/orchestration

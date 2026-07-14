@@ -219,6 +219,14 @@ async def repin_definition(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     await _persist(sql, mem, [org_slug, SYSTEM_ORG])
+    from app.services import metric_compile as compile_svc
+
+    await compile_svc.enqueue_compile(
+        session,
+        trigger="repin",
+        content_hashes=[row.content_hash] if row.content_hash else [],
+        reason=f"repin:{org_slug}/{metric_id}",
+    )
     await session.commit()
     return row
 
@@ -282,6 +290,15 @@ async def put_metric_set(
             known_orgs=[org_slug],
         )
     await _persist(sql, mem, [org_slug, SYSTEM_ORG])
+    from app.services import metric_compile as compile_svc
+
+    enrollments = await sql.list_enrollments(org_slug)
+    await compile_svc.enqueue_compile(
+        session,
+        trigger="metric_set",
+        content_hashes=[e.content_hash for e in enrollments if e.content_hash],
+        reason=f"metric_set:{org_slug}",
+    )
     await session.commit()
     return row
 
@@ -306,6 +323,15 @@ async def put_dimension_mapping(
             known_orgs=[org_slug],
         )
     await _persist(sql, mem, [org_slug, SYSTEM_ORG])
+    from app.services import metric_compile as compile_svc
+
+    enrollments = await sql.list_enrollments(org_slug)
+    await compile_svc.enqueue_compile(
+        session,
+        trigger="dimension_mapping",
+        content_hashes=[e.content_hash for e in enrollments if e.content_hash],
+        reason=f"dimension_mapping:{org_slug}/{row.metric_id}",
+    )
     await session.commit()
     return row
 

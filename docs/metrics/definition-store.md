@@ -83,19 +83,22 @@ Permission `metrics:manage` (admin default) for writes; `metrics:read` for reads
 
 | `METRICS_COMPILE_SOURCE` | Behavior |
 |---|---|
-| `files` (default) | CI / `propel-metrics compile` owns committed SQL |
-| `db` | Resolve orgs from `metric_definitions`, emit shared-hash models |
+| `files` | CI / `propel-metrics compile` owns committed SQL; dirty rows are still recorded |
+| `db` (**default**) | Resolve orgs from `metric_definitions`, emit shared-hash models |
 
-Parity gate:
+Activation / MetricSet / mapping writes mark `metric_compile_dirty`. The Dagster
+sensor `metrics_compile_dirty_sensor` launches `metrics_compile_build`, which
+claims a single-flight `metric_compile_runs` row and drains the dirty set.
+Hourly schedule runs a full resolve backstop.
+
+Parity gate before relying on `db` in a new environment:
 
 ```bash
 uv run propel-metrics import-system --store .propel-store.json
 uv run propel-metrics resolve-parity --org acme --store .propel-store.json
 ```
 
-Activation dirties content hashes and enqueues a single-flight compile run
-(`metric_compile_runs`). Dagster job `metrics_compile_build` (hourly schedule,
-stopped by default) drains the dirty set when `METRICS_COMPILE_SOURCE=db`.
+Override with `METRICS_COMPILE_SOURCE=files` to force the file pipeline.
 
 ## Serving swap
 

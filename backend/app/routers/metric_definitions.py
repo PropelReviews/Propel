@@ -211,25 +211,23 @@ async def list_metric_compile_runs(
 
 @router.post(
     "/tenants/{tenant_id}/metric-compile-runs:enqueue",
-    response_model=CompileRunRead | dict,
 )
 async def enqueue_metric_compile(
     ctx=Depends(require_permission("metrics:manage")),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Enqueue a single-flight dirty-set compile (no-op when source=files)."""
+    """Mark enrollment hashes dirty so the Dagster dirty-set sensor drains them."""
     from app.services import metric_compile as compile_svc
+    from app.services.metric_store import SqlAlchemyDefinitionStore
 
-    _ = ctx
-    run = await compile_svc.enqueue_compile(session, trigger="api")
-    await session.commit()
-    if run is None:
-        return {"status": "already_running"}
-    return CompileRunRead(
-        id=str(run.id),
-        started_at=run.started_at,
-        finished_at=run.finished_at,
-        status=run.status,
-        trigger=run.trigger,
-        report_json=run.report_json,
+    sql = SqlAlchemyDefinitionStore(session)
+    enrollments = await sql.list_enrollments(ctx.tenant.slug)
+    hashes = [e.content_hash for e in enrollments if e.content_hash]
+    result = await compile_svc.enqueue_compile(
+        session,
+        trigger="api",
+        content_hashes=hashes,
+        reason=f"api-enqueue:{ctx.tenant.slug}",
     )
+    await session.commit()
+    return result

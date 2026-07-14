@@ -34,6 +34,7 @@ from propel_orchestration.jobs import (
 from propel_orchestration.logging import configure_logging
 from propel_orchestration.metrics_compile import (
     metrics_compile_build_job,
+    metrics_compile_dirty_sensor,
     metrics_compile_hourly,
 )
 
@@ -54,6 +55,7 @@ defs = Definitions(
         linear_fanout_sensor,
         analytics_sensor,
         dask_worker_scaling_sensor,
+        metrics_compile_dirty_sensor,
     ],
     resources={
         "dbt": DbtCliResource(project_dir=dbt_project),
