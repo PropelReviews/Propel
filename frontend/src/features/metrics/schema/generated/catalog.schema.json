@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://propel.dev/schemas/metrics/catalog.schema.json",
+  "title": "Propel entity catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["catalogVersion", "entities"],
+  "properties": {
+    "catalogVersion": { "type": "integer", "minimum": 1 },
+    "entities": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fields"],
+        "properties": {
+          "grain": { "type": "string" },
+          "dbt_model": { "type": "string", "minLength": 1 },
+          "fields": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "role"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "enum",
+                    "integer",
+                    "float",
+                    "boolean",
+                    "timestamp",
+                    "array<string>"
+                  ]
+                },
+                "role": {
+                  "type": "string",
+                  "enum": ["key", "tenant_key", "dimension", "measure", "event_time"]
+                },
+                "values": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "nullable": { "type": "boolean" },
+                "cardinality_estimate": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "person": {
+                  "type": "boolean",
+                  "description": "Field identifies a person; used for visibility guardrails in the authoring UI."
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": { "type": { "const": "enum" } },
+                    "required": ["type"]
+                  },
+                  "then": { "required": ["values"] }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "cardinality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "warn_above": { "type": "integer", "minimum": 1 },
+        "error_above": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

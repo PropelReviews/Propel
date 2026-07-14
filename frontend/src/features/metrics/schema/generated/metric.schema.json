@@ -1,0 +1,444 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://propel.dev/schemas/metrics/metric.schema.json",
+  "title": "Propel Metric",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": { "type": "string", "const": "propel/v1" },
+    "kind": { "type": "string", "const": "Metric" },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "spec": { "$ref": "#/$defs/spec" }
+  },
+  "$defs": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]{1,62}$"
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+        },
+        "owner": { "type": "string" },
+        "advanced": { "type": "boolean", "default": false },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "active", "deprecated", "archived", "broken"],
+          "default": "draft"
+        },
+        "version": { "type": "integer", "minimum": 1, "default": 1 }
+      }
+    },
+    "filterPredicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "op"],
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "op": {
+          "type": "string",
+          "enum": [
+            "eq",
+            "neq",
+            "in",
+            "not_in",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "contains",
+            "not_contains",
+            "starts_with",
+            "ends_with",
+            "is_null",
+            "is_not_null"
+          ]
+        },
+        "value": {}
+      }
+    },
+    "filterNode": {
+      "oneOf": [
+        { "$ref": "#/$defs/filterPredicate" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["any_of"],
+          "properties": {
+            "any_of": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/filterNode" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["all_of"],
+          "properties": {
+            "all_of": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/filterNode" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["not"],
+          "properties": {
+            "not": { "$ref": "#/$defs/filterNode" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sql"],
+          "properties": {
+            "sql": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "operandRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]{1,62}$"
+        },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/filterNode" }
+            }
+          }
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["days", "step"],
+      "properties": {
+        "days": { "type": "integer", "minimum": 1 },
+        "step": { "type": "string", "enum": ["day", "week"] }
+      }
+    },
+    "paramDecl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "binds"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "array<string>", "integer", "boolean"]
+        },
+        "default": {},
+        "binds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["filter"],
+          "properties": {
+            "filter": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["field", "op"],
+              "properties": {
+                "field": { "type": "string" },
+                "op": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "measure": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "count",
+            "count_distinct",
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "percentile",
+            "interval",
+            "ratio",
+            "formula",
+            "sql"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "count" } },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "properties": { "type": { "const": "count" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "count_distinct" } },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "required": ["type", "field"],
+            "properties": {
+              "type": { "const": "count_distinct" },
+              "field": { "type": "string" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["sum", "avg", "min", "max"] }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "required": ["type", "field"],
+            "properties": {
+              "type": { "enum": ["sum", "avg", "min", "max"] },
+              "field": { "type": "string" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "percentile" } },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "required": ["type", "field", "percentile"],
+            "properties": {
+              "type": { "const": "percentile" },
+              "field": { "type": "string" },
+              "percentile": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "exclusiveMaximum": 100
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "interval" } },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "required": ["type", "from", "to", "agg"],
+            "properties": {
+              "type": { "const": "interval" },
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "agg": {
+                "type": "string",
+                "enum": ["avg", "median", "percentile", "min", "max", "sum"]
+              },
+              "percentile": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "exclusiveMaximum": 100
+              },
+              "null_handling": {
+                "type": "string",
+                "enum": ["exclude"],
+                "default": "exclude"
+              },
+              "negative_handling": {
+                "type": "string",
+                "enum": ["exclude", "clamp_zero", "allow"],
+                "default": "exclude"
+              },
+              "join": {
+                "description": "Reserved for v2 cross-entity intervals; not allowed in v1.",
+                "not": {}
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "agg": { "const": "percentile" } },
+                  "required": ["agg"]
+                },
+                "then": { "required": ["percentile"] }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "ratio" } },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "required": ["type", "numerator", "denominator"],
+            "properties": {
+              "type": { "const": "ratio" },
+              "numerator": { "$ref": "#/$defs/operandRef" },
+              "denominator": { "$ref": "#/$defs/operandRef" },
+              "zero_denominator": {
+                "description": "Emit NULL (YAML null) or 0 when denominator is 0.",
+                "default": null,
+                "oneOf": [{ "type": "null" }, { "const": "zero" }]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "formula" } },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "required": ["type", "inputs", "expression"],
+            "properties": {
+              "type": { "const": "formula" },
+              "inputs": {
+                "type": "object",
+                "minProperties": 2,
+                "maxProperties": 8,
+                "additionalProperties": { "$ref": "#/$defs/operandRef" },
+                "propertyNames": {
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                }
+              },
+              "expression": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "sql" } },
+            "required": ["type"]
+          },
+          "then": {
+            "additionalProperties": false,
+            "required": ["type", "sql"],
+            "properties": {
+              "type": { "const": "sql" },
+              "sql": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entity": { "type": "string", "minLength": 1 },
+        "extends": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]{1,62}$"
+        },
+        "overrides": { "type": "object" },
+        "measure": { "$ref": "#/$defs/measure" },
+        "filters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/filterNode" }
+        },
+        "time": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "field": { "type": "string" },
+            "grains": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["day", "week", "month", "quarter"]
+              },
+              "uniqueItems": true
+            },
+            "windows": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/window" }
+            }
+          },
+          "anyOf": [
+            { "required": ["grains"], "properties": { "grains": { "minItems": 1 } } },
+            { "required": ["windows"], "properties": { "windows": { "minItems": 1 } } }
+          ]
+        },
+        "dimensions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/paramDecl" }
+        },
+        "display": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unit": { "type": "string" },
+            "format": {
+              "type": "string",
+              "enum": [
+                "integer",
+                "decimal_1dp",
+                "decimal_2dp",
+                "percent_1dp",
+                "humanize_duration"
+              ]
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["higher_is_better", "lower_is_better", "neutral"]
+            }
+          }
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["ic", "team", "org"],
+          "default": "team"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "not": { "required": ["extends"] }
+          },
+          "then": {
+            "required": ["time", "measure"]
+          }
+        }
+      ]
+    }
+  }
+}

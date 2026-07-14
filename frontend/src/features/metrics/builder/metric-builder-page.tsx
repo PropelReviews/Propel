@@ -38,6 +38,11 @@ import {
   emptyMetricDocument,
 } from "@/features/metrics/document/store";
 import { documentToYaml } from "@/features/metrics/document/yaml-io";
+import {
+  fieldForPath,
+  validateMetricDocument,
+} from "@/features/metrics/schema/client-validate";
+import { messageForCode } from "@/features/metrics/schema/error-messages";
 import { PreviewPanel } from "@/features/metrics/preview/preview-panel";
 
 const MEASURE_TYPES = [
@@ -79,6 +84,9 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   const [saveState, setSaveState] = useState<string>("");
   const [validateErrors, setValidateErrors] = useState<
     Array<{ code?: string; path?: string; message?: string }>
+  >([]);
+  const [clientIssues, setClientIssues] = useState<
+    Array<{ code: string; path: string; message: string }>
   >([]);
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(mode === "edit");
@@ -191,9 +199,25 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
 
   useEffect(() => {
     if (advanced || yamlMode) return;
+    const issues = validateMetricDocument(
+      doc,
+      catalog
+        ? {
+            entities: catalog.entities.map((e) => ({
+              name: e.name,
+              fields: e.fields.map((f) => ({
+                name: f.name,
+                type: f.type,
+                role: f.role,
+              })),
+            })),
+          }
+        : undefined,
+    );
+    setClientIssues(issues);
     const t = window.setTimeout(() => void runValidate(), 500);
     return () => window.clearTimeout(t);
-  }, [doc, advanced, yamlMode, runValidate]);
+  }, [doc, advanced, yamlMode, runValidate, catalog]);
 
   const autosave = useCallback(async () => {
     if (!token || !tenant || advanced) return;
@@ -395,14 +419,26 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
             </p>
           )}
 
-          {validateErrors.length > 0 && (
+          {(clientIssues.length > 0 || validateErrors.length > 0) && (
             <ul
               role="alert"
               className="border-destructive/40 bg-destructive/5 text-destructive space-y-1 rounded-lg border p-3 text-sm"
             >
+              {clientIssues.map((e, i) => (
+                <li key={`c-${e.path}-${i}`}>
+                  [{e.code}] {e.path}: {messageForCode(e.code, e.message)}
+                  {fieldForPath(e.path) ? (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      → {fieldForPath(e.path)}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
               {validateErrors.map((e, i) => (
-                <li key={`${e.path}-${i}`}>
-                  [{e.code}] {e.path}: {e.message}
+                <li key={`s-${e.path}-${i}`}>
+                  [{e.code}] {e.path}:{" "}
+                  {messageForCode(String(e.code ?? ""), e.message ?? "")}
                 </li>
               ))}
             </ul>

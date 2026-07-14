@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://propel.dev/schemas/metrics/metric_set.schema.json",
+  "title": "Propel MetricSet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": { "type": "string", "const": "propel/v1" },
+    "kind": { "type": "string", "const": "MetricSet" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["org"],
+      "properties": {
+        "org": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$",
+          "description": "Tenant slug"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "standard": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["default_on", "explicit"],
+              "default": "default_on"
+            },
+            "disabled": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^propel\\.[a-z][a-z0-9_]{1,62}$"
+              },
+              "uniqueItems": true
+            },
+            "enabled": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^propel\\.[a-z][a-z0-9_]{1,62}$"
+              },
+              "uniqueItems": true
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]{1,62}$"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}
