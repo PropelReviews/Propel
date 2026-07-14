@@ -81,6 +81,7 @@ select
     null::timestamptz as bucket_end,
     null::boolean as is_complete,
     ''::text as dim_repo,
+    ''::text as dim_team,
     null::float8 as value,
     null::float8 as numerator,
     null::float8 as denominator

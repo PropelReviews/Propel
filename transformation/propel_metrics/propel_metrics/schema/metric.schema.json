@@ -31,7 +31,7 @@
         "advanced": { "type": "boolean", "default": false },
         "status": {
           "type": "string",
-          "enum": ["draft", "active", "deprecated", "archived"],
+          "enum": ["draft", "active", "deprecated", "archived", "broken"],
           "default": "draft"
         },
         "version": { "type": "integer", "minimum": 1, "default": 1 }

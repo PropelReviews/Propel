@@ -14,6 +14,7 @@ m_rows as (
         base.tenant_id,
         base.merged_at as t,
         ''::text as dim_repo,
+        ''::text as dim_team,
         1 as _value
     from {{ ref('pull_request') }} as base
     where (base.merged_at is not null)
@@ -32,11 +33,12 @@ select
     (((date_trunc('day', m_rows.t at time zone 'UTC')) + interval '1 day'))::timestamptz as bucket_end,
     ((((date_trunc('day', m_rows.t at time zone 'UTC')) + interval '1 day')) <= current_timestamp) as is_complete,
     m_rows.dim_repo as dim_repo,
+    m_rows.dim_team as dim_team,
     count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from m_rows
-group by m_rows.tenant_id, (date_trunc('day', m_rows.t at time zone 'UTC')), m_rows.dim_repo
+group by m_rows.tenant_id, (date_trunc('day', m_rows.t at time zone 'UTC')), m_rows.dim_repo, m_rows.dim_team
 
 ),
 grain_week as (
@@ -50,11 +52,12 @@ select
     (((date_trunc('week', m_rows.t at time zone 'UTC')) + interval '7 days'))::timestamptz as bucket_end,
     ((((date_trunc('week', m_rows.t at time zone 'UTC')) + interval '7 days')) <= current_timestamp) as is_complete,
     m_rows.dim_repo as dim_repo,
+    m_rows.dim_team as dim_team,
     count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from m_rows
-group by m_rows.tenant_id, (date_trunc('week', m_rows.t at time zone 'UTC')), m_rows.dim_repo
+group by m_rows.tenant_id, (date_trunc('week', m_rows.t at time zone 'UTC')), m_rows.dim_repo, m_rows.dim_team
 
 ),
 grain_month as (
@@ -68,11 +71,12 @@ select
     (((date_trunc('month', m_rows.t at time zone 'UTC')) + interval '1 month'))::timestamptz as bucket_end,
     ((((date_trunc('month', m_rows.t at time zone 'UTC')) + interval '1 month')) <= current_timestamp) as is_complete,
     m_rows.dim_repo as dim_repo,
+    m_rows.dim_team as dim_team,
     count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from m_rows
-group by m_rows.tenant_id, (date_trunc('month', m_rows.t at time zone 'UTC')), m_rows.dim_repo
+group by m_rows.tenant_id, (date_trunc('month', m_rows.t at time zone 'UTC')), m_rows.dim_repo, m_rows.dim_team
 
 ),
 
