@@ -18,6 +18,9 @@ fi
 echo "Installing frontend dependencies..."
 (cd frontend && npm install)
 
+echo "Installing Playwright Chromium (browser / visual tests)..."
+(cd frontend && npx playwright install chromium)
+
 echo "Installing backend dependencies..."
 (cd backend && uv sync)
 
