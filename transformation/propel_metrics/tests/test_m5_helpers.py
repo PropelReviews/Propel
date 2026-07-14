@@ -59,8 +59,15 @@ spec:
 def test_preview_sql_for_shipped_metric():
     by_id = {m.metric_id: m for m in resolve_metrics(active_only=True)}
     plan = build_compiled_plan(by_id["propel.merged_prs"], by_id)
-    out = render_preview_sql(plan, tenant_id="00000000-0000-0000-0000-000000000001")
-    assert "statement_timeout" in out["sql"]
+    out = render_preview_sql(
+        plan,
+        tenant_id="00000000-0000-0000-0000-000000000001",
+        relation_schema="public",
+    )
+    assert "LIMIT 500" in out["sql"]
+    assert "public.pull_request" in out["sql"]
+    assert out["diagnostics_sql"] is not None
+    assert "count(*)" in out["diagnostics_sql"]
 
 
 def test_formula_json_ast_ok():
