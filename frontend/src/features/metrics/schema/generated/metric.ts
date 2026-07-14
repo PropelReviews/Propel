@@ -30,12 +30,7 @@ export type Spec = {
   };
   display?: {
     unit?: string;
-    format?:
-      | "integer"
-      | "decimal_1dp"
-      | "decimal_2dp"
-      | "percent_1dp"
-      | "humanize_duration";
+    format?: "integer" | "decimal_1dp" | "decimal_2dp" | "percent_1dp" | "humanize_duration";
     direction?: "higher_is_better" | "lower_is_better" | "neutral";
   };
   visibility?: "ic" | "team" | "org";

@@ -6,3 +6,4 @@ storybook-static
 coverage
 .vitest-cache
 *.tsbuildinfo
+src/features/metrics/schema/generated/

@@ -18,12 +18,14 @@
     "test": "vitest run --passWithNoTests",
     "metrics:gen-types": "node scripts/generate-metric-types.mjs",
     "metrics:check-types": "npm run metrics:gen-types && git diff --exit-code -- src/features/metrics/schema/generated",
+    "metrics:roundtrip": "node scripts/metrics-roundtrip-ci.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
     "@hookform/resolvers": "^5.4.0",
+    "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/vite": "^4.3.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",

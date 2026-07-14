@@ -191,10 +191,7 @@
       },
       "allOf": [
         {
-          "if": {
-            "properties": { "type": { "const": "count" } },
-            "required": ["type"]
-          },
+          "if": { "properties": { "type": { "const": "count" } }, "required": ["type"] },
           "then": {
             "additionalProperties": false,
             "properties": { "type": { "const": "count" } }
@@ -241,11 +238,7 @@
             "properties": {
               "type": { "const": "percentile" },
               "field": { "type": "string" },
-              "percentile": {
-                "type": "number",
-                "exclusiveMinimum": 0,
-                "exclusiveMaximum": 100
-              }
+              "percentile": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 100 }
             }
           }
         },
@@ -311,7 +304,10 @@
               "zero_denominator": {
                 "description": "Emit NULL (YAML null) or 0 when denominator is 0.",
                 "default": null,
-                "oneOf": [{ "type": "null" }, { "const": "zero" }]
+                "oneOf": [
+                  { "type": "null" },
+                  { "const": "zero" }
+                ]
               }
             }
           }

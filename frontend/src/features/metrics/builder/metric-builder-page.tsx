@@ -25,6 +25,7 @@ import {
   validateMetricDefinition,
   type MetricCatalogResponse,
 } from "@/features/metrics/api/metric-definitions";
+import { MetricYamlEditor } from "@/features/metrics/builder/metric-yaml-editor";
 import { ActivateReviewSheet } from "@/features/metrics/builder/activate-sheet";
 import { FilterBuilder } from "@/features/metrics/builder/filter-builder";
 import { DerivedMeasureEditor } from "@/features/metrics/builder/derived-measure-editor";
@@ -89,6 +90,8 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   >([]);
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
   const [activateOpen, setActivateOpen] = useState(false);
+  const [yamlReformatWarn, setYamlReformatWarn] = useState(false);
+  const [parentVisibility, setParentVisibility] = useState<string | null>(null);
   const [loading, setLoading] = useState(mode === "edit");
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -136,7 +139,7 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
 
   // Prefill variant from ?extends=
   useEffect(() => {
-    if (mode !== "create" || !extendsParent || !tenant) return;
+    if (mode !== "create" || !extendsParent || !tenant || !token) return;
     const id =
       presetId ??
       `${tenant.slug}.${extendsParent.split(".").slice(1).join("_")}_variant`;
@@ -162,7 +165,24 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
         },
       },
     });
-  }, [mode, extendsParent, presetId, tenant]);
+    getMetricDefinition(token, tenant.id, extendsParent)
+      .then((parent) => {
+        const resolved = parent.resolved_json as {
+          spec?: { visibility?: string };
+        } | null;
+        const vis =
+          resolved?.spec?.visibility ??
+          (parseYaml(parent.yaml) as { spec?: { visibility?: string } })?.spec
+            ?.visibility ??
+          "org";
+        setParentVisibility(String(vis));
+        dispatch({
+          type: "patch",
+          patch: { op: "set", path: ["spec", "visibility"], value: vis },
+        });
+      })
+      .catch(() => setParentVisibility("org"));
+  }, [mode, extendsParent, presetId, tenant, token]);
 
   // Create mode: bind tenant slug into id once
   useEffect(() => {
@@ -417,11 +437,17 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
 
           {yamlMode ? (
             <div className="space-y-2">
-              <textarea
-                className="border-input bg-background min-h-96 w-full rounded-lg border p-3 font-mono text-sm"
+              {yamlReformatWarn && (
+                <p role="status" className="text-sm text-amber-200">
+                  This edit will reformat the YAML (structural change).
+                </p>
+              )}
+              <MetricYamlEditor
                 value={yamlText}
-                onChange={(e) => setYamlText(e.target.value)}
-                aria-label="Metric YAML"
+                onChange={(v) => {
+                  setYamlText(v);
+                  setYamlReformatWarn(true);
+                }}
               />
               {yamlError && (
                 <p role="alert" className="text-destructive text-sm">
@@ -713,6 +739,94 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                     );
                   })}
                 </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Rolling windows</Label>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      onClick={() => {
+                        const windows = Array.isArray(time.windows)
+                          ? [...(time.windows as object[])]
+                          : [];
+                        windows.push({ days: 30, step: "day" });
+                        setSpec("time", { ...time, windows });
+                      }}
+                    >
+                      + Add rolling window
+                    </Button>
+                  </div>
+                  {(Array.isArray(time.windows)
+                    ? (time.windows as Array<{ days?: number; step?: string }>)
+                    : []
+                  ).map((w, i) => (
+                    <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+                      <span>Trailing</span>
+                      <Input
+                        type="number"
+                        className="w-20"
+                        value={w.days ?? 30}
+                        onChange={(e) => {
+                          const windows = [
+                            ...(time.windows as Array<{
+                              days?: number;
+                              step?: string;
+                            }>),
+                          ];
+                          windows[i] = {
+                            ...windows[i],
+                            days: Number(e.target.value),
+                          };
+                          setSpec("time", { ...time, windows });
+                        }}
+                      />
+                      <span>days, computed</span>
+                      <Select
+                        value={w.step ?? "day"}
+                        onValueChange={(step) => {
+                          const windows = [
+                            ...(time.windows as Array<{
+                              days?: number;
+                              step?: string;
+                            }>),
+                          ];
+                          windows[i] = { ...windows[i], step };
+                          setSpec("time", { ...time, windows });
+                        }}
+                      >
+                        <SelectTrigger className="w-28">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="day">daily</SelectItem>
+                          <SelectItem value="week">weekly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          const windows = (time.windows as object[]).filter(
+                            (_, j) => j !== i,
+                          );
+                          setSpec("time", { ...time, windows });
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                  {Array.isArray(time.windows) &&
+                    (time.windows as unknown[]).length > 0 &&
+                    Array.isArray(spec.dimensions) &&
+                    (spec.dimensions as string[]).length > 2 && (
+                      <p className="text-xs text-amber-200">
+                        Cost hint: many windows × dimensions can be expensive to
+                        compile.
+                      </p>
+                    )}
+                </div>
               </section>
 
               <section className="space-y-3">
@@ -749,6 +863,83 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
               <section className="space-y-3">
                 <h2 className="text-lg font-medium">⑦ Display & visibility</h2>
                 <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <Label>Unit</Label>
+                    <Input
+                      className="mt-1"
+                      value={String(
+                        ((spec.display as Record<string, unknown>) ?? {}).unit ?? "",
+                      )}
+                      onChange={(e) =>
+                        setSpec("display", {
+                          ...((spec.display as object) ?? {}),
+                          unit: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Format</Label>
+                    <Select
+                      value={String(
+                        ((spec.display as Record<string, unknown>) ?? {}).format ??
+                          "integer",
+                      )}
+                      onValueChange={(format) =>
+                        setSpec("display", {
+                          ...((spec.display as object) ?? {}),
+                          format,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(
+                          [
+                            "integer",
+                            "decimal_1dp",
+                            "decimal_2dp",
+                            "percent_1dp",
+                            "humanize_duration",
+                          ] as const
+                        ).map((f) => (
+                          <SelectItem key={f} value={f}>
+                            {f}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Direction</Label>
+                    <Select
+                      value={String(
+                        ((spec.display as Record<string, unknown>) ?? {}).direction ??
+                          "neutral",
+                      )}
+                      onValueChange={(direction) =>
+                        setSpec("display", {
+                          ...((spec.display as object) ?? {}),
+                          direction,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="higher_is_better">
+                          higher is better
+                        </SelectItem>
+                        <SelectItem value="lower_is_better">lower is better</SelectItem>
+                        <SelectItem value="neutral">neutral</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
                   {(
                     [
                       [
@@ -767,21 +958,31 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                         "Visible across the organization. Prefer IC for person-level flow metrics.",
                       ],
                     ] as const
-                  ).map(([value, title, copy]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={
-                        spec.visibility === value
-                          ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
-                          : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
-                      }
-                      onClick={() => setSpec("visibility", value)}
-                    >
-                      <div className="font-medium">{title}</div>
-                      <div className="text-muted-foreground mt-1 text-xs">{copy}</div>
-                    </button>
-                  ))}
+                  )
+                    .filter(([value]) => {
+                      if (!parentVisibility) return true;
+                      const rank: Record<string, number> = {
+                        ic: 0,
+                        team: 1,
+                        org: 2,
+                      };
+                      return (rank[value] ?? 0) <= (rank[parentVisibility] ?? 2);
+                    })
+                    .map(([value, title, copy]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={
+                          spec.visibility === value
+                            ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
+                            : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
+                        }
+                        onClick={() => setSpec("visibility", value)}
+                      >
+                        <div className="font-medium">{title}</div>
+                        <div className="text-muted-foreground mt-1 text-xs">{copy}</div>
+                      </button>
+                    ))}
                 </div>
                 {Array.isArray(spec.dimensions) &&
                   (spec.dimensions as string[]).some((d) =>

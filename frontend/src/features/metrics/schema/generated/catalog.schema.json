@@ -39,7 +39,13 @@
                 },
                 "role": {
                   "type": "string",
-                  "enum": ["key", "tenant_key", "dimension", "measure", "event_time"]
+                  "enum": [
+                    "key",
+                    "tenant_key",
+                    "dimension",
+                    "measure",
+                    "event_time"
+                  ]
                 },
                 "values": {
                   "type": "array",

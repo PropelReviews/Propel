@@ -28,7 +28,10 @@
         "from_field": { "type": "string", "minLength": 1 },
         "to_dimension": { "type": "string", "minLength": 1 },
         "default": {
-          "oneOf": [{ "type": "string" }, { "type": "string", "const": "exclude" }]
+          "oneOf": [
+            { "type": "string" },
+            { "type": "string", "const": "exclude" }
+          ]
         },
         "mapping": {
           "type": "object",
