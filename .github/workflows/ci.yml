@@ -359,8 +359,7 @@ jobs:
           JWT_SECRET: test-secret
         run: |
           python - <<'PY'
-          # Avoid importing analytics here — it runs ``dbt parse`` at module
-          # load (covered by the dedicated dbt job). Job graph imports are enough.
+          # Lightweight smoke: job graph imports without loading analytics/dbt.
           from propel_orchestration import jobs, worker_scaling
 
           assert jobs.discovery_job is not None
@@ -368,6 +367,27 @@ jobs:
           assert callable(worker_scaling.reconcile)
           print("orchestration job modules import ok")
           PY
+
+      # Full code-location load. Catches conflicting AssetSpecs (and similar
+      # Definitions errors) that kill the ECS gRPC server and surface as
+      # DagsterUserCodeUnreachableError / connection refused on :4000.
+      - name: Load Dagster definitions
+        env:
+          PYTHONPATH: ${{ github.workspace }}/orchestration:${{ github.workspace }}/backend
+          POSTHOG_API_KEY: ""
+          POSTHOG_HOST: ""
+          DATABASE_URL: postgresql://propel:propel@localhost:5432/propel_test
+          JWT_SECRET: test-secret
+          DBT_HOST: localhost
+          DBT_PORT: "5432"
+          DBT_USER: propel
+          DBT_PASSWORD: propel
+          DBT_DBNAME: propel_test
+        run: |
+          uv pip install --python .ci-venv/bin/python pytest
+          dbt parse --project-dir ../transformation/dbt --profiles-dir ../transformation/dbt
+          pytest -v --tb=short tests/test_definitions.py
+        working-directory: orchestration
 
   docker-api:
     name: Docker API image
