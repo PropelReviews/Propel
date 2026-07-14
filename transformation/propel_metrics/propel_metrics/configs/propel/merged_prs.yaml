@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.merged_prs
+  name: Merged Pull Requests
+  description: Count of merged pull requests (denominator building block for ratios).
+  tags: [flow]
+  status: active
+  version: 1
+spec:
+  entity: pull_request
+  measure:
+    type: count
+  filters:
+    - field: merged_at
+      op: is_not_null
+  time:
+    field: merged_at
+    grains: [day, week, month]
+  dimensions: []
+  display:
+    unit: count
+    format: integer
+    direction: neutral
+  visibility: team

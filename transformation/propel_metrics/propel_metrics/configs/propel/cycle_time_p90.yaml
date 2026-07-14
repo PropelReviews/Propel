@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.cycle_time_p90
+  name: PR Cycle Time (p90)
+  description: 90th-percentile PR open→merge duration (seconds).
+  tags: [dora, flow]
+  status: active
+  version: 1
+spec:
+  extends: propel.cycle_time
+  overrides:
+    measure:
+      agg: percentile
+      percentile: 90
+    display:
+      unit: duration
+      format: humanize_duration
+      direction: lower_is_better

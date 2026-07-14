@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.deployment_frequency
+  name: Deployment Frequency
+  description: >
+    Count of published non-draft, non-prerelease GitHub Releases (production
+    deployment-frequency proxy).
+  tags: [dora]
+  status: active
+  version: 1
+spec:
+  entity: release
+  measure:
+    type: count
+  filters:
+    - field: is_draft
+      op: eq
+      value: false
+    - field: is_prerelease
+      op: eq
+      value: false
+    - field: published_at
+      op: is_not_null
+  time:
+    field: published_at
+    grains: [day, week, month]
+  dimensions: []
+  display:
+    unit: count
+    format: integer
+    direction: higher_is_better
+  visibility: org

@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.mttr
+  name: Mean Time to Restore
+  description: >
+    Draft stub — incidents are not ingested yet. Kept for format dogfooding;
+    status draft so it does not compile.
+  tags: [dora]
+  status: draft
+  version: 1
+spec:
+  entity: incident
+  measure:
+    type: interval
+    from: started_at
+    to: resolved_at
+    agg: avg
+  filters:
+    - field: resolved_at
+      op: is_not_null
+  time:
+    field: resolved_at
+    grains: [week, month]
+    windows:
+      - days: 30
+        step: day
+  dimensions: [service]
+  display:
+    unit: duration
+    format: humanize_duration
+    direction: lower_is_better
+  visibility: team

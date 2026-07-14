@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://propel.dev/schemas/metrics/dimension_mapping.schema.json",
+  "title": "Propel DimensionMapping",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": { "type": "string", "const": "propel/v1" },
+    "kind": { "type": "string", "const": "DimensionMapping" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]{1,62}$"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "from_field", "to_dimension", "mapping"],
+      "properties": {
+        "entity": { "type": "string", "minLength": 1 },
+        "from_field": { "type": "string", "minLength": 1 },
+        "to_dimension": { "type": "string", "minLength": 1 },
+        "default": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "string", "const": "exclude" }
+          ]
+        },
+        "mapping": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

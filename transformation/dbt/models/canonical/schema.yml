@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: pull_request
+    description: >
+      L0 pull_request entity for the metric config catalog. One row per GitHub
+      PR with first_review_at and review_count derived from submitted reviews.
+    columns:
+      - name: id
+        data_tests:
+          - not_null
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: opened_at
+        data_tests:
+          - not_null
+
+  - name: release
+    description: >
+      L0 release entity (GitHub Releases) for deployment-frequency metrics.
+    columns:
+      - name: id
+        data_tests:
+          - not_null
+      - name: tenant_id
+        data_tests:
+          - not_null

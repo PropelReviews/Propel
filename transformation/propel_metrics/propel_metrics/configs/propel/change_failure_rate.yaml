@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../schema/metric.schema.json
+apiVersion: propel/v1
+kind: Metric
+metadata:
+  id: propel.change_failure_rate
+  name: Change Failure Rate
+  description: >
+    Share of merged PRs whose title matches the revert heuristic. Validated in
+    M1; ratio codegen lands in M3 — not compiled by M2.
+  tags: [dora]
+  status: active
+  version: 1
+spec:
+  measure:
+    type: ratio
+    numerator:
+      ref: propel.reverted_prs
+    denominator:
+      ref: propel.merged_prs
+    zero_denominator: null
+  time:
+    grains: [day, week, month]
+  dimensions: []
+  display:
+    unit: percent
+    format: percent_1dp
+    direction: lower_is_better
+  visibility: org

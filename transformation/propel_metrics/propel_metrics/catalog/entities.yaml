@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=../schema/catalog.schema.json
+# L0 entity catalog — typed contract between canonical dbt models and metric configs.
+# catalogVersion bumps when fields are removed or retyped.
+catalogVersion: 1
+
+cardinality:
+  warn_above: 500
+  error_above: 5000
+
+entities:
+  pull_request:
+    grain: one row per PR
+    dbt_model: pull_request
+    fields:
+      id: { type: string, role: key }
+      tenant_id: { type: string, role: tenant_key }
+      repo: { type: string, role: dimension, cardinality_estimate: 200 }
+      author_id: { type: string, role: dimension, cardinality_estimate: 2000 }
+      state:
+        type: enum
+        values: [open, merged, closed]
+        role: dimension
+      additions: { type: integer, role: measure, nullable: true }
+      deletions: { type: integer, role: measure, nullable: true }
+      review_count: { type: integer, role: measure }
+      is_revert: { type: boolean, role: dimension }
+      opened_at: { type: timestamp, role: event_time }
+      first_review_at: { type: timestamp, role: event_time, nullable: true }
+      merged_at: { type: timestamp, role: event_time, nullable: true }
+      closed_at: { type: timestamp, role: event_time, nullable: true }
+
+  release:
+    grain: one row per GitHub Release (deployment-frequency proxy)
+    dbt_model: release
+    fields:
+      id: { type: string, role: key }
+      tenant_id: { type: string, role: tenant_key }
+      repo: { type: string, role: dimension, cardinality_estimate: 200 }
+      is_draft: { type: boolean, role: dimension }
+      is_prerelease: { type: boolean, role: dimension }
+      published_at: { type: timestamp, role: event_time, nullable: true }
+      created_at: { type: timestamp, role: event_time }
+
+  review:
+    grain: one row per submitted PR review
+    dbt_model: stg_github_reviews
+    fields:
+      id: { type: string, role: key }
+      tenant_id: { type: string, role: tenant_key }
+      repo: { type: string, role: dimension, cardinality_estimate: 200 }
+      reviewer_id: { type: string, role: dimension, cardinality_estimate: 2000 }
+      pull_request_number: { type: integer, role: dimension }
+      submitted_at: { type: timestamp, role: event_time }
+
+  # Stub until incidents are ingested. Configs may reference only when status=draft.
+  incident:
+    grain: one row per incident (not yet backed by a dbt model)
+    dbt_model: _unbacked_incident
+    fields:
+      id: { type: string, role: key }
+      tenant_id: { type: string, role: tenant_key }
+      service: { type: string, role: dimension }
+      started_at: { type: timestamp, role: event_time }
+      resolved_at: { type: timestamp, role: event_time, nullable: true }
