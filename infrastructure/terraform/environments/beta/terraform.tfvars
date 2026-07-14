@@ -13,6 +13,6 @@ api_subdomain     = "api"
 app_subdomain     = "app"
 dagster_subdomain = "dagster"
 
-db_min_acu        = 0.5
+db_min_acu        = 0
 db_max_acu        = 2
 api_desired_count = 1
