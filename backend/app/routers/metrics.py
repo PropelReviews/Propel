@@ -9,6 +9,12 @@ Endpoints map onto DORA-aligned primitives computed in transformation/dbt:
   GET .../metrics/cycle-time            lead-time-for-changes proxy
   GET .../metrics/review-latency        review-flow / lead-time breakdown
   GET .../metrics/change-failure        change-fail-rate proxy (reverts)
+  GET .../metrics/review-comments       PR review-comment throughput
+  GET .../metrics/workflow-runs         GitHub Actions run activity
+  GET .../metrics/linear/issues         Linear issue activity
+  GET .../metrics/linear/comments       Linear comment throughput
+  GET .../metrics/linear/projects       Linear project activity
+  GET .../metrics/linear/description-edits  Linear description edits
 """
 
 from datetime import UTC, datetime, timedelta
@@ -24,8 +30,14 @@ from app.schemas.metrics import (
     CycleTimeResponse,
     DeploymentFrequencyResponse,
     Granularity,
+    LinearCommentsResponse,
+    LinearDescriptionEditsResponse,
+    LinearIssueActivityResponse,
+    LinearProjectsResponse,
     PullRequestActivityResponse,
+    ReviewCommentsResponse,
     ReviewLatencyResponse,
+    WorkflowRunsResponse,
 )
 from app.services import metrics as metrics_service
 
@@ -141,6 +153,132 @@ async def get_change_failure(
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
     return await metrics_service.change_failure(
+        session,
+        ctx.tenant.id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/review-comments",
+    response_model=ReviewCommentsResponse,
+)
+async def get_review_comments(
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved_start, resolved_end = _resolve_range(start, end)
+    return await metrics_service.review_comments(
+        session,
+        ctx.tenant.id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/workflow-runs",
+    response_model=WorkflowRunsResponse,
+)
+async def get_workflow_runs(
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved_start, resolved_end = _resolve_range(start, end)
+    return await metrics_service.workflow_runs(
+        session,
+        ctx.tenant.id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/linear/issues",
+    response_model=LinearIssueActivityResponse,
+)
+async def get_linear_issues(
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved_start, resolved_end = _resolve_range(start, end)
+    return await metrics_service.linear_issue_activity(
+        session,
+        ctx.tenant.id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/linear/comments",
+    response_model=LinearCommentsResponse,
+)
+async def get_linear_comments(
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved_start, resolved_end = _resolve_range(start, end)
+    return await metrics_service.linear_comments(
+        session,
+        ctx.tenant.id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/linear/projects",
+    response_model=LinearProjectsResponse,
+)
+async def get_linear_projects(
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved_start, resolved_end = _resolve_range(start, end)
+    return await metrics_service.linear_projects(
+        session,
+        ctx.tenant.id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/linear/description-edits",
+    response_model=LinearDescriptionEditsResponse,
+)
+async def get_linear_description_edits(
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved_start, resolved_end = _resolve_range(start, end)
+    return await metrics_service.linear_description_edits(
         session,
         ctx.tenant.id,
         granularity=granularity,

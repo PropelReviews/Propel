@@ -347,6 +347,7 @@ Go to **GitHub → Settings → Developer settings → GitHub Apps → New GitHu
 | **Issues** | Read-only | Issues and comments |
 | **Metadata** | Read-only | Required for repository access |
 | **Pull requests** | Read-only | PRs, reviews, review comments |
+| **Actions** | Read-only | Workflow runs (CI/CD activity primitives) |
 
 ### 3. Organization permissions
 
@@ -464,11 +465,14 @@ authorization code. Revoke and reconnect:
 
 ### 4. Verify ingestion
 
-Linear issues are pulled by the `linear_issues_sync` Meltano job, scheduled
-hourly via Dagster alongside GitHub jobs:
+Linear issues, comments, projects, and issue description edits are pulled by
+Meltano jobs (`linear_issues_sync`, `linear_comments_sync`,
+`linear_projects_sync`, `linear_description_edits_sync`), scheduled hourly via
+Dagster alongside GitHub jobs:
 
 ```bash
 docker compose exec ingestion python -m app.ingestion.cli run --job linear_issues_sync
+docker compose exec ingestion python -m app.ingestion.cli run --job linear_comments_sync
 ```
 
 ---

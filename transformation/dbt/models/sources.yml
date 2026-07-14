@@ -51,3 +51,47 @@ sources:
         meta:
           dagster:
             asset_key: ["github", "releases"]
+
+      - name: github_review_comments
+        identifier: raw_record
+        description: >
+          GitHub pull-request review comment payloads
+          (resource_type = 'pull_request_review_comments') from
+          tap-github-pull-requests.
+        meta:
+          dagster:
+            asset_key: ["github", "review_comments"]
+
+      - name: github_workflow_runs
+        identifier: raw_record
+        description: >
+          GitHub Actions workflow run payloads (resource_type = 'workflow_runs')
+          from tap-github-workflow-runs.
+        meta:
+          dagster:
+            asset_key: ["github", "workflow_runs"]
+
+      - name: linear_comments
+        identifier: raw_record
+        description: >
+          Linear comment payloads (resource_type = 'comments') from tap-linear.
+        meta:
+          dagster:
+            asset_key: ["linear", "comments"]
+
+      - name: linear_projects
+        identifier: raw_record
+        description: >
+          Linear project payloads (resource_type = 'projects') from tap-linear.
+        meta:
+          dagster:
+            asset_key: ["linear", "projects"]
+
+      - name: linear_description_edits
+        identifier: raw_record
+        description: >
+          Linear issue description-edit history
+          (resource_type = 'issue_description_edits') from tap-linear.
+        meta:
+          dagster:
+            asset_key: ["linear", "description_edits"]

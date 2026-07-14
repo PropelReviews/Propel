@@ -162,8 +162,23 @@ ingestion_asset_specs = [
         group_name="ingestion",
     ),
     AssetSpec(
+        key=["github", "reviews"],
+        description="Pull-request reviews landed with the pull_requests job.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
+        key=["github", "review_comments"],
+        description="Pull-request review comments landed with the pull_requests job.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
         key=["github", "releases"],
         description="GitHub Releases used for DORA deployment frequency.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
+        key=["github", "workflow_runs"],
+        description="GitHub Actions workflow runs across the org's repos.",
         group_name="ingestion",
     ),
     AssetSpec(
@@ -174,6 +189,21 @@ ingestion_asset_specs = [
     AssetSpec(
         key=["linear", "issues"],
         description="Issues pulled from the connected Linear workspace.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
+        key=["linear", "comments"],
+        description="Comments pulled from the connected Linear workspace.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
+        key=["linear", "projects"],
+        description="Projects pulled from the connected Linear workspace.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
+        key=["linear", "description_edits"],
+        description="Issue description-edit history from the Linear workspace.",
         group_name="ingestion",
     ),
 ]

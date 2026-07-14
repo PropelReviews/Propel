@@ -143,4 +143,93 @@ values
       "team": {"key": "ENG"},
       "creator": {"email": "alice@acme.com"}, "assignee": {"email": "bob@acme.com"}}',
     '2026-01-06T11:00:00Z'
+),
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'linear', 'issues', 'lin-issue-2',
+    '{"id": "lin-issue-2", "identifier": "ENG-43", "title": "Canceled spike",
+      "createdAt": "2026-01-04T10:00:00Z", "updatedAt": "2026-01-05T10:00:00Z",
+      "canceledAt": "2026-01-05T10:00:00Z",
+      "url": "https://linear.app/acme/issue/ENG-43",
+      "state": {"name": "Canceled", "type": "canceled"},
+      "team": {"key": "ENG"},
+      "creator": {"email": "carol@acme.com"}}',
+    '2026-01-05T11:00:00Z'
+),
+-- GitHub review comments
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'pull_request_review_comments',
+    'PRRC_1',
+    '{"node_id": "PRRC_1", "id": 1, "created_at": "2026-01-05T16:00:00Z",
+      "updated_at": "2026-01-05T16:00:00Z", "user": {"login": "alice"},
+      "pull_request_number": 2, "path": "src/auth.py",
+      "org": "acme", "repo": "api"}',
+    '2026-01-05T17:00:00Z'
+),
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'pull_request_review_comments',
+    'PRRC_2',
+    '{"node_id": "PRRC_2", "id": 2, "created_at": "2026-01-06T11:00:00Z",
+      "updated_at": "2026-01-06T11:00:00Z", "user": {"login": "bob"},
+      "pull_request_number": 5, "path": "src/main.py",
+      "org": "acme", "repo": "api"}',
+    '2026-01-06T12:00:00Z'
+),
+-- GitHub Actions workflow runs
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'workflow_runs', 'WFR_1',
+    '{"node_id": "WFR_1", "id": 101, "name": "CI", "status": "completed",
+      "conclusion": "success", "event": "push", "run_number": 1,
+      "created_at": "2026-01-06T08:00:00Z", "updated_at": "2026-01-06T08:10:00Z",
+      "actor": {"login": "alice"}, "org": "acme", "repo": "api"}',
+    '2026-01-06T09:00:00Z'
+),
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'workflow_runs', 'WFR_2',
+    '{"node_id": "WFR_2", "id": 102, "name": "CI", "status": "completed",
+      "conclusion": "failure", "event": "pull_request", "run_number": 2,
+      "created_at": "2026-01-07T08:00:00Z", "updated_at": "2026-01-07T08:12:00Z",
+      "actor": {"login": "bob"}, "org": "acme", "repo": "web"}',
+    '2026-01-07T09:00:00Z'
+),
+-- Linear comments
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'linear', 'comments', 'lin-comment-1',
+    '{"id": "lin-comment-1", "body": "Ship it",
+      "createdAt": "2026-01-05T12:00:00Z", "updatedAt": "2026-01-05T12:00:00Z",
+      "issueId": "lin-issue-1",
+      "issue": {"id": "lin-issue-1", "identifier": "ENG-42"},
+      "user": {"id": "u1", "email": "alice@acme.com"}}',
+    '2026-01-05T13:00:00Z'
+),
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'linear', 'comments', 'lin-comment-2',
+    '{"id": "lin-comment-2", "body": "Done",
+      "createdAt": "2026-01-06T12:00:00Z", "updatedAt": "2026-01-06T12:00:00Z",
+      "issueId": "lin-issue-1",
+      "issue": {"id": "lin-issue-1", "identifier": "ENG-42"},
+      "user": {"id": "u2", "email": "bob@acme.com"}}',
+    '2026-01-06T13:00:00Z'
+),
+-- Linear projects
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'linear', 'projects', 'lin-proj-1',
+    '{"id": "lin-proj-1", "name": "Launch",
+      "createdAt": "2026-01-01T10:00:00Z", "updatedAt": "2026-01-06T10:00:00Z",
+      "completedAt": "2026-01-06T10:00:00Z",
+      "url": "https://linear.app/acme/project/launch",
+      "status": {"name": "Completed", "type": "completed"},
+      "lead": {"id": "u1", "email": "alice@acme.com"}}',
+    '2026-01-06T11:00:00Z'
+),
+-- Linear description edits
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'linear', 'issue_description_edits',
+    'lin-hist-1',
+    '{"id": "lin-hist-1", "createdAt": "2026-01-05T14:00:00Z",
+      "updatedDescription": true,
+      "issue": {"id": "lin-issue-1", "identifier": "ENG-42",
+                "url": "https://linear.app/acme/issue/ENG-42"},
+      "actor": {"id": "u1", "email": "alice@acme.com"},
+      "descriptionUpdatedBy": [{"id": "u1", "email": "alice@acme.com"}]}',
+    '2026-01-05T15:00:00Z'
 );

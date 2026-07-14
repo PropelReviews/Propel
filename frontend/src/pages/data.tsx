@@ -10,6 +10,14 @@ import {
   ReviewLatencyChart,
 } from "@/components/dora-metric-charts";
 import { PrActivityChart } from "@/components/pr-activity-chart";
+import {
+  LinearCommentsChart,
+  LinearDescriptionEditsChart,
+  LinearIssueActivityChart,
+  LinearProjectsChart,
+  ReviewCommentsChart,
+  WorkflowRunsChart,
+} from "@/components/primitive-metric-charts";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -227,8 +235,47 @@ function Loaded({
       </section>
 
       <section>
+        <h2 className="mb-4 text-lg font-medium">Review comments</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Line-level discussion on pull-request reviews.
+        </p>
+        <ReviewCommentsChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Action runs</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          GitHub Actions workflow runs — started, succeeded, and failed.
+        </p>
+        <WorkflowRunsChart tenantId={tenantId} />
+      </section>
+
+      <section>
         <h2 className="mb-4 text-lg font-medium">Change failure</h2>
         <ChangeFailureChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Linear issues</h2>
+        <LinearIssueActivityChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Linear comments</h2>
+        <LinearCommentsChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Linear projects</h2>
+        <LinearProjectsChart tenantId={tenantId} />
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Description edits</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Times Linear issue descriptions were edited.
+        </p>
+        <LinearDescriptionEditsChart tenantId={tenantId} />
       </section>
 
       {stats.by_kind.length > 0 && (

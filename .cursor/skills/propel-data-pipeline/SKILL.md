@@ -13,7 +13,8 @@ GitHub API ──Meltano taps──> target-propel ──> Postgres (raw_record 
                                            └─> Postgres `analytics` schema (marts)
 ```
 
-Only **GitHub** (+ Copilot metrics) and **Linear** issues are implemented.
+Only **GitHub** (+ Copilot metrics, Actions workflow runs) and **Linear**
+(issues, comments, projects, description edits) are implemented.
 The whole pipeline is an event-driven job chain: hourly `discovery_job` →
 `org_fanout_sensor` launches one `org_ingestion_job` per org → `analytics_sensor`
 runs the dbt assets for that org's tenant partition (`dbt build --vars '{tenant_id: ...}'`,
@@ -21,20 +22,14 @@ incremental delete+insert).
 
 ## Key files
 
-- `backend/meltano/meltano.yml` — taps + jobs: `github_org_sync`, `github_user_profiles_sync`, `github_commits_sync`, `github_pull_requests_sync`, `github_issues_sync`, `github_releases_sync`, `copilot_sync`, `linear_issues_sync`
-- `backend/meltano/target-propel/` — custom Singer target; envelope mappers in `target_propel/envelopes/` (`github.py`, `copilot.py`), wired in `sinks.py::_map_envelope`
+- `backend/meltano/meltano.yml` — taps + jobs: `github_org_sync`, `github_user_profiles_sync`, `github_commits_sync`, `github_pull_requests_sync`, `github_issues_sync`, `github_releases_sync`, `github_workflow_runs_sync`, `copilot_sync`, `linear_issues_sync`, `linear_comments_sync`, `linear_projects_sync`, `linear_description_edits_sync`
+- `backend/meltano/target-propel/` — custom Singer target; envelope mappers in `target_propel/envelopes/` (`github.py`, `copilot.py`, `linear.py`), wired in `sinks.py::_map_envelope`
 - `backend/app/ingestion/orchestrator.py` — run lifecycle: creates `ingestion_run`, mints GitHub App installation token, builds `TAP_*`/`PROPEL_*` env, shells out `meltano run <job>`, finalizes counts/watermark; `start_date` kwarg overrides the watermark for backfills
 - `backend/app/ingestion/cli.py` — manual runs (`--account-id`, `--job`, `--start-date`)
-- `orchestration/propel_orchestration/jobs.py` — `discovery_job` + hourly `discovery_schedule`, per-org `org_ingestion_job` (one op per resource), `org_fanout_sensor`
+- `orchestration/propel_orchestration/jobs.py` — `discovery_job` + hourly `discovery_schedule`, per-org `org_ingestion_job` (one op per resource), `org_fanout_sensor`, `linear_ingestion_job`
 - `orchestration/propel_orchestration/analytics.py` — dagster-dbt assets (tenant `DynamicPartitionsDefinition`), `analytics_assets_job`, `analytics_sensor`; derives `DBT_*` env from `DATABASE_URL`
-- `transformation/dbt/` — dbt project: staging views (`stg_github_pull_requests`,
-  `stg_github_reviews`, `stg_github_releases`, issues) → DORA primitive marts in
-  the `analytics` schema (`fct_deployment_frequency_daily`, `fct_pr_activity_daily`,
-  `fct_pr_cycle_time_daily`, `fct_review_latency_daily`, `fct_change_failure_daily`;
-  incremental per tenant/day)
-- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the
-  marts (`date_trunc` per granularity): deployment-frequency, pull-requests,
-  cycle-time, review-latency, change-failure
+- `transformation/dbt/` — dbt project: staging views → daily primitive marts in the `analytics` schema (PR/review/Actions/Linear; incremental per tenant/day)
+- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the marts (`date_trunc` per granularity)
 
 ## Running it
 

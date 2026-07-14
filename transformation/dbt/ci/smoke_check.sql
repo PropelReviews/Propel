@@ -146,4 +146,162 @@ begin
     end if;
 
     raise notice 'fct_deployment_frequency_daily matches expected fixture output';
+
+    -- Review comments: 1 on Jan 5, 1 on Jan 6
+    with expected (activity_date, review_comments_created) as (
+        values
+            ('2026-01-05'::date, 1),
+            ('2026-01-06'::date, 1)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join analytics.fct_review_comments_daily f
+        on f.activity_date = e.activity_date
+        and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+    where
+        f.review_comments_created is distinct from e.review_comments_created
+        or e.activity_date is null
+        or f.activity_date is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_review_comments_daily does not match expected fixture output (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_review_comments_daily matches expected fixture output';
+
+    -- Workflow runs: WFR_1 started+completed success on Jan 6; WFR_2 failure on Jan 7
+    with expected (
+        activity_date, runs_started, runs_completed, runs_success, runs_failure
+    ) as (
+        values
+            ('2026-01-06'::date, 1, 1, 1, 0),
+            ('2026-01-07'::date, 1, 1, 0, 1)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join analytics.fct_workflow_runs_daily f
+        on f.activity_date = e.activity_date
+        and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+    where
+        f.runs_started is distinct from e.runs_started
+        or f.runs_completed is distinct from e.runs_completed
+        or f.runs_success is distinct from e.runs_success
+        or f.runs_failure is distinct from e.runs_failure
+        or e.activity_date is null
+        or f.activity_date is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_workflow_runs_daily does not match expected fixture output (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_workflow_runs_daily matches expected fixture output';
+
+    -- Linear issue activity
+    with expected (
+        activity_date, issues_created, issues_completed, issues_canceled
+    ) as (
+        values
+            ('2026-01-02'::date, 1, 0, 0),
+            ('2026-01-04'::date, 1, 0, 0),
+            ('2026-01-05'::date, 0, 0, 1),
+            ('2026-01-06'::date, 0, 1, 0)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join analytics.fct_linear_issue_activity_daily f
+        on f.activity_date = e.activity_date
+        and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+    where
+        f.issues_created is distinct from e.issues_created
+        or f.issues_completed is distinct from e.issues_completed
+        or f.issues_canceled is distinct from e.issues_canceled
+        or e.activity_date is null
+        or f.activity_date is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_linear_issue_activity_daily does not match expected fixture output (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_linear_issue_activity_daily matches expected fixture output';
+
+    -- Linear comments
+    with expected (activity_date, comments_created) as (
+        values
+            ('2026-01-05'::date, 1),
+            ('2026-01-06'::date, 1)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join analytics.fct_linear_comments_daily f
+        on f.activity_date = e.activity_date
+        and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+    where
+        f.comments_created is distinct from e.comments_created
+        or e.activity_date is null
+        or f.activity_date is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_linear_comments_daily does not match expected fixture output (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_linear_comments_daily matches expected fixture output';
+
+    -- Linear projects
+    with expected (
+        activity_date, projects_created, projects_completed, projects_canceled
+    ) as (
+        values
+            ('2026-01-01'::date, 1, 0, 0),
+            ('2026-01-06'::date, 0, 1, 0)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join analytics.fct_linear_projects_daily f
+        on f.activity_date = e.activity_date
+        and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+    where
+        f.projects_created is distinct from e.projects_created
+        or f.projects_completed is distinct from e.projects_completed
+        or f.projects_canceled is distinct from e.projects_canceled
+        or e.activity_date is null
+        or f.activity_date is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_linear_projects_daily does not match expected fixture output (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_linear_projects_daily matches expected fixture output';
+
+    -- Linear description edits
+    with expected (activity_date, description_edits) as (
+        values
+            ('2026-01-05'::date, 1)
+    )
+    select count(*) into bad_rows
+    from expected e
+    full outer join analytics.fct_linear_description_edits_daily f
+        on f.activity_date = e.activity_date
+        and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
+    where
+        f.description_edits is distinct from e.description_edits
+        or e.activity_date is null
+        or f.activity_date is null;
+
+    if bad_rows > 0 then
+        raise exception
+            'fct_linear_description_edits_daily does not match expected fixture output (% mismatched rows)',
+            bad_rows;
+    end if;
+
+    raise notice 'fct_linear_description_edits_daily matches expected fixture output';
 end $$;

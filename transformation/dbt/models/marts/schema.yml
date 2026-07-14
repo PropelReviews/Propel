@@ -109,6 +109,110 @@ models:
         data_tests:
           - not_null
 
+  - name: fct_review_comments_daily
+    description: >
+      Daily GitHub pull-request review-comment counts (line-level PR discussion).
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: review_comments_created
+        data_tests:
+          - not_null
+
+  - name: fct_workflow_runs_daily
+    description: >
+      Daily GitHub Actions workflow-run primitives: started, completed, success,
+      and failure counts.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: runs_started
+        data_tests:
+          - not_null
+      - name: runs_completed
+        data_tests:
+          - not_null
+      - name: runs_success
+        data_tests:
+          - not_null
+      - name: runs_failure
+        data_tests:
+          - not_null
+
+  - name: fct_linear_issue_activity_daily
+    description: >
+      Daily Linear issue activity: created, completed, and canceled counts.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: issues_created
+        data_tests:
+          - not_null
+      - name: issues_completed
+        data_tests:
+          - not_null
+      - name: issues_canceled
+        data_tests:
+          - not_null
+
+  - name: fct_linear_comments_daily
+    description: Daily Linear comment creation counts.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: comments_created
+        data_tests:
+          - not_null
+
+  - name: fct_linear_projects_daily
+    description: >
+      Daily Linear project activity: created, completed, and canceled counts.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: projects_created
+        data_tests:
+          - not_null
+      - name: projects_completed
+        data_tests:
+          - not_null
+      - name: projects_canceled
+        data_tests:
+          - not_null
+
+  - name: fct_linear_description_edits_daily
+    description: Daily Linear issue description-edit counts.
+    columns:
+      - name: tenant_id
+        data_tests:
+          - not_null
+      - name: activity_date
+        data_tests:
+          - not_null
+      - name: description_edits
+        data_tests:
+          - not_null
+
   - name: stg_github_pull_requests
     description: >
       Latest snapshot of every GitHub pull request (one row per PR), including

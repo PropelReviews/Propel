@@ -10,6 +10,11 @@ DORA-aligned primitives currently exposed:
   - cycle time             → lead-time-for-changes proxy (PR open → merge)
   - review latency         → lead-time breakdown / review flow
   - change failure         → change-fail-rate proxy (revert-titled merges)
+
+Additional base primitives:
+  - review comments        → GitHub PR review-comment throughput
+  - workflow runs          → GitHub Actions run activity
+  - Linear issues/comments/projects/description edits
 """
 
 from datetime import date
@@ -88,3 +93,82 @@ class ChangeFailurePoint(BaseModel):
 class ChangeFailureResponse(BaseModel):
     granularity: Granularity
     points: list[ChangeFailurePoint]
+
+
+class ReviewCommentsPoint(BaseModel):
+    """GitHub PR review-comment throughput bucketed to one period."""
+
+    period_start: date
+    review_comments_created: int
+
+
+class ReviewCommentsResponse(BaseModel):
+    granularity: Granularity
+    points: list[ReviewCommentsPoint]
+
+
+class WorkflowRunsPoint(BaseModel):
+    """GitHub Actions workflow-run activity bucketed to one period."""
+
+    period_start: date
+    runs_started: int
+    runs_completed: int
+    runs_success: int
+    runs_failure: int
+
+
+class WorkflowRunsResponse(BaseModel):
+    granularity: Granularity
+    points: list[WorkflowRunsPoint]
+
+
+class LinearIssueActivityPoint(BaseModel):
+    """Linear issue activity bucketed to one period."""
+
+    period_start: date
+    issues_created: int
+    issues_completed: int
+    issues_canceled: int
+
+
+class LinearIssueActivityResponse(BaseModel):
+    granularity: Granularity
+    points: list[LinearIssueActivityPoint]
+
+
+class LinearCommentsPoint(BaseModel):
+    """Linear comment throughput bucketed to one period."""
+
+    period_start: date
+    comments_created: int
+
+
+class LinearCommentsResponse(BaseModel):
+    granularity: Granularity
+    points: list[LinearCommentsPoint]
+
+
+class LinearProjectsPoint(BaseModel):
+    """Linear project activity bucketed to one period."""
+
+    period_start: date
+    projects_created: int
+    projects_completed: int
+    projects_canceled: int
+
+
+class LinearProjectsResponse(BaseModel):
+    granularity: Granularity
+    points: list[LinearProjectsPoint]
+
+
+class LinearDescriptionEditsPoint(BaseModel):
+    """Linear issue description-edit counts bucketed to one period."""
+
+    period_start: date
+    description_edits: int
+
+
+class LinearDescriptionEditsResponse(BaseModel):
+    granularity: Granularity
+    points: list[LinearDescriptionEditsPoint]

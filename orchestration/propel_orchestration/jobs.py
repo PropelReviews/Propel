@@ -20,6 +20,8 @@ DAG shape (per org)::
                          ├─> get_commits ───────────────────────────┤
                          ├─> get_pull_requests ──────────────────────┤
                          ├─> get_issues ─────────────────────────────┤
+                         ├─> get_releases ───────────────────────────┤
+                         ├─> get_workflow_runs ──────────────────────┤
                          └─> get_copilot_usage ──────────────────────┴─> flush_logs
 
 ``get_user_profiles`` runs after ``get_org_members`` (it targets the member
@@ -92,11 +94,16 @@ _ASSET_KEYS: dict[str, tuple[AssetKey, ...]] = {
     "github_pull_requests_sync": (
         AssetKey(["github", "pull_requests"]),
         AssetKey(["github", "reviews"]),
+        AssetKey(["github", "review_comments"]),
     ),
     "github_issues_sync": (AssetKey(["github", "issues"]),),
     "github_releases_sync": (AssetKey(["github", "releases"]),),
+    "github_workflow_runs_sync": (AssetKey(["github", "workflow_runs"]),),
     "copilot_sync": (AssetKey(["github", "copilot_usage"]),),
     "linear_issues_sync": (AssetKey(["linear", "issues"]),),
+    "linear_comments_sync": (AssetKey(["linear", "comments"]),),
+    "linear_projects_sync": (AssetKey(["linear", "projects"]),),
+    "linear_description_edits_sync": (AssetKey(["linear", "description_edits"]),),
 }
 
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -321,6 +328,11 @@ get_releases = _resource_op(
     "github_releases_sync",
     "Pull GitHub Releases (deployment-frequency signal) across the org's repos.",
 )
+get_workflow_runs = _resource_op(
+    "get_workflow_runs",
+    "github_workflow_runs_sync",
+    "Pull GitHub Actions workflow runs across the org's repos.",
+)
 get_copilot_usage = _resource_op(
     "get_copilot_usage",
     "copilot_sync",
@@ -330,6 +342,21 @@ get_linear_issues = _resource_op(
     "get_linear_issues",
     "linear_issues_sync",
     "Pull issues for the connected Linear workspace.",
+)
+get_linear_comments = _resource_op(
+    "get_linear_comments",
+    "linear_comments_sync",
+    "Pull comments for the connected Linear workspace.",
+)
+get_linear_projects = _resource_op(
+    "get_linear_projects",
+    "linear_projects_sync",
+    "Pull projects for the connected Linear workspace.",
+)
+get_linear_description_edits = _resource_op(
+    "get_linear_description_edits",
+    "linear_description_edits_sync",
+    "Pull issue description-edit history for the connected Linear workspace.",
 )
 
 
@@ -378,22 +405,37 @@ def org_ingestion_job() -> None:
     pulls = get_pull_requests(start=started)
     issues = get_issues(start=started)
     releases = get_releases(start=started)
+    workflow_runs = get_workflow_runs(start=started)
     copilot = get_copilot_usage(start=started)
-    flush_logs(after=[profiles, commits, pulls, issues, releases, copilot])
+    flush_logs(
+        after=[
+            profiles,
+            commits,
+            pulls,
+            issues,
+            releases,
+            workflow_runs,
+            copilot,
+        ]
+    )
 
 
 @job(
     executor_def=build_dask_executor(),
     tags=_INGESTION_CONCURRENCY_TAGS,
     description=(
-        "Pull one Linear workspace's issues (scoped by the propel/account_id "
-        "tag; tag propel/start_date for a time-based backfill)."
+        "Pull one Linear workspace's primitives (issues, comments, projects, "
+        "description edits; scoped by the propel/account_id tag; tag "
+        "propel/start_date for a time-based backfill)."
     ),
 )
 def linear_ingestion_job() -> None:
     started = start_org_ingestion()
     issues = get_linear_issues(start=started)
-    flush_logs(after=[issues])
+    comments = get_linear_comments(start=started)
+    projects = get_linear_projects(start=started)
+    description_edits = get_linear_description_edits(start=started)
+    flush_logs(after=[issues, comments, projects, description_edits])
 
 
 async def _list_accounts(

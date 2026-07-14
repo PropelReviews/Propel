@@ -73,6 +73,14 @@ plugins:
       select:
         - releases.*
 
+    # GitHub Actions workflow runs — primitive CI/CD activity signal.
+    - name: tap-github-workflow-runs
+      inherit_from: tap-github
+      config:
+        repositories: ${TAP_GITHUB_REPOSITORIES}
+      select:
+        - workflow_runs.*
+
     - name: tap-github-org
       inherit_from: tap-github
       config:
@@ -99,8 +107,9 @@ plugins:
         org: ${COPILOT_ORG}
         auth_token: ${GITHUB_INSTALLATION_TOKEN}
 
-    # Linear issues via GraphQL. Auth is the per-workspace OAuth access token
+    # Linear via GraphQL. Auth is the per-workspace OAuth access token
     # (actor=app), minted/refreshed by the orchestrator and passed per run.
+    # Children split streams into separate jobs (independent watermarks).
     - name: tap-linear
       namespace: tap_linear
       pip_url: -e ./tap-linear
@@ -112,8 +121,26 @@ plugins:
       config:
         auth_token: ${TAP_LINEAR_AUTH_TOKEN}
         start_date: ${TAP_LINEAR_START_DATE}
+
+    - name: tap-linear-issues
+      inherit_from: tap-linear
       select:
         - issues.*
+
+    - name: tap-linear-comments
+      inherit_from: tap-linear
+      select:
+        - comments.*
+
+    - name: tap-linear-projects
+      inherit_from: tap-linear
+      select:
+        - projects.*
+
+    - name: tap-linear-description-edits
+      inherit_from: tap-linear
+      select:
+        - issue_description_edits.*
 
   loaders:
     - name: target-propel
@@ -140,9 +167,21 @@ jobs:
   - name: github_releases_sync
     tasks:
       - tap-github-releases target-propel
+  - name: github_workflow_runs_sync
+    tasks:
+      - tap-github-workflow-runs target-propel
   - name: copilot_sync
     tasks:
       - tap-github-copilot target-propel
   - name: linear_issues_sync
     tasks:
-      - tap-linear target-propel
+      - tap-linear-issues target-propel
+  - name: linear_comments_sync
+    tasks:
+      - tap-linear-comments target-propel
+  - name: linear_projects_sync
+    tasks:
+      - tap-linear-projects target-propel
+  - name: linear_description_edits_sync
+    tasks:
+      - tap-linear-description-edits target-propel

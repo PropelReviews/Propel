@@ -28,10 +28,22 @@ from app.schemas.metrics import (
     DeploymentFrequencyPoint,
     DeploymentFrequencyResponse,
     Granularity,
+    LinearCommentsPoint,
+    LinearCommentsResponse,
+    LinearDescriptionEditsPoint,
+    LinearDescriptionEditsResponse,
+    LinearIssueActivityPoint,
+    LinearIssueActivityResponse,
+    LinearProjectsPoint,
+    LinearProjectsResponse,
     PullRequestActivityPoint,
     PullRequestActivityResponse,
+    ReviewCommentsPoint,
+    ReviewCommentsResponse,
     ReviewLatencyPoint,
     ReviewLatencyResponse,
+    WorkflowRunsPoint,
+    WorkflowRunsResponse,
 )
 
 logger = logging.getLogger("propel.metrics")
@@ -134,6 +146,97 @@ _CHANGE_FAILURE_QUERY = text(
             SUM(prs_reverted)::float8 / NULLIF(SUM(prs_merged), 0)
         )::float8 AS change_failure_rate
     FROM analytics.fct_change_failure_daily
+    WHERE tenant_id = :tenant_id
+      AND activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+_REVIEW_COMMENTS_QUERY = text(
+    """
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(review_comments_created), 0)::int AS review_comments_created
+    FROM analytics.fct_review_comments_daily
+    WHERE tenant_id = :tenant_id
+      AND activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+_WORKFLOW_RUNS_QUERY = text(
+    """
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(runs_started), 0)::int AS runs_started,
+        COALESCE(SUM(runs_completed), 0)::int AS runs_completed,
+        COALESCE(SUM(runs_success), 0)::int AS runs_success,
+        COALESCE(SUM(runs_failure), 0)::int AS runs_failure
+    FROM analytics.fct_workflow_runs_daily
+    WHERE tenant_id = :tenant_id
+      AND activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+_LINEAR_ISSUE_ACTIVITY_QUERY = text(
+    """
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(issues_created), 0)::int AS issues_created,
+        COALESCE(SUM(issues_completed), 0)::int AS issues_completed,
+        COALESCE(SUM(issues_canceled), 0)::int AS issues_canceled
+    FROM analytics.fct_linear_issue_activity_daily
+    WHERE tenant_id = :tenant_id
+      AND activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+_LINEAR_COMMENTS_QUERY = text(
+    """
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(comments_created), 0)::int AS comments_created
+    FROM analytics.fct_linear_comments_daily
+    WHERE tenant_id = :tenant_id
+      AND activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+_LINEAR_PROJECTS_QUERY = text(
+    """
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(projects_created), 0)::int AS projects_created,
+        COALESCE(SUM(projects_completed), 0)::int AS projects_completed,
+        COALESCE(SUM(projects_canceled), 0)::int AS projects_canceled
+    FROM analytics.fct_linear_projects_daily
+    WHERE tenant_id = :tenant_id
+      AND activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+_LINEAR_DESCRIPTION_EDITS_QUERY = text(
+    """
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(description_edits), 0)::int AS description_edits
+    FROM analytics.fct_linear_description_edits_daily
     WHERE tenant_id = :tenant_id
       AND activity_date >= :start
       AND activity_date <= :end
@@ -302,5 +405,168 @@ async def change_failure(
                 change_failure_rate=rate,
             )
             for period_start, prs_merged, prs_reverted, rate in rows
+        ],
+    )
+
+
+async def review_comments(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    granularity: Granularity,
+    start: date,
+    end: date,
+) -> ReviewCommentsResponse:
+    rows = await _safe_query(
+        session,
+        _REVIEW_COMMENTS_QUERY,
+        _bind(granularity, tenant_id, start, end),
+        "analytics.fct_review_comments_daily",
+    )
+    return ReviewCommentsResponse(
+        granularity=granularity,
+        points=[
+            ReviewCommentsPoint(
+                period_start=period_start,
+                review_comments_created=count,
+            )
+            for period_start, count in rows
+        ],
+    )
+
+
+async def workflow_runs(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    granularity: Granularity,
+    start: date,
+    end: date,
+) -> WorkflowRunsResponse:
+    rows = await _safe_query(
+        session,
+        _WORKFLOW_RUNS_QUERY,
+        _bind(granularity, tenant_id, start, end),
+        "analytics.fct_workflow_runs_daily",
+    )
+    return WorkflowRunsResponse(
+        granularity=granularity,
+        points=[
+            WorkflowRunsPoint(
+                period_start=period_start,
+                runs_started=started,
+                runs_completed=completed,
+                runs_success=success,
+                runs_failure=failure,
+            )
+            for period_start, started, completed, success, failure in rows
+        ],
+    )
+
+
+async def linear_issue_activity(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    granularity: Granularity,
+    start: date,
+    end: date,
+) -> LinearIssueActivityResponse:
+    rows = await _safe_query(
+        session,
+        _LINEAR_ISSUE_ACTIVITY_QUERY,
+        _bind(granularity, tenant_id, start, end),
+        "analytics.fct_linear_issue_activity_daily",
+    )
+    return LinearIssueActivityResponse(
+        granularity=granularity,
+        points=[
+            LinearIssueActivityPoint(
+                period_start=period_start,
+                issues_created=created,
+                issues_completed=completed,
+                issues_canceled=canceled,
+            )
+            for period_start, created, completed, canceled in rows
+        ],
+    )
+
+
+async def linear_comments(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    granularity: Granularity,
+    start: date,
+    end: date,
+) -> LinearCommentsResponse:
+    rows = await _safe_query(
+        session,
+        _LINEAR_COMMENTS_QUERY,
+        _bind(granularity, tenant_id, start, end),
+        "analytics.fct_linear_comments_daily",
+    )
+    return LinearCommentsResponse(
+        granularity=granularity,
+        points=[
+            LinearCommentsPoint(
+                period_start=period_start,
+                comments_created=count,
+            )
+            for period_start, count in rows
+        ],
+    )
+
+
+async def linear_projects(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    granularity: Granularity,
+    start: date,
+    end: date,
+) -> LinearProjectsResponse:
+    rows = await _safe_query(
+        session,
+        _LINEAR_PROJECTS_QUERY,
+        _bind(granularity, tenant_id, start, end),
+        "analytics.fct_linear_projects_daily",
+    )
+    return LinearProjectsResponse(
+        granularity=granularity,
+        points=[
+            LinearProjectsPoint(
+                period_start=period_start,
+                projects_created=created,
+                projects_completed=completed,
+                projects_canceled=canceled,
+            )
+            for period_start, created, completed, canceled in rows
+        ],
+    )
+
+
+async def linear_description_edits(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    granularity: Granularity,
+    start: date,
+    end: date,
+) -> LinearDescriptionEditsResponse:
+    rows = await _safe_query(
+        session,
+        _LINEAR_DESCRIPTION_EDITS_QUERY,
+        _bind(granularity, tenant_id, start, end),
+        "analytics.fct_linear_description_edits_daily",
+    )
+    return LinearDescriptionEditsResponse(
+        granularity=granularity,
+        points=[
+            LinearDescriptionEditsPoint(
+                period_start=period_start,
+                description_edits=count,
+            )
+            for period_start, count in rows
         ],
     )

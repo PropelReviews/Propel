@@ -76,12 +76,73 @@ async def analytics_tables(db_engine):
                 "production_releases int NOT NULL)"
             )
         )
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS analytics.fct_review_comments_daily ("
+                "tenant_id uuid NOT NULL, "
+                "activity_date date NOT NULL, "
+                "review_comments_created int NOT NULL)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS analytics.fct_workflow_runs_daily ("
+                "tenant_id uuid NOT NULL, "
+                "activity_date date NOT NULL, "
+                "runs_started int NOT NULL, "
+                "runs_completed int NOT NULL, "
+                "runs_success int NOT NULL, "
+                "runs_failure int NOT NULL)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_issue_activity_daily ("
+                "tenant_id uuid NOT NULL, "
+                "activity_date date NOT NULL, "
+                "issues_created int NOT NULL, "
+                "issues_completed int NOT NULL, "
+                "issues_canceled int NOT NULL)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_comments_daily ("
+                "tenant_id uuid NOT NULL, "
+                "activity_date date NOT NULL, "
+                "comments_created int NOT NULL)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_projects_daily ("
+                "tenant_id uuid NOT NULL, "
+                "activity_date date NOT NULL, "
+                "projects_created int NOT NULL, "
+                "projects_completed int NOT NULL, "
+                "projects_canceled int NOT NULL)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_description_edits_daily ("
+                "tenant_id uuid NOT NULL, "
+                "activity_date date NOT NULL, "
+                "description_edits int NOT NULL)"
+            )
+        )
         for table in (
             "fct_pr_activity_daily",
             "fct_pr_cycle_time_daily",
             "fct_review_latency_daily",
             "fct_change_failure_daily",
             "fct_deployment_frequency_daily",
+            "fct_review_comments_daily",
+            "fct_workflow_runs_daily",
+            "fct_linear_issue_activity_daily",
+            "fct_linear_comments_daily",
+            "fct_linear_projects_daily",
+            "fct_linear_description_edits_daily",
         ):
             await conn.execute(text(f"TRUNCATE analytics.{table}"))
     yield
@@ -92,6 +153,12 @@ async def analytics_tables(db_engine):
             "fct_review_latency_daily",
             "fct_change_failure_daily",
             "fct_deployment_frequency_daily",
+            "fct_review_comments_daily",
+            "fct_workflow_runs_daily",
+            "fct_linear_issue_activity_daily",
+            "fct_linear_comments_daily",
+            "fct_linear_projects_daily",
+            "fct_linear_description_edits_daily",
         ):
             await conn.execute(text(f"DROP TABLE IF EXISTS analytics.{table}"))
         await conn.execute(text("DROP SCHEMA IF EXISTS analytics"))
@@ -476,6 +543,12 @@ async def test_dora_endpoints_missing_tables_return_empty(client: AsyncClient):
         "review-latency",
         "change-failure",
         "deployment-frequency",
+        "review-comments",
+        "workflow-runs",
+        "linear/issues",
+        "linear/comments",
+        "linear/projects",
+        "linear/description-edits",
     ):
         resp = await client.get(
             f"/api/v1/tenants/{tenant['id']}/metrics/{path}",
@@ -483,3 +556,253 @@ async def test_dora_endpoints_missing_tables_return_empty(client: AsyncClient):
         )
         assert resp.status_code == 200, resp.text
         assert resp.json() == {"granularity": "daily", "points": []}
+
+
+async def _seed_review_comments(
+    tenant_id: uuid.UUID, activity_date: date, *, count: int
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO analytics.fct_review_comments_daily "
+                "(tenant_id, activity_date, review_comments_created) "
+                "VALUES (:tenant_id, :activity_date, :count)"
+            ),
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "count": count,
+            },
+        )
+        await session.commit()
+
+
+async def _seed_workflow_runs(
+    tenant_id: uuid.UUID,
+    activity_date: date,
+    *,
+    started: int,
+    completed: int,
+    success: int,
+    failure: int,
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO analytics.fct_workflow_runs_daily "
+                "(tenant_id, activity_date, runs_started, runs_completed, "
+                " runs_success, runs_failure) "
+                "VALUES (:tenant_id, :activity_date, :started, :completed, "
+                " :success, :failure)"
+            ),
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "started": started,
+                "completed": completed,
+                "success": success,
+                "failure": failure,
+            },
+        )
+        await session.commit()
+
+
+async def _seed_linear_issues(
+    tenant_id: uuid.UUID,
+    activity_date: date,
+    *,
+    created: int = 0,
+    completed: int = 0,
+    canceled: int = 0,
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO analytics.fct_linear_issue_activity_daily "
+                "(tenant_id, activity_date, issues_created, issues_completed, "
+                " issues_canceled) "
+                "VALUES (:tenant_id, :activity_date, :created, :completed, :canceled)"
+            ),
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "created": created,
+                "completed": completed,
+                "canceled": canceled,
+            },
+        )
+        await session.commit()
+
+
+async def _seed_linear_comments(
+    tenant_id: uuid.UUID, activity_date: date, *, count: int
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO analytics.fct_linear_comments_daily "
+                "(tenant_id, activity_date, comments_created) "
+                "VALUES (:tenant_id, :activity_date, :count)"
+            ),
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "count": count,
+            },
+        )
+        await session.commit()
+
+
+async def _seed_linear_projects(
+    tenant_id: uuid.UUID,
+    activity_date: date,
+    *,
+    created: int = 0,
+    completed: int = 0,
+    canceled: int = 0,
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO analytics.fct_linear_projects_daily "
+                "(tenant_id, activity_date, projects_created, projects_completed, "
+                " projects_canceled) "
+                "VALUES (:tenant_id, :activity_date, :created, :completed, :canceled)"
+            ),
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "created": created,
+                "completed": completed,
+                "canceled": canceled,
+            },
+        )
+        await session.commit()
+
+
+async def _seed_linear_description_edits(
+    tenant_id: uuid.UUID, activity_date: date, *, count: int
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                "INSERT INTO analytics.fct_linear_description_edits_daily "
+                "(tenant_id, activity_date, description_edits) "
+                "VALUES (:tenant_id, :activity_date, :count)"
+            ),
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "count": count,
+            },
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_review_comments_and_workflow_runs(client: AsyncClient, analytics_tables):
+    token, tenant = await _setup_tenant(client, email="primitives@example.com")
+    tenant_id = uuid.UUID(tenant["id"])
+
+    await _seed_review_comments(tenant_id, date(2026, 6, 1), count=4)
+    await _seed_workflow_runs(
+        tenant_id,
+        date(2026, 6, 1),
+        started=5,
+        completed=4,
+        success=3,
+        failure=1,
+    )
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/review-comments",
+        params={"granularity": "daily", "start": "2026-06-01", "end": "2026-06-01"},
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["points"] == [
+        {"period_start": "2026-06-01", "review_comments_created": 4}
+    ]
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/workflow-runs",
+        params={"granularity": "daily", "start": "2026-06-01", "end": "2026-06-01"},
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["points"] == [
+        {
+            "period_start": "2026-06-01",
+            "runs_started": 5,
+            "runs_completed": 4,
+            "runs_success": 3,
+            "runs_failure": 1,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_linear_primitive_metrics(client: AsyncClient, analytics_tables):
+    token, tenant = await _setup_tenant(client, email="linear-metrics@example.com")
+    tenant_id = uuid.UUID(tenant["id"])
+    headers = auth_headers(token)
+    params = {"granularity": "daily", "start": "2026-06-01", "end": "2026-06-01"}
+
+    await _seed_linear_issues(
+        tenant_id, date(2026, 6, 1), created=3, completed=2, canceled=1
+    )
+    await _seed_linear_comments(tenant_id, date(2026, 6, 1), count=7)
+    await _seed_linear_projects(
+        tenant_id, date(2026, 6, 1), created=1, completed=1, canceled=0
+    )
+    await _seed_linear_description_edits(tenant_id, date(2026, 6, 1), count=2)
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/linear/issues",
+        params=params,
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["points"] == [
+        {
+            "period_start": "2026-06-01",
+            "issues_created": 3,
+            "issues_completed": 2,
+            "issues_canceled": 1,
+        }
+    ]
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/linear/comments",
+        params=params,
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["points"] == [
+        {"period_start": "2026-06-01", "comments_created": 7}
+    ]
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/linear/projects",
+        params=params,
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["points"] == [
+        {
+            "period_start": "2026-06-01",
+            "projects_created": 1,
+            "projects_completed": 1,
+            "projects_canceled": 0,
+        }
+    ]
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/linear/description-edits",
+        params=params,
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["points"] == [
+        {"period_start": "2026-06-01", "description_edits": 2}
+    ]
