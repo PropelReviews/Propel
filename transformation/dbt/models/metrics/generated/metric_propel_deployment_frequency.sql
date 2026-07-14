@@ -28,7 +28,7 @@ filtered as (
     select
         base.tenant_id,
         base.published_at,
-        null::text as dim_repo,
+        ''::text as dim_repo,
         1 as _value
     from base
     where (base.is_draft = false) and (base.is_prerelease = false) and (base.published_at is not null)
@@ -45,8 +45,8 @@ select
     (date_trunc('day', filtered.published_at at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('day', filtered.published_at at time zone 'UTC')) + interval '1 day'))::timestamptz as bucket_end,
     ((((date_trunc('day', filtered.published_at at time zone 'UTC')) + interval '1 day')) <= current_timestamp) as is_complete,
-    filtered.dim_repo,
-    count(*)::float8 as value,
+    filtered.dim_repo as dim_repo,
+    count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from filtered
@@ -63,8 +63,8 @@ select
     (date_trunc('week', filtered.published_at at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('week', filtered.published_at at time zone 'UTC')) + interval '7 days'))::timestamptz as bucket_end,
     ((((date_trunc('week', filtered.published_at at time zone 'UTC')) + interval '7 days')) <= current_timestamp) as is_complete,
-    filtered.dim_repo,
-    count(*)::float8 as value,
+    filtered.dim_repo as dim_repo,
+    count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from filtered
@@ -81,8 +81,8 @@ select
     (date_trunc('month', filtered.published_at at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('month', filtered.published_at at time zone 'UTC')) + interval '1 month'))::timestamptz as bucket_end,
     ((((date_trunc('month', filtered.published_at at time zone 'UTC')) + interval '1 month')) <= current_timestamp) as is_complete,
-    filtered.dim_repo,
-    count(*)::float8 as value,
+    filtered.dim_repo as dim_repo,
+    count(*)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from filtered

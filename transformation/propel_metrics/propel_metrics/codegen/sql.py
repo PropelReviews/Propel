@@ -153,8 +153,11 @@ def render_metric_sql(metric: ResolvedMetric) -> str:
 
     dbt_model = _dbt_model_for_entity(entity)
     value_select = _value_column_sql(measure)
+    # Org-total rows use '' (not SQL NULL) so incremental unique_key matching
+    # works under Postgres (NULL is distinct in unique constraints / IN lists).
+    # Serving treats '' as org total — same contract as NULL in the design spec.
     dim_select = (
-        "base.repo as dim_repo" if "repo" in dimensions else "null::text as dim_repo"
+        "base.repo as dim_repo" if "repo" in dimensions else "''::text as dim_repo"
     )
     where_sql = _base_where(metric, measure)
     agg = _agg_expr(measure, "_value")
@@ -174,8 +177,10 @@ def render_metric_sql(metric: ResolvedMetric) -> str:
     (filtered.tenant_id, ({bs}), filtered.dim_repo),
     (filtered.tenant_id, ({bs}))
 )"""
+            dim_out = "coalesce(filtered.dim_repo, '')"
         else:
             group_by = f"group by filtered.tenant_id, ({bs}), filtered.dim_repo"
+            dim_out = "filtered.dim_repo"
 
         grain_parts.append(
             f"""(
@@ -187,8 +192,8 @@ select
     ({bs})::timestamptz as bucket_start,
     ({be})::timestamptz as bucket_end,
     (({be}) <= current_timestamp) as is_complete,
-    filtered.dim_repo,
-    {agg} as value,
+    {dim_out} as dim_repo,
+    {agg} as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from filtered

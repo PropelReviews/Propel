@@ -28,8 +28,9 @@ incremental delete+insert).
 - `backend/app/ingestion/cli.py` — manual runs (`--account-id`, `--job`, `--start-date`)
 - `orchestration/propel_orchestration/jobs.py` — `discovery_job` + hourly `discovery_schedule`, per-org `org_ingestion_job` (one op per resource), `org_fanout_sensor`, `linear_ingestion_job`
 - `orchestration/propel_orchestration/analytics.py` — dagster-dbt assets (tenant `DynamicPartitionsDefinition`), `analytics_assets_job`, `analytics_sensor`; derives `DBT_*` env from `DATABASE_URL`
-- `transformation/dbt/` — dbt project: staging views → daily primitive marts in the `analytics` schema. Tool-specific staging; **normalized facts** (`fct_ticket_*`, `fct_project_activity_daily`, plus GitHub DORA/CI marts) with a `source` dimension where multi-tracker
-- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the marts (`date_trunc` per granularity); ticket/project endpoints are tracker-agnostic
+- `transformation/dbt/` — dbt project: staging views → canonical L0 entities → daily primitive marts + generated `fct_metric_values` in the `analytics` schema. Tool-specific staging; **normalized facts** (`fct_ticket_*`, `fct_project_activity_daily`, plus GitHub DORA/CI marts) with a `source` dimension where multi-tracker
+- `transformation/propel_metrics/` — declarative Metric YAML (`propel.*`), entity catalog, `propel-metrics validate|compile` (codegen into `models/metrics/generated/`). See `docs/metrics/config-system.md`
+- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the **legacy** marts (`date_trunc` per granularity); ticket/project endpoints are tracker-agnostic. Cutover to `fct_metric_values` is not done yet
 
 ## Running it
 
@@ -46,6 +47,11 @@ docker compose exec ingestion dbt build --full-refresh \
 
 # dbt lint (config: transformation/dbt/.sqlfluff; CI gate in .github/workflows/ci.yml "dbt checks")
 cd transformation/dbt && uvx --from "sqlfluff>=3,<4" sqlfluff lint models
+
+# metric configs (CI gate: "Metric config checks")
+cd transformation/propel_metrics && uv sync --extra dev
+uv run propel-metrics validate
+uv run propel-metrics compile --check
 ```
 
 ## Data contract

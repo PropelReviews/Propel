@@ -28,6 +28,10 @@ Example metrics:
 
 ```
 transformation/
+├── propel_metrics/                         # Metric YAML → validate + compile to dbt
+│   ├── propel_metrics/configs/propel/      # shipped L1 Metric configs
+│   ├── propel_metrics/catalog/             # L0 entity catalog
+│   └── README.md
 └── dbt/                                    # dbt project root
     ├── dbt_project.yml
     ├── profiles.yml                        # postgres profile, DBT_* env vars
@@ -37,32 +41,20 @@ transformation/
     │   └── smoke_check.sql                 # asserts mart output matches the fixture
     └── models/
         ├── sources.yml                     # public.raw_record (+ github/linear source aliases)
-        ├── staging/
-        │   ├── stg_github_pull_requests.sql
-        │   ├── stg_github_reviews.sql
-        │   ├── stg_github_review_comments.sql
-        │   ├── stg_github_issue_comments.sql
-        │   ├── stg_github_workflow_runs.sql
-        │   ├── stg_github_releases.sql
-        │   ├── stg_github_issues.sql
-        │   ├── stg_linear_issues.sql
-        │   ├── stg_linear_comments.sql
-        │   ├── stg_linear_projects.sql
-        │   └── stg_linear_description_edits.sql
-        └── marts/
-            ├── fct_deployment_frequency_daily.sql  # GitHub Releases
-            ├── fct_pr_activity_daily.sql           # PR throughput
-            ├── fct_pr_cycle_time_daily.sql         # lead-time proxy
-            ├── fct_review_latency_daily.sql        # time to first review
-            ├── fct_review_comments_daily.sql       # PR review comments
-            ├── fct_workflow_runs_daily.sql         # Actions runs
-            ├── fct_change_failure_daily.sql        # CFR proxy via reverts
-            ├── fct_ticket_activity_daily.sql       # tickets across trackers
-            ├── fct_ticket_comments_daily.sql
-            ├── fct_ticket_description_edits_daily.sql
-            ├── fct_project_activity_daily.sql
-            ├── fct_tickets.sql
-            └── schema.yml
+        ├── staging/                        # tool-specific latest-snapshot views
+        ├── canonical/                      # L0 entities (pull_request, release, …)
+        ├── metrics/generated/              # propel-metrics compile output (committed)
+        └── marts/                          # legacy daily primitives (dual-run with generated)
+```
+
+See [docs/metrics/config-system.md](../docs/metrics/config-system.md) for the
+declarative metric format. Validate/compile:
+
+```bash
+cd transformation/propel_metrics
+uv sync --extra dev
+uv run propel-metrics validate
+uv run propel-metrics compile --check
 ```
 
 Models land in the `analytics` Postgres schema (raw landing tables stay in `public`). The `analytics` schema is dbt-owned — like Dagster's `dagster` schema, it is not managed by Alembic.

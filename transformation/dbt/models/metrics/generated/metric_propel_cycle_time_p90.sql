@@ -28,7 +28,7 @@ filtered as (
     select
         base.tenant_id,
         base.merged_at,
-        null::text as dim_repo,
+        ''::text as dim_repo,
         extract(epoch from (base.merged_at - base.opened_at))::float8 as _value
     from base
     where (base.merged_at is not null)
@@ -48,8 +48,8 @@ select
     (date_trunc('day', filtered.merged_at at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('day', filtered.merged_at at time zone 'UTC')) + interval '1 day'))::timestamptz as bucket_end,
     ((((date_trunc('day', filtered.merged_at at time zone 'UTC')) + interval '1 day')) <= current_timestamp) as is_complete,
-    filtered.dim_repo,
-    percentile_cont(0.9) within group (order by _value)::float8 as value,
+    filtered.dim_repo as dim_repo,
+    percentile_cont(0.9) within group (order by _value)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from filtered
@@ -66,8 +66,8 @@ select
     (date_trunc('week', filtered.merged_at at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('week', filtered.merged_at at time zone 'UTC')) + interval '7 days'))::timestamptz as bucket_end,
     ((((date_trunc('week', filtered.merged_at at time zone 'UTC')) + interval '7 days')) <= current_timestamp) as is_complete,
-    filtered.dim_repo,
-    percentile_cont(0.9) within group (order by _value)::float8 as value,
+    filtered.dim_repo as dim_repo,
+    percentile_cont(0.9) within group (order by _value)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from filtered
@@ -84,8 +84,8 @@ select
     (date_trunc('month', filtered.merged_at at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('month', filtered.merged_at at time zone 'UTC')) + interval '1 month'))::timestamptz as bucket_end,
     ((((date_trunc('month', filtered.merged_at at time zone 'UTC')) + interval '1 month')) <= current_timestamp) as is_complete,
-    filtered.dim_repo,
-    percentile_cont(0.9) within group (order by _value)::float8 as value,
+    filtered.dim_repo as dim_repo,
+    percentile_cont(0.9) within group (order by _value)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
 from filtered

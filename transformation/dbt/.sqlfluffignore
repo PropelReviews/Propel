@@ -1,0 +1,3 @@
+# Machine-generated metric models — style is enforced by the compiler;
+# correctness/drift is gated by `propel-metrics compile --check` in CI.
+models/metrics/generated/**
