@@ -132,6 +132,14 @@ values
       "html_url": "https://github.com/acme/web/issues/11"}',
     '2026-01-05T11:00:00Z'
 ),
+-- GitHub issue comments (ticket discussion)
+(
+    'aaaaaaaa-0000-0000-0000-000000000001', 'github', 'issue_comments', 'IC_1',
+    '{"node_id": "IC_1", "id": 1, "created_at": "2026-01-04T15:00:00Z",
+      "updated_at": "2026-01-04T15:00:00Z", "user": {"login": "bob"},
+      "issue_number": 10, "org": "acme", "repo": "api"}',
+    '2026-01-04T16:00:00Z'
+),
 -- Linear issues
 (
     'aaaaaaaa-0000-0000-0000-000000000001', 'linear', 'issues', 'lin-issue-1',

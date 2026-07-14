@@ -147,9 +147,11 @@ models:
         data_tests:
           - not_null
 
-  - name: fct_linear_issue_activity_daily
+  - name: fct_ticket_activity_daily
     description: >
-      Daily Linear issue activity: created, completed, and canceled counts.
+      Daily ticket activity across issue trackers (GitHub Issues, Linear, …):
+      created, completed, and canceled counts. Grain includes `source` so new
+      tools (e.g. Jira) land in the same mart.
     columns:
       - name: tenant_id
         data_tests:
@@ -157,18 +159,25 @@ models:
       - name: activity_date
         data_tests:
           - not_null
-      - name: issues_created
+      - name: source
         data_tests:
           - not_null
-      - name: issues_completed
+          - accepted_values:
+              values: ['github', 'linear']
+      - name: tickets_created
         data_tests:
           - not_null
-      - name: issues_canceled
+      - name: tickets_completed
+        data_tests:
+          - not_null
+      - name: tickets_canceled
         data_tests:
           - not_null
 
-  - name: fct_linear_comments_daily
-    description: Daily Linear comment creation counts.
+  - name: fct_ticket_comments_daily
+    description: >
+      Daily ticket-comment counts across issue trackers (GitHub issue comments,
+      Linear comments, …). Excludes PR review comments.
     columns:
       - name: tenant_id
         data_tests:
@@ -176,13 +185,19 @@ models:
       - name: activity_date
         data_tests:
           - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['github', 'linear']
       - name: comments_created
         data_tests:
           - not_null
 
-  - name: fct_linear_projects_daily
+  - name: fct_project_activity_daily
     description: >
-      Daily Linear project activity: created, completed, and canceled counts.
+      Daily project activity across project trackers (Linear today; Jira later):
+      created, completed, and canceled counts.
     columns:
       - name: tenant_id
         data_tests:
@@ -190,6 +205,11 @@ models:
       - name: activity_date
         data_tests:
           - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['linear']
       - name: projects_created
         data_tests:
           - not_null
@@ -200,8 +220,10 @@ models:
         data_tests:
           - not_null
 
-  - name: fct_linear_description_edits_daily
-    description: Daily Linear issue description-edit counts.
+  - name: fct_ticket_description_edits_daily
+    description: >
+      Daily ticket description-edit counts across issue trackers (Linear
+      IssueHistory today; structured for future Jira changelog).
     columns:
       - name: tenant_id
         data_tests:
@@ -209,6 +231,11 @@ models:
       - name: activity_date
         data_tests:
           - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['linear']
       - name: description_edits
         data_tests:
           - not_null

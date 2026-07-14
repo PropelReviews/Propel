@@ -1,9 +1,12 @@
--- Daily Linear issue description-edit activity per tenant.
+-- Daily ticket description-edit activity across issue trackers.
+--
+-- Currently Linear (IssueHistory.updatedDescription); structured with `source`
+-- so a future Jira changelog tap lands here without a new fact table.
 
 {{ config(
     materialized='incremental',
     incremental_strategy='delete+insert',
-    unique_key=['tenant_id', 'activity_date'],
+    unique_key=['tenant_id', 'activity_date', 'source'],
 ) }}
 
 with edits as (
@@ -19,6 +22,7 @@ with edits as (
 select
     tenant_id,
     (edited_at at time zone 'UTC')::date as activity_date,
+    'linear' as source,
     count(*)::int as description_edits
 from edits
 where edited_at is not null

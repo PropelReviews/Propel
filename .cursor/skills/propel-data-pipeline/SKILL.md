@@ -28,8 +28,8 @@ incremental delete+insert).
 - `backend/app/ingestion/cli.py` — manual runs (`--account-id`, `--job`, `--start-date`)
 - `orchestration/propel_orchestration/jobs.py` — `discovery_job` + hourly `discovery_schedule`, per-org `org_ingestion_job` (one op per resource), `org_fanout_sensor`, `linear_ingestion_job`
 - `orchestration/propel_orchestration/analytics.py` — dagster-dbt assets (tenant `DynamicPartitionsDefinition`), `analytics_assets_job`, `analytics_sensor`; derives `DBT_*` env from `DATABASE_URL`
-- `transformation/dbt/` — dbt project: staging views → daily primitive marts in the `analytics` schema (PR/review/Actions/Linear; incremental per tenant/day)
-- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the marts (`date_trunc` per granularity)
+- `transformation/dbt/` — dbt project: staging views → daily primitive marts in the `analytics` schema. Tool-specific staging; **normalized facts** (`fct_ticket_*`, `fct_project_activity_daily`, plus GitHub DORA/CI marts) with a `source` dimension where multi-tracker
+- `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the marts (`date_trunc` per granularity); ticket/project endpoints are tracker-agnostic
 
 ## Running it
 

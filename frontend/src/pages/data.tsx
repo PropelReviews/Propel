@@ -11,11 +11,11 @@ import {
 } from "@/components/dora-metric-charts";
 import { PrActivityChart } from "@/components/pr-activity-chart";
 import {
-  LinearCommentsChart,
-  LinearDescriptionEditsChart,
-  LinearIssueActivityChart,
-  LinearProjectsChart,
+  ProjectActivityChart,
   ReviewCommentsChart,
+  TicketActivityChart,
+  TicketCommentsChart,
+  TicketDescriptionEditsChart,
   WorkflowRunsChart,
 } from "@/components/primitive-metric-charts";
 import { Badge } from "@/components/ui/badge";
@@ -256,26 +256,29 @@ function Loaded({
       </section>
 
       <section>
-        <h2 className="mb-4 text-lg font-medium">Linear issues</h2>
-        <LinearIssueActivityChart tenantId={tenantId} />
+        <h2 className="mb-4 text-lg font-medium">Tickets</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Created, completed, and canceled across connected issue trackers.
+        </p>
+        <TicketActivityChart tenantId={tenantId} />
       </section>
 
       <section>
-        <h2 className="mb-4 text-lg font-medium">Linear comments</h2>
-        <LinearCommentsChart tenantId={tenantId} />
+        <h2 className="mb-4 text-lg font-medium">Ticket comments</h2>
+        <TicketCommentsChart tenantId={tenantId} />
       </section>
 
       <section>
-        <h2 className="mb-4 text-lg font-medium">Linear projects</h2>
-        <LinearProjectsChart tenantId={tenantId} />
+        <h2 className="mb-4 text-lg font-medium">Projects</h2>
+        <ProjectActivityChart tenantId={tenantId} />
       </section>
 
       <section>
         <h2 className="mb-4 text-lg font-medium">Description edits</h2>
         <p className="text-muted-foreground mb-4 text-sm">
-          Times Linear issue descriptions were edited.
+          Times ticket descriptions were edited.
         </p>
-        <LinearDescriptionEditsChart tenantId={tenantId} />
+        <TicketDescriptionEditsChart tenantId={tenantId} />
       </section>
 
       {stats.by_kind.length > 0 && (

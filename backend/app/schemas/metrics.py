@@ -14,7 +14,8 @@ DORA-aligned primitives currently exposed:
 Additional base primitives:
   - review comments        → GitHub PR review-comment throughput
   - workflow runs          → GitHub Actions run activity
-  - Linear issues/comments/projects/description edits
+  - tickets / comments / description edits / projects
+    (normalized across trackers; source is a mart dimension)
 """
 
 from datetime import date
@@ -122,34 +123,34 @@ class WorkflowRunsResponse(BaseModel):
     points: list[WorkflowRunsPoint]
 
 
-class LinearIssueActivityPoint(BaseModel):
-    """Linear issue activity bucketed to one period."""
+class TicketActivityPoint(BaseModel):
+    """Ticket activity across issue trackers, bucketed to one period."""
 
     period_start: date
-    issues_created: int
-    issues_completed: int
-    issues_canceled: int
+    tickets_created: int
+    tickets_completed: int
+    tickets_canceled: int
 
 
-class LinearIssueActivityResponse(BaseModel):
+class TicketActivityResponse(BaseModel):
     granularity: Granularity
-    points: list[LinearIssueActivityPoint]
+    points: list[TicketActivityPoint]
 
 
-class LinearCommentsPoint(BaseModel):
-    """Linear comment throughput bucketed to one period."""
+class TicketCommentsPoint(BaseModel):
+    """Ticket-comment throughput across issue trackers, bucketed to one period."""
 
     period_start: date
     comments_created: int
 
 
-class LinearCommentsResponse(BaseModel):
+class TicketCommentsResponse(BaseModel):
     granularity: Granularity
-    points: list[LinearCommentsPoint]
+    points: list[TicketCommentsPoint]
 
 
-class LinearProjectsPoint(BaseModel):
-    """Linear project activity bucketed to one period."""
+class ProjectActivityPoint(BaseModel):
+    """Project activity across project trackers, bucketed to one period."""
 
     period_start: date
     projects_created: int
@@ -157,18 +158,18 @@ class LinearProjectsPoint(BaseModel):
     projects_canceled: int
 
 
-class LinearProjectsResponse(BaseModel):
+class ProjectActivityResponse(BaseModel):
     granularity: Granularity
-    points: list[LinearProjectsPoint]
+    points: list[ProjectActivityPoint]
 
 
-class LinearDescriptionEditsPoint(BaseModel):
-    """Linear issue description-edit counts bucketed to one period."""
+class TicketDescriptionEditsPoint(BaseModel):
+    """Ticket description-edit counts across issue trackers."""
 
     period_start: date
     description_edits: int
 
 
-class LinearDescriptionEditsResponse(BaseModel):
+class TicketDescriptionEditsResponse(BaseModel):
     granularity: Granularity
-    points: list[LinearDescriptionEditsPoint]
+    points: list[TicketDescriptionEditsPoint]

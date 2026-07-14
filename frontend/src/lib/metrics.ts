@@ -88,48 +88,48 @@ export type WorkflowRunsResponse = {
   points: WorkflowRunsPoint[];
 };
 
-export type LinearIssueActivityPoint = {
+export type TicketActivityPoint = {
   period_start: string;
-  issues_created: number;
-  issues_completed: number;
-  issues_canceled: number;
+  tickets_created: number;
+  tickets_completed: number;
+  tickets_canceled: number;
 };
 
-export type LinearIssueActivityResponse = {
+export type TicketActivityResponse = {
   granularity: Granularity;
-  points: LinearIssueActivityPoint[];
+  points: TicketActivityPoint[];
 };
 
-export type LinearCommentsPoint = {
+export type TicketCommentsPoint = {
   period_start: string;
   comments_created: number;
 };
 
-export type LinearCommentsResponse = {
+export type TicketCommentsResponse = {
   granularity: Granularity;
-  points: LinearCommentsPoint[];
+  points: TicketCommentsPoint[];
 };
 
-export type LinearProjectsPoint = {
+export type ProjectActivityPoint = {
   period_start: string;
   projects_created: number;
   projects_completed: number;
   projects_canceled: number;
 };
 
-export type LinearProjectsResponse = {
+export type ProjectActivityResponse = {
   granularity: Granularity;
-  points: LinearProjectsPoint[];
+  points: ProjectActivityPoint[];
 };
 
-export type LinearDescriptionEditsPoint = {
+export type TicketDescriptionEditsPoint = {
   period_start: string;
   description_edits: number;
 };
 
-export type LinearDescriptionEditsResponse = {
+export type TicketDescriptionEditsResponse = {
   granularity: Granularity;
-  points: LinearDescriptionEditsPoint[];
+  points: TicketDescriptionEditsPoint[];
 };
 
 type MetricRange = { granularity: Granularity; start: Date; end: Date };
@@ -226,50 +226,50 @@ export function getWorkflowRuns(
   );
 }
 
-export function getLinearIssueActivity(
+export function getTicketActivity(
   token: string,
   tenantId: string,
   options: MetricRange,
-): Promise<LinearIssueActivityResponse> {
+): Promise<TicketActivityResponse> {
   const params = rangeParams(options);
-  return authedGet<LinearIssueActivityResponse>(
-    `/api/v1/tenants/${tenantId}/metrics/linear/issues?${params}`,
+  return authedGet<TicketActivityResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/tickets?${params}`,
     token,
   );
 }
 
-export function getLinearComments(
+export function getTicketComments(
   token: string,
   tenantId: string,
   options: MetricRange,
-): Promise<LinearCommentsResponse> {
+): Promise<TicketCommentsResponse> {
   const params = rangeParams(options);
-  return authedGet<LinearCommentsResponse>(
-    `/api/v1/tenants/${tenantId}/metrics/linear/comments?${params}`,
+  return authedGet<TicketCommentsResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/ticket-comments?${params}`,
     token,
   );
 }
 
-export function getLinearProjects(
+export function getProjectActivity(
   token: string,
   tenantId: string,
   options: MetricRange,
-): Promise<LinearProjectsResponse> {
+): Promise<ProjectActivityResponse> {
   const params = rangeParams(options);
-  return authedGet<LinearProjectsResponse>(
-    `/api/v1/tenants/${tenantId}/metrics/linear/projects?${params}`,
+  return authedGet<ProjectActivityResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/projects?${params}`,
     token,
   );
 }
 
-export function getLinearDescriptionEdits(
+export function getTicketDescriptionEdits(
   token: string,
   tenantId: string,
   options: MetricRange,
-): Promise<LinearDescriptionEditsResponse> {
+): Promise<TicketDescriptionEditsResponse> {
   const params = rangeParams(options);
-  return authedGet<LinearDescriptionEditsResponse>(
-    `/api/v1/tenants/${tenantId}/metrics/linear/description-edits?${params}`,
+  return authedGet<TicketDescriptionEditsResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/ticket-description-edits?${params}`,
     token,
   );
 }

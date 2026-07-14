@@ -12,11 +12,11 @@ import {
 } from "@/components/charts";
 import { ApiError } from "@/lib/api";
 import {
-  getLinearComments,
-  getLinearDescriptionEdits,
-  getLinearIssueActivity,
-  getLinearProjects,
+  getProjectActivity,
   getReviewComments,
+  getTicketActivity,
+  getTicketComments,
+  getTicketDescriptionEdits,
   getWorkflowRuns,
 } from "@/lib/metrics";
 import { useAuth } from "@/providers/auth-provider";
@@ -36,22 +36,22 @@ const WORKFLOW_RUN_SERIES: ChartSeries[] = [
   { key: "runs_failure", label: "Failure" },
 ];
 
-const LINEAR_ISSUE_SERIES: ChartSeries[] = [
-  { key: "issues_created", label: "Created" },
-  { key: "issues_completed", label: "Completed" },
-  { key: "issues_canceled", label: "Canceled" },
+const TICKET_SERIES: ChartSeries[] = [
+  { key: "tickets_created", label: "Created" },
+  { key: "tickets_completed", label: "Completed" },
+  { key: "tickets_canceled", label: "Canceled" },
 ];
 
-const LINEAR_COMMENT_SERIES: ChartSeries[] = [
+const TICKET_COMMENT_SERIES: ChartSeries[] = [
   { key: "comments_created", label: "Comments" },
 ];
 
-const LINEAR_PROJECT_SERIES: ChartSeries[] = [
+const PROJECT_SERIES: ChartSeries[] = [
   { key: "projects_created", label: "Created" },
   { key: "projects_completed", label: "Completed" },
 ];
 
-const LINEAR_DESCRIPTION_EDIT_SERIES: ChartSeries[] = [
+const DESCRIPTION_EDIT_SERIES: ChartSeries[] = [
   { key: "description_edits", label: "Description edits" },
 ];
 
@@ -201,19 +201,19 @@ function WorkflowRunsChartInner({ tenantId }: { tenantId: string }) {
   );
 }
 
-/** Linear issue created / completed / canceled. */
-export function LinearIssueActivityChart({ tenantId }: { tenantId: string }) {
+/** Ticket activity across issue trackers (GitHub, Linear, …). */
+export function TicketActivityChart({ tenantId }: { tenantId: string }) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <LinearIssueActivityChartInner tenantId={tenantId} />
+      <TicketActivityChartInner tenantId={tenantId} />
     </MetricFiltersProvider>
   );
 }
 
-function LinearIssueActivityChartInner({ tenantId }: { tenantId: string }) {
+function TicketActivityChartInner({ tenantId }: { tenantId: string }) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -227,7 +227,7 @@ function LinearIssueActivityChartInner({ tenantId }: { tenantId: string }) {
     (async () => {
       setState({ status: "loading" });
       try {
-        const response = await getLinearIssueActivity(token, tenantId, {
+        const response = await getTicketActivity(token, tenantId, {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
@@ -237,9 +237,9 @@ function LinearIssueActivityChartInner({ tenantId }: { tenantId: string }) {
           status: "ready",
           data: response.points.map((point) => ({
             date: point.period_start,
-            issues_created: point.issues_created,
-            issues_completed: point.issues_completed,
-            issues_canceled: point.issues_canceled,
+            tickets_created: point.tickets_created,
+            tickets_completed: point.tickets_completed,
+            tickets_canceled: point.tickets_canceled,
           })),
         });
       } catch (error) {
@@ -247,7 +247,7 @@ function LinearIssueActivityChartInner({ tenantId }: { tenantId: string }) {
         setState({
           status: "error",
           message:
-            error instanceof ApiError ? error.message : "Could not load Linear issues.",
+            error instanceof ApiError ? error.message : "Could not load tickets.",
         });
       }
     })();
@@ -258,33 +258,35 @@ function LinearIssueActivityChartInner({ tenantId }: { tenantId: string }) {
 
   return (
     <LineChartWidget
-      title="Linear issues"
-      description="Issues created, completed, and canceled"
+      title="Tickets"
+      description="Tickets created, completed, and canceled across connected trackers"
       data={state.status === "ready" ? state.data : []}
-      series={LINEAR_ISSUE_SERIES}
+      series={TICKET_SERIES}
       xFormatter={formatWeekLabel}
       valueFormatter={formatCount}
       isLoading={state.status === "loading"}
       emptyMessage={
-        state.status === "error" ? state.message : "No Linear issues in this range yet."
+        state.status === "error"
+          ? state.message
+          : "No ticket activity in this range yet."
       }
     />
   );
 }
 
-/** Linear comment throughput. */
-export function LinearCommentsChart({ tenantId }: { tenantId: string }) {
+/** Ticket comment throughput across issue trackers. */
+export function TicketCommentsChart({ tenantId }: { tenantId: string }) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <LinearCommentsChartInner tenantId={tenantId} />
+      <TicketCommentsChartInner tenantId={tenantId} />
     </MetricFiltersProvider>
   );
 }
 
-function LinearCommentsChartInner({ tenantId }: { tenantId: string }) {
+function TicketCommentsChartInner({ tenantId }: { tenantId: string }) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -298,7 +300,7 @@ function LinearCommentsChartInner({ tenantId }: { tenantId: string }) {
     (async () => {
       setState({ status: "loading" });
       try {
-        const response = await getLinearComments(token, tenantId, {
+        const response = await getTicketComments(token, tenantId, {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
@@ -318,7 +320,7 @@ function LinearCommentsChartInner({ tenantId }: { tenantId: string }) {
           message:
             error instanceof ApiError
               ? error.message
-              : "Could not load Linear comments.",
+              : "Could not load ticket comments.",
         });
       }
     })();
@@ -329,35 +331,35 @@ function LinearCommentsChartInner({ tenantId }: { tenantId: string }) {
 
   return (
     <LineChartWidget
-      title="Linear comments"
-      description="Comments created on issues and projects"
+      title="Ticket comments"
+      description="Comments on tickets across connected trackers"
       data={state.status === "ready" ? state.data : []}
-      series={LINEAR_COMMENT_SERIES}
+      series={TICKET_COMMENT_SERIES}
       xFormatter={formatWeekLabel}
       valueFormatter={formatCount}
       isLoading={state.status === "loading"}
       emptyMessage={
         state.status === "error"
           ? state.message
-          : "No Linear comments in this range yet."
+          : "No ticket comments in this range yet."
       }
     />
   );
 }
 
-/** Linear project activity. */
-export function LinearProjectsChart({ tenantId }: { tenantId: string }) {
+/** Project activity across project trackers. */
+export function ProjectActivityChart({ tenantId }: { tenantId: string }) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <LinearProjectsChartInner tenantId={tenantId} />
+      <ProjectActivityChartInner tenantId={tenantId} />
     </MetricFiltersProvider>
   );
 }
 
-function LinearProjectsChartInner({ tenantId }: { tenantId: string }) {
+function ProjectActivityChartInner({ tenantId }: { tenantId: string }) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -371,7 +373,7 @@ function LinearProjectsChartInner({ tenantId }: { tenantId: string }) {
     (async () => {
       setState({ status: "loading" });
       try {
-        const response = await getLinearProjects(token, tenantId, {
+        const response = await getProjectActivity(token, tenantId, {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
@@ -390,9 +392,7 @@ function LinearProjectsChartInner({ tenantId }: { tenantId: string }) {
         setState({
           status: "error",
           message:
-            error instanceof ApiError
-              ? error.message
-              : "Could not load Linear projects.",
+            error instanceof ApiError ? error.message : "Could not load projects.",
         });
       }
     })();
@@ -403,35 +403,33 @@ function LinearProjectsChartInner({ tenantId }: { tenantId: string }) {
 
   return (
     <LineChartWidget
-      title="Linear projects"
-      description="Projects created and completed"
+      title="Projects"
+      description="Projects created and completed across connected trackers"
       data={state.status === "ready" ? state.data : []}
-      series={LINEAR_PROJECT_SERIES}
+      series={PROJECT_SERIES}
       xFormatter={formatWeekLabel}
       valueFormatter={formatCount}
       isLoading={state.status === "loading"}
       emptyMessage={
-        state.status === "error"
-          ? state.message
-          : "No Linear projects in this range yet."
+        state.status === "error" ? state.message : "No projects in this range yet."
       }
     />
   );
 }
 
-/** Linear issue description edits. */
-export function LinearDescriptionEditsChart({ tenantId }: { tenantId: string }) {
+/** Ticket description edits across issue trackers. */
+export function TicketDescriptionEditsChart({ tenantId }: { tenantId: string }) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <LinearDescriptionEditsChartInner tenantId={tenantId} />
+      <TicketDescriptionEditsChartInner tenantId={tenantId} />
     </MetricFiltersProvider>
   );
 }
 
-function LinearDescriptionEditsChartInner({ tenantId }: { tenantId: string }) {
+function TicketDescriptionEditsChartInner({ tenantId }: { tenantId: string }) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -445,7 +443,7 @@ function LinearDescriptionEditsChartInner({ tenantId }: { tenantId: string }) {
     (async () => {
       setState({ status: "loading" });
       try {
-        const response = await getLinearDescriptionEdits(token, tenantId, {
+        const response = await getTicketDescriptionEdits(token, tenantId, {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
@@ -477,9 +475,9 @@ function LinearDescriptionEditsChartInner({ tenantId }: { tenantId: string }) {
   return (
     <LineChartWidget
       title="Description edits"
-      description="Times Linear issue descriptions were edited"
+      description="Times ticket descriptions were edited across connected trackers"
       data={state.status === "ready" ? state.data : []}
-      series={LINEAR_DESCRIPTION_EDIT_SERIES}
+      series={DESCRIPTION_EDIT_SERIES}
       xFormatter={formatWeekLabel}
       valueFormatter={formatCount}
       isLoading={state.status === "loading"}

@@ -162,6 +162,11 @@ ingestion_asset_specs = [
         group_name="ingestion",
     ),
     AssetSpec(
+        key=["github", "issue_comments"],
+        description="Issue comments landed with the issues job.",
+        group_name="ingestion",
+    ),
+    AssetSpec(
         key=["github", "reviews"],
         description="Pull-request reviews landed with the pull_requests job.",
         group_name="ingestion",

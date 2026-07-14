@@ -62,6 +62,16 @@ sources:
           dagster:
             asset_key: ["github", "review_comments"]
 
+      - name: github_issue_comments
+        identifier: raw_record
+        description: >
+          GitHub issue comment payloads (resource_type = 'issue_comments') from
+          tap-github-issues. Ticket discussion (not PR review comments).
+        meta:
+          dagster:
+            # Same Meltano job as issues; distinct Dagster asset key for lineage.
+            asset_key: ["github", "issue_comments"]
+
       - name: github_workflow_runs
         identifier: raw_record
         description: >

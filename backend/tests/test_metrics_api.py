@@ -97,27 +97,30 @@ async def analytics_tables(db_engine):
         )
         await conn.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_issue_activity_daily ("
+                "CREATE TABLE IF NOT EXISTS analytics.fct_ticket_activity_daily ("
                 "tenant_id uuid NOT NULL, "
                 "activity_date date NOT NULL, "
-                "issues_created int NOT NULL, "
-                "issues_completed int NOT NULL, "
-                "issues_canceled int NOT NULL)"
+                "source text NOT NULL, "
+                "tickets_created int NOT NULL, "
+                "tickets_completed int NOT NULL, "
+                "tickets_canceled int NOT NULL)"
             )
         )
         await conn.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_comments_daily ("
+                "CREATE TABLE IF NOT EXISTS analytics.fct_ticket_comments_daily ("
                 "tenant_id uuid NOT NULL, "
                 "activity_date date NOT NULL, "
+                "source text NOT NULL, "
                 "comments_created int NOT NULL)"
             )
         )
         await conn.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS analytics.fct_linear_projects_daily ("
+                "CREATE TABLE IF NOT EXISTS analytics.fct_project_activity_daily ("
                 "tenant_id uuid NOT NULL, "
                 "activity_date date NOT NULL, "
+                "source text NOT NULL, "
                 "projects_created int NOT NULL, "
                 "projects_completed int NOT NULL, "
                 "projects_canceled int NOT NULL)"
@@ -126,9 +129,10 @@ async def analytics_tables(db_engine):
         await conn.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS "
-                "analytics.fct_linear_description_edits_daily ("
+                "analytics.fct_ticket_description_edits_daily ("
                 "tenant_id uuid NOT NULL, "
                 "activity_date date NOT NULL, "
+                "source text NOT NULL, "
                 "description_edits int NOT NULL)"
             )
         )
@@ -140,10 +144,10 @@ async def analytics_tables(db_engine):
             "fct_deployment_frequency_daily",
             "fct_review_comments_daily",
             "fct_workflow_runs_daily",
-            "fct_linear_issue_activity_daily",
-            "fct_linear_comments_daily",
-            "fct_linear_projects_daily",
-            "fct_linear_description_edits_daily",
+            "fct_ticket_activity_daily",
+            "fct_ticket_comments_daily",
+            "fct_project_activity_daily",
+            "fct_ticket_description_edits_daily",
         ):
             await conn.execute(text(f"TRUNCATE analytics.{table}"))
     yield
@@ -156,10 +160,10 @@ async def analytics_tables(db_engine):
             "fct_deployment_frequency_daily",
             "fct_review_comments_daily",
             "fct_workflow_runs_daily",
-            "fct_linear_issue_activity_daily",
-            "fct_linear_comments_daily",
-            "fct_linear_projects_daily",
-            "fct_linear_description_edits_daily",
+            "fct_ticket_activity_daily",
+            "fct_ticket_comments_daily",
+            "fct_project_activity_daily",
+            "fct_ticket_description_edits_daily",
         ):
             await conn.execute(text(f"DROP TABLE IF EXISTS analytics.{table}"))
         await conn.execute(text("DROP SCHEMA IF EXISTS analytics"))
@@ -546,10 +550,10 @@ async def test_dora_endpoints_missing_tables_return_empty(client: AsyncClient):
         "deployment-frequency",
         "review-comments",
         "workflow-runs",
-        "linear/issues",
-        "linear/comments",
-        "linear/projects",
-        "linear/description-edits",
+        "tickets",
+        "ticket-comments",
+        "projects",
+        "ticket-description-edits",
     ):
         resp = await client.get(
             f"/api/v1/tenants/{tenant['id']}/metrics/{path}",
@@ -608,10 +612,11 @@ async def _seed_workflow_runs(
         await session.commit()
 
 
-async def _seed_linear_issues(
+async def _seed_ticket_activity(
     tenant_id: uuid.UUID,
     activity_date: date,
     *,
+    source: str = "linear",
     created: int = 0,
     completed: int = 0,
     canceled: int = 0,
@@ -619,14 +624,16 @@ async def _seed_linear_issues(
     async with async_session_maker() as session:
         await session.execute(
             text(
-                "INSERT INTO analytics.fct_linear_issue_activity_daily "
-                "(tenant_id, activity_date, issues_created, issues_completed, "
-                " issues_canceled) "
-                "VALUES (:tenant_id, :activity_date, :created, :completed, :canceled)"
+                "INSERT INTO analytics.fct_ticket_activity_daily "
+                "(tenant_id, activity_date, source, tickets_created, "
+                " tickets_completed, tickets_canceled) "
+                "VALUES (:tenant_id, :activity_date, :source, :created, "
+                " :completed, :canceled)"
             ),
             {
                 "tenant_id": tenant_id,
                 "activity_date": activity_date,
+                "source": source,
                 "created": created,
                 "completed": completed,
                 "canceled": canceled,
@@ -635,29 +642,35 @@ async def _seed_linear_issues(
         await session.commit()
 
 
-async def _seed_linear_comments(
-    tenant_id: uuid.UUID, activity_date: date, *, count: int
+async def _seed_ticket_comments(
+    tenant_id: uuid.UUID,
+    activity_date: date,
+    *,
+    source: str = "linear",
+    count: int,
 ) -> None:
     async with async_session_maker() as session:
         await session.execute(
             text(
-                "INSERT INTO analytics.fct_linear_comments_daily "
-                "(tenant_id, activity_date, comments_created) "
-                "VALUES (:tenant_id, :activity_date, :count)"
+                "INSERT INTO analytics.fct_ticket_comments_daily "
+                "(tenant_id, activity_date, source, comments_created) "
+                "VALUES (:tenant_id, :activity_date, :source, :count)"
             ),
             {
                 "tenant_id": tenant_id,
                 "activity_date": activity_date,
+                "source": source,
                 "count": count,
             },
         )
         await session.commit()
 
 
-async def _seed_linear_projects(
+async def _seed_project_activity(
     tenant_id: uuid.UUID,
     activity_date: date,
     *,
+    source: str = "linear",
     created: int = 0,
     completed: int = 0,
     canceled: int = 0,
@@ -665,14 +678,16 @@ async def _seed_linear_projects(
     async with async_session_maker() as session:
         await session.execute(
             text(
-                "INSERT INTO analytics.fct_linear_projects_daily "
-                "(tenant_id, activity_date, projects_created, projects_completed, "
-                " projects_canceled) "
-                "VALUES (:tenant_id, :activity_date, :created, :completed, :canceled)"
+                "INSERT INTO analytics.fct_project_activity_daily "
+                "(tenant_id, activity_date, source, projects_created, "
+                " projects_completed, projects_canceled) "
+                "VALUES (:tenant_id, :activity_date, :source, :created, "
+                " :completed, :canceled)"
             ),
             {
                 "tenant_id": tenant_id,
                 "activity_date": activity_date,
+                "source": source,
                 "created": created,
                 "completed": completed,
                 "canceled": canceled,
@@ -681,19 +696,24 @@ async def _seed_linear_projects(
         await session.commit()
 
 
-async def _seed_linear_description_edits(
-    tenant_id: uuid.UUID, activity_date: date, *, count: int
+async def _seed_ticket_description_edits(
+    tenant_id: uuid.UUID,
+    activity_date: date,
+    *,
+    source: str = "linear",
+    count: int,
 ) -> None:
     async with async_session_maker() as session:
         await session.execute(
             text(
-                "INSERT INTO analytics.fct_linear_description_edits_daily "
-                "(tenant_id, activity_date, description_edits) "
-                "VALUES (:tenant_id, :activity_date, :count)"
+                "INSERT INTO analytics.fct_ticket_description_edits_daily "
+                "(tenant_id, activity_date, source, description_edits) "
+                "VALUES (:tenant_id, :activity_date, :source, :count)"
             ),
             {
                 "tenant_id": tenant_id,
                 "activity_date": activity_date,
+                "source": source,
                 "count": count,
             },
         )
@@ -743,23 +763,34 @@ async def test_review_comments_and_workflow_runs(client: AsyncClient, analytics_
 
 
 @pytest.mark.asyncio
-async def test_linear_primitive_metrics(client: AsyncClient, analytics_tables):
-    token, tenant = await _setup_tenant(client, email="linear-metrics@example.com")
+async def test_normalized_ticket_and_project_metrics(
+    client: AsyncClient, analytics_tables
+):
+    token, tenant = await _setup_tenant(client, email="ticket-metrics@example.com")
     tenant_id = uuid.UUID(tenant["id"])
     headers = auth_headers(token)
     params = {"granularity": "daily", "start": "2026-06-01", "end": "2026-06-01"}
 
-    await _seed_linear_issues(
-        tenant_id, date(2026, 6, 1), created=3, completed=2, canceled=1
+    # Two sources on the same day — API sums across source.
+    await _seed_ticket_activity(
+        tenant_id, date(2026, 6, 1), source="linear", created=2, completed=1
     )
-    await _seed_linear_comments(tenant_id, date(2026, 6, 1), count=7)
-    await _seed_linear_projects(
+    await _seed_ticket_activity(
+        tenant_id, date(2026, 6, 1), source="github", created=1, canceled=1
+    )
+    await _seed_ticket_comments(
+        tenant_id, date(2026, 6, 1), source="linear", count=4
+    )
+    await _seed_ticket_comments(
+        tenant_id, date(2026, 6, 1), source="github", count=3
+    )
+    await _seed_project_activity(
         tenant_id, date(2026, 6, 1), created=1, completed=1, canceled=0
     )
-    await _seed_linear_description_edits(tenant_id, date(2026, 6, 1), count=2)
+    await _seed_ticket_description_edits(tenant_id, date(2026, 6, 1), count=2)
 
     resp = await client.get(
-        f"/api/v1/tenants/{tenant['id']}/metrics/linear/issues",
+        f"/api/v1/tenants/{tenant['id']}/metrics/tickets",
         params=params,
         headers=headers,
     )
@@ -767,14 +798,14 @@ async def test_linear_primitive_metrics(client: AsyncClient, analytics_tables):
     assert resp.json()["points"] == [
         {
             "period_start": "2026-06-01",
-            "issues_created": 3,
-            "issues_completed": 2,
-            "issues_canceled": 1,
+            "tickets_created": 3,
+            "tickets_completed": 1,
+            "tickets_canceled": 1,
         }
     ]
 
     resp = await client.get(
-        f"/api/v1/tenants/{tenant['id']}/metrics/linear/comments",
+        f"/api/v1/tenants/{tenant['id']}/metrics/ticket-comments",
         params=params,
         headers=headers,
     )
@@ -784,7 +815,7 @@ async def test_linear_primitive_metrics(client: AsyncClient, analytics_tables):
     ]
 
     resp = await client.get(
-        f"/api/v1/tenants/{tenant['id']}/metrics/linear/projects",
+        f"/api/v1/tenants/{tenant['id']}/metrics/projects",
         params=params,
         headers=headers,
     )
@@ -799,7 +830,7 @@ async def test_linear_primitive_metrics(client: AsyncClient, analytics_tables):
     ]
 
     resp = await client.get(
-        f"/api/v1/tenants/{tenant['id']}/metrics/linear/description-edits",
+        f"/api/v1/tenants/{tenant['id']}/metrics/ticket-description-edits",
         params=params,
         headers=headers,
     )

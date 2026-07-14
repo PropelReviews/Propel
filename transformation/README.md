@@ -20,7 +20,8 @@ Example metrics:
 - Review comments — line-level PR discussion
 - Action runs — GitHub Actions workflow run activity
 - Change-failure proxy (revert-titled merges)
-- Linear issues, comments, projects, description edits
+- Ticket activity / comments / description edits — normalized across trackers
+- Project activity — normalized across project trackers
 - Tooling activity signals
 
 ## Directory layout
@@ -40,6 +41,7 @@ transformation/
         │   ├── stg_github_pull_requests.sql
         │   ├── stg_github_reviews.sql
         │   ├── stg_github_review_comments.sql
+        │   ├── stg_github_issue_comments.sql
         │   ├── stg_github_workflow_runs.sql
         │   ├── stg_github_releases.sql
         │   ├── stg_github_issues.sql
@@ -55,10 +57,10 @@ transformation/
             ├── fct_review_comments_daily.sql       # PR review comments
             ├── fct_workflow_runs_daily.sql         # Actions runs
             ├── fct_change_failure_daily.sql        # CFR proxy via reverts
-            ├── fct_linear_issue_activity_daily.sql
-            ├── fct_linear_comments_daily.sql
-            ├── fct_linear_projects_daily.sql
-            ├── fct_linear_description_edits_daily.sql
+            ├── fct_ticket_activity_daily.sql       # tickets across trackers
+            ├── fct_ticket_comments_daily.sql
+            ├── fct_ticket_description_edits_daily.sql
+            ├── fct_project_activity_daily.sql
             ├── fct_tickets.sql
             └── schema.yml
 ```

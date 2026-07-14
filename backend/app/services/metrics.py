@@ -28,20 +28,20 @@ from app.schemas.metrics import (
     DeploymentFrequencyPoint,
     DeploymentFrequencyResponse,
     Granularity,
-    LinearCommentsPoint,
-    LinearCommentsResponse,
-    LinearDescriptionEditsPoint,
-    LinearDescriptionEditsResponse,
-    LinearIssueActivityPoint,
-    LinearIssueActivityResponse,
-    LinearProjectsPoint,
-    LinearProjectsResponse,
+    ProjectActivityPoint,
+    ProjectActivityResponse,
     PullRequestActivityPoint,
     PullRequestActivityResponse,
     ReviewCommentsPoint,
     ReviewCommentsResponse,
     ReviewLatencyPoint,
     ReviewLatencyResponse,
+    TicketActivityPoint,
+    TicketActivityResponse,
+    TicketCommentsPoint,
+    TicketCommentsResponse,
+    TicketDescriptionEditsPoint,
+    TicketDescriptionEditsResponse,
     WorkflowRunsPoint,
     WorkflowRunsResponse,
 )
@@ -185,14 +185,14 @@ _WORKFLOW_RUNS_QUERY = text(
     """
 )
 
-_LINEAR_ISSUE_ACTIVITY_QUERY = text(
+_TICKET_ACTIVITY_QUERY = text(
     """
     SELECT
         date_trunc(:trunc_unit, activity_date)::date AS period_start,
-        COALESCE(SUM(issues_created), 0)::int AS issues_created,
-        COALESCE(SUM(issues_completed), 0)::int AS issues_completed,
-        COALESCE(SUM(issues_canceled), 0)::int AS issues_canceled
-    FROM analytics.fct_linear_issue_activity_daily
+        COALESCE(SUM(tickets_created), 0)::int AS tickets_created,
+        COALESCE(SUM(tickets_completed), 0)::int AS tickets_completed,
+        COALESCE(SUM(tickets_canceled), 0)::int AS tickets_canceled
+    FROM analytics.fct_ticket_activity_daily
     WHERE tenant_id = :tenant_id
       AND activity_date >= :start
       AND activity_date <= :end
@@ -201,12 +201,12 @@ _LINEAR_ISSUE_ACTIVITY_QUERY = text(
     """
 )
 
-_LINEAR_COMMENTS_QUERY = text(
+_TICKET_COMMENTS_QUERY = text(
     """
     SELECT
         date_trunc(:trunc_unit, activity_date)::date AS period_start,
         COALESCE(SUM(comments_created), 0)::int AS comments_created
-    FROM analytics.fct_linear_comments_daily
+    FROM analytics.fct_ticket_comments_daily
     WHERE tenant_id = :tenant_id
       AND activity_date >= :start
       AND activity_date <= :end
@@ -215,14 +215,14 @@ _LINEAR_COMMENTS_QUERY = text(
     """
 )
 
-_LINEAR_PROJECTS_QUERY = text(
+_PROJECT_ACTIVITY_QUERY = text(
     """
     SELECT
         date_trunc(:trunc_unit, activity_date)::date AS period_start,
         COALESCE(SUM(projects_created), 0)::int AS projects_created,
         COALESCE(SUM(projects_completed), 0)::int AS projects_completed,
         COALESCE(SUM(projects_canceled), 0)::int AS projects_canceled
-    FROM analytics.fct_linear_projects_daily
+    FROM analytics.fct_project_activity_daily
     WHERE tenant_id = :tenant_id
       AND activity_date >= :start
       AND activity_date <= :end
@@ -231,12 +231,12 @@ _LINEAR_PROJECTS_QUERY = text(
     """
 )
 
-_LINEAR_DESCRIPTION_EDITS_QUERY = text(
+_TICKET_DESCRIPTION_EDITS_QUERY = text(
     """
     SELECT
         date_trunc(:trunc_unit, activity_date)::date AS period_start,
         COALESCE(SUM(description_edits), 0)::int AS description_edits
-    FROM analytics.fct_linear_description_edits_daily
+    FROM analytics.fct_ticket_description_edits_daily
     WHERE tenant_id = :tenant_id
       AND activity_date >= :start
       AND activity_date <= :end
@@ -464,52 +464,52 @@ async def workflow_runs(
     )
 
 
-async def linear_issue_activity(
+async def ticket_activity(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     *,
     granularity: Granularity,
     start: date,
     end: date,
-) -> LinearIssueActivityResponse:
+) -> TicketActivityResponse:
     rows = await _safe_query(
         session,
-        _LINEAR_ISSUE_ACTIVITY_QUERY,
+        _TICKET_ACTIVITY_QUERY,
         _bind(granularity, tenant_id, start, end),
-        "analytics.fct_linear_issue_activity_daily",
+        "analytics.fct_ticket_activity_daily",
     )
-    return LinearIssueActivityResponse(
+    return TicketActivityResponse(
         granularity=granularity,
         points=[
-            LinearIssueActivityPoint(
+            TicketActivityPoint(
                 period_start=period_start,
-                issues_created=created,
-                issues_completed=completed,
-                issues_canceled=canceled,
+                tickets_created=created,
+                tickets_completed=completed,
+                tickets_canceled=canceled,
             )
             for period_start, created, completed, canceled in rows
         ],
     )
 
 
-async def linear_comments(
+async def ticket_comments(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     *,
     granularity: Granularity,
     start: date,
     end: date,
-) -> LinearCommentsResponse:
+) -> TicketCommentsResponse:
     rows = await _safe_query(
         session,
-        _LINEAR_COMMENTS_QUERY,
+        _TICKET_COMMENTS_QUERY,
         _bind(granularity, tenant_id, start, end),
-        "analytics.fct_linear_comments_daily",
+        "analytics.fct_ticket_comments_daily",
     )
-    return LinearCommentsResponse(
+    return TicketCommentsResponse(
         granularity=granularity,
         points=[
-            LinearCommentsPoint(
+            TicketCommentsPoint(
                 period_start=period_start,
                 comments_created=count,
             )
@@ -518,24 +518,24 @@ async def linear_comments(
     )
 
 
-async def linear_projects(
+async def project_activity(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     *,
     granularity: Granularity,
     start: date,
     end: date,
-) -> LinearProjectsResponse:
+) -> ProjectActivityResponse:
     rows = await _safe_query(
         session,
-        _LINEAR_PROJECTS_QUERY,
+        _PROJECT_ACTIVITY_QUERY,
         _bind(granularity, tenant_id, start, end),
-        "analytics.fct_linear_projects_daily",
+        "analytics.fct_project_activity_daily",
     )
-    return LinearProjectsResponse(
+    return ProjectActivityResponse(
         granularity=granularity,
         points=[
-            LinearProjectsPoint(
+            ProjectActivityPoint(
                 period_start=period_start,
                 projects_created=created,
                 projects_completed=completed,
@@ -546,24 +546,24 @@ async def linear_projects(
     )
 
 
-async def linear_description_edits(
+async def ticket_description_edits(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     *,
     granularity: Granularity,
     start: date,
     end: date,
-) -> LinearDescriptionEditsResponse:
+) -> TicketDescriptionEditsResponse:
     rows = await _safe_query(
         session,
-        _LINEAR_DESCRIPTION_EDITS_QUERY,
+        _TICKET_DESCRIPTION_EDITS_QUERY,
         _bind(granularity, tenant_id, start, end),
-        "analytics.fct_linear_description_edits_daily",
+        "analytics.fct_ticket_description_edits_daily",
     )
-    return LinearDescriptionEditsResponse(
+    return TicketDescriptionEditsResponse(
         granularity=granularity,
         points=[
-            LinearDescriptionEditsPoint(
+            TicketDescriptionEditsPoint(
                 period_start=period_start,
                 description_edits=count,
             )

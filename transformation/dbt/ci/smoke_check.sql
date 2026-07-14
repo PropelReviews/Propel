@@ -200,46 +200,52 @@ begin
 
     raise notice 'fct_workflow_runs_daily matches expected fixture output';
 
-    -- Linear issue activity
+    -- Ticket activity (GitHub + Linear), grain (date, source)
     with expected (
-        activity_date, issues_created, issues_completed, issues_canceled
+        activity_date, source, tickets_created, tickets_completed, tickets_canceled
     ) as (
         values
-            ('2026-01-02'::date, 1, 0, 0),
-            ('2026-01-04'::date, 1, 0, 0),
-            ('2026-01-05'::date, 0, 0, 1),
-            ('2026-01-06'::date, 0, 1, 0)
+            ('2026-01-02'::date, 'linear', 1, 0, 0),
+            ('2026-01-03'::date, 'github', 1, 0, 0),
+            ('2026-01-04'::date, 'github', 1, 0, 0),
+            ('2026-01-04'::date, 'linear', 1, 0, 0),
+            ('2026-01-05'::date, 'github', 0, 0, 1),
+            ('2026-01-05'::date, 'linear', 0, 0, 1),
+            ('2026-01-06'::date, 'linear', 0, 1, 0)
     )
     select count(*) into bad_rows
     from expected e
-    full outer join analytics.fct_linear_issue_activity_daily f
+    full outer join analytics.fct_ticket_activity_daily f
         on f.activity_date = e.activity_date
+        and f.source = e.source
         and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
     where
-        f.issues_created is distinct from e.issues_created
-        or f.issues_completed is distinct from e.issues_completed
-        or f.issues_canceled is distinct from e.issues_canceled
+        f.tickets_created is distinct from e.tickets_created
+        or f.tickets_completed is distinct from e.tickets_completed
+        or f.tickets_canceled is distinct from e.tickets_canceled
         or e.activity_date is null
         or f.activity_date is null;
 
     if bad_rows > 0 then
         raise exception
-            'fct_linear_issue_activity_daily does not match expected fixture output (% mismatched rows)',
+            'fct_ticket_activity_daily does not match expected fixture output (% mismatched rows)',
             bad_rows;
     end if;
 
-    raise notice 'fct_linear_issue_activity_daily matches expected fixture output';
+    raise notice 'fct_ticket_activity_daily matches expected fixture output';
 
-    -- Linear comments
-    with expected (activity_date, comments_created) as (
+    -- Ticket comments: GitHub IC_1 on Jan 4; Linear comments on Jan 5 and 6
+    with expected (activity_date, source, comments_created) as (
         values
-            ('2026-01-05'::date, 1),
-            ('2026-01-06'::date, 1)
+            ('2026-01-04'::date, 'github', 1),
+            ('2026-01-05'::date, 'linear', 1),
+            ('2026-01-06'::date, 'linear', 1)
     )
     select count(*) into bad_rows
     from expected e
-    full outer join analytics.fct_linear_comments_daily f
+    full outer join analytics.fct_ticket_comments_daily f
         on f.activity_date = e.activity_date
+        and f.source = e.source
         and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
     where
         f.comments_created is distinct from e.comments_created
@@ -248,24 +254,25 @@ begin
 
     if bad_rows > 0 then
         raise exception
-            'fct_linear_comments_daily does not match expected fixture output (% mismatched rows)',
+            'fct_ticket_comments_daily does not match expected fixture output (% mismatched rows)',
             bad_rows;
     end if;
 
-    raise notice 'fct_linear_comments_daily matches expected fixture output';
+    raise notice 'fct_ticket_comments_daily matches expected fixture output';
 
-    -- Linear projects
+    -- Project activity (Linear today)
     with expected (
-        activity_date, projects_created, projects_completed, projects_canceled
+        activity_date, source, projects_created, projects_completed, projects_canceled
     ) as (
         values
-            ('2026-01-01'::date, 1, 0, 0),
-            ('2026-01-06'::date, 0, 1, 0)
+            ('2026-01-01'::date, 'linear', 1, 0, 0),
+            ('2026-01-06'::date, 'linear', 0, 1, 0)
     )
     select count(*) into bad_rows
     from expected e
-    full outer join analytics.fct_linear_projects_daily f
+    full outer join analytics.fct_project_activity_daily f
         on f.activity_date = e.activity_date
+        and f.source = e.source
         and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
     where
         f.projects_created is distinct from e.projects_created
@@ -276,21 +283,22 @@ begin
 
     if bad_rows > 0 then
         raise exception
-            'fct_linear_projects_daily does not match expected fixture output (% mismatched rows)',
+            'fct_project_activity_daily does not match expected fixture output (% mismatched rows)',
             bad_rows;
     end if;
 
-    raise notice 'fct_linear_projects_daily matches expected fixture output';
+    raise notice 'fct_project_activity_daily matches expected fixture output';
 
-    -- Linear description edits
-    with expected (activity_date, description_edits) as (
+    -- Ticket description edits (Linear today)
+    with expected (activity_date, source, description_edits) as (
         values
-            ('2026-01-05'::date, 1)
+            ('2026-01-05'::date, 'linear', 1)
     )
     select count(*) into bad_rows
     from expected e
-    full outer join analytics.fct_linear_description_edits_daily f
+    full outer join analytics.fct_ticket_description_edits_daily f
         on f.activity_date = e.activity_date
+        and f.source = e.source
         and f.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
     where
         f.description_edits is distinct from e.description_edits
@@ -299,9 +307,9 @@ begin
 
     if bad_rows > 0 then
         raise exception
-            'fct_linear_description_edits_daily does not match expected fixture output (% mismatched rows)',
+            'fct_ticket_description_edits_daily does not match expected fixture output (% mismatched rows)',
             bad_rows;
     end if;
 
-    raise notice 'fct_linear_description_edits_daily matches expected fixture output';
+    raise notice 'fct_ticket_description_edits_daily matches expected fixture output';
 end $$;

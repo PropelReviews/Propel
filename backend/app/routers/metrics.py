@@ -11,10 +11,10 @@ Endpoints map onto DORA-aligned primitives computed in transformation/dbt:
   GET .../metrics/change-failure        change-fail-rate proxy (reverts)
   GET .../metrics/review-comments       PR review-comment throughput
   GET .../metrics/workflow-runs         GitHub Actions run activity
-  GET .../metrics/linear/issues         Linear issue activity
-  GET .../metrics/linear/comments       Linear comment throughput
-  GET .../metrics/linear/projects       Linear project activity
-  GET .../metrics/linear/description-edits  Linear description edits
+  GET .../metrics/tickets               ticket activity (all trackers)
+  GET .../metrics/ticket-comments       ticket comment throughput
+  GET .../metrics/projects              project activity
+  GET .../metrics/ticket-description-edits  ticket description edits
 """
 
 from datetime import UTC, datetime, timedelta
@@ -30,13 +30,13 @@ from app.schemas.metrics import (
     CycleTimeResponse,
     DeploymentFrequencyResponse,
     Granularity,
-    LinearCommentsResponse,
-    LinearDescriptionEditsResponse,
-    LinearIssueActivityResponse,
-    LinearProjectsResponse,
+    ProjectActivityResponse,
     PullRequestActivityResponse,
     ReviewCommentsResponse,
     ReviewLatencyResponse,
+    TicketActivityResponse,
+    TicketCommentsResponse,
+    TicketDescriptionEditsResponse,
     WorkflowRunsResponse,
 )
 from app.services import metrics as metrics_service
@@ -204,10 +204,10 @@ async def get_workflow_runs(
 
 
 @router.get(
-    "/tenants/{tenant_id}/metrics/linear/issues",
-    response_model=LinearIssueActivityResponse,
+    "/tenants/{tenant_id}/metrics/tickets",
+    response_model=TicketActivityResponse,
 )
-async def get_linear_issues(
+async def get_ticket_activity(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
@@ -215,7 +215,7 @@ async def get_linear_issues(
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
-    return await metrics_service.linear_issue_activity(
+    return await metrics_service.ticket_activity(
         session,
         ctx.tenant.id,
         granularity=granularity,
@@ -225,10 +225,10 @@ async def get_linear_issues(
 
 
 @router.get(
-    "/tenants/{tenant_id}/metrics/linear/comments",
-    response_model=LinearCommentsResponse,
+    "/tenants/{tenant_id}/metrics/ticket-comments",
+    response_model=TicketCommentsResponse,
 )
-async def get_linear_comments(
+async def get_ticket_comments(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
@@ -236,7 +236,7 @@ async def get_linear_comments(
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
-    return await metrics_service.linear_comments(
+    return await metrics_service.ticket_comments(
         session,
         ctx.tenant.id,
         granularity=granularity,
@@ -246,10 +246,10 @@ async def get_linear_comments(
 
 
 @router.get(
-    "/tenants/{tenant_id}/metrics/linear/projects",
-    response_model=LinearProjectsResponse,
+    "/tenants/{tenant_id}/metrics/projects",
+    response_model=ProjectActivityResponse,
 )
-async def get_linear_projects(
+async def get_project_activity(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
@@ -257,7 +257,7 @@ async def get_linear_projects(
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
-    return await metrics_service.linear_projects(
+    return await metrics_service.project_activity(
         session,
         ctx.tenant.id,
         granularity=granularity,
@@ -267,10 +267,10 @@ async def get_linear_projects(
 
 
 @router.get(
-    "/tenants/{tenant_id}/metrics/linear/description-edits",
-    response_model=LinearDescriptionEditsResponse,
+    "/tenants/{tenant_id}/metrics/ticket-description-edits",
+    response_model=TicketDescriptionEditsResponse,
 )
-async def get_linear_description_edits(
+async def get_ticket_description_edits(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
@@ -278,7 +278,7 @@ async def get_linear_description_edits(
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
-    return await metrics_service.linear_description_edits(
+    return await metrics_service.ticket_description_edits(
         session,
         ctx.tenant.id,
         granularity=granularity,

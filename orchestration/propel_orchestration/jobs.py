@@ -96,7 +96,10 @@ _ASSET_KEYS: dict[str, tuple[AssetKey, ...]] = {
         AssetKey(["github", "reviews"]),
         AssetKey(["github", "review_comments"]),
     ),
-    "github_issues_sync": (AssetKey(["github", "issues"]),),
+    "github_issues_sync": (
+        AssetKey(["github", "issues"]),
+        AssetKey(["github", "issue_comments"]),
+    ),
     "github_releases_sync": (AssetKey(["github", "releases"]),),
     "github_workflow_runs_sync": (AssetKey(["github", "workflow_runs"]),),
     "copilot_sync": (AssetKey(["github", "copilot_usage"]),),
