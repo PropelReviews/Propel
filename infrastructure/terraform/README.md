@@ -84,7 +84,7 @@ expose as a variable):
 | Variable | Example | Consumed by |
 |----------|---------|-------------|
 | `POSTHOG_TOKEN` | `phc_...` | API (OTEL -> PostHog) + SPA |
-| `POSTHOG_HOST` | `https://us.i.posthog.com` | API + SPA |
+| `POSTHOG_HOST` | `https://metrics.propelreview.com` | API + SPA |
 
 For OAuth client secrets, add GitHub Environment **secrets** on `prod`.
 Deploy workflows map them into `app_secrets` automatically:

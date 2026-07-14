@@ -14,7 +14,7 @@ def test_setup_logging_noop_without_token(monkeypatch):
 
 def test_setup_logging_attaches_handler(monkeypatch):
     monkeypatch.setenv("POSTHOG_TOKEN", "phc_test_token")
-    monkeypatch.setenv("POSTHOG_HOST", "https://us.i.posthog.com")
+    monkeypatch.setenv("POSTHOG_HOST", "https://metrics.propelreview.com")
     monkeypatch.setenv("OTEL_SERVICE_NAME", "propel-backend-test")
 
     root = logging.getLogger()

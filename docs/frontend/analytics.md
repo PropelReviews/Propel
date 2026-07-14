@@ -6,6 +6,10 @@ initialized in [`frontend/src/providers/posthog-provider.tsx`](../../frontend/sr
 and stays **fully disabled** unless `VITE_POSTHOG_KEY` is set, so none of the
 below fires in environments without a key.
 
+Event capture routes through PostHog's managed reverse proxy at
+`https://metrics.propelreview.com` (`api_host`). `ui_host` points at
+`https://us.posthog.com` so the toolbar and session replay player work correctly.
+
 ## Auto-captured events
 
 Configured explicitly in `posthog.init`:

@@ -31,7 +31,10 @@ export default defineConfig(({ mode }) => {
         env.VITE_POSTHOG_KEY ?? env.POSTHOG_TOKEN ?? "",
       ),
       "import.meta.env.VITE_POSTHOG_HOST": JSON.stringify(
-        env.VITE_POSTHOG_HOST ?? env.POSTHOG_HOST ?? "https://us.i.posthog.com",
+        env.VITE_POSTHOG_HOST ?? env.POSTHOG_HOST ?? "https://metrics.propelreview.com",
+      ),
+      "import.meta.env.VITE_POSTHOG_UI_HOST": JSON.stringify(
+        env.VITE_POSTHOG_UI_HOST ?? env.POSTHOG_UI_HOST ?? "https://us.posthog.com",
       ),
       // Backend API base URL. The deploy script sets this per environment
       // (e.g. https://api.beta.propel.ninja); defaults to the local dev API.
@@ -59,7 +62,7 @@ export default defineConfig(({ mode }) => {
             posthogRollup({
               personalApiKey: posthogPersonalApiKey,
               projectId: posthogProjectId,
-              host: env.POSTHOG_HOST ?? "https://us.i.posthog.com",
+              host: env.POSTHOG_UPLOAD_HOST ?? "https://us.i.posthog.com",
               sourcemaps: {
                 enabled: true,
                 releaseName: "propel-frontend",
