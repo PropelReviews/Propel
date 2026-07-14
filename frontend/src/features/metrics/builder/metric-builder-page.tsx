@@ -28,6 +28,7 @@ import {
   type MetricCatalogResponse,
 } from "@/features/metrics/api/metric-definitions";
 import { FilterBuilder } from "@/features/metrics/builder/filter-builder";
+import { DerivedMeasureEditor } from "@/features/metrics/builder/derived-measure-editor";
 import { AdvancedBanner } from "@/features/metrics/components/metric-badges";
 import { ForkPrompt } from "@/features/metrics/catalog/customize-params-dialog";
 import { isAdvancedDocument } from "@/features/metrics/document/advanced";
@@ -48,6 +49,8 @@ const MEASURE_TYPES = [
   "max",
   "percentile",
   "interval",
+  "ratio",
+  "formula",
 ] as const;
 
 const GRAINS = ["day", "week", "month", "quarter"] as const;
@@ -427,12 +430,25 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                   <KindCard
                     title="Measure events"
                     body="Count, interval, or aggregate over an entity."
-                    active={!extendsParent}
+                    active={
+                      !extendsParent &&
+                      measure.type !== "ratio" &&
+                      measure.type !== "formula"
+                    }
+                    onClick={() => setSpec("measure", { type: "count" })}
                   />
                   <KindCard
                     title="Combine metrics"
-                    body="Ratio or formula — use YAML / operand pickers in a follow-up."
-                    disabled
+                    body="Ratio or formula over referencable metrics."
+                    active={measure.type === "ratio" || measure.type === "formula"}
+                    onClick={() =>
+                      setSpec("measure", {
+                        type: "ratio",
+                        numerator: { ref: "" },
+                        denominator: { ref: "" },
+                        zero_denominator: null,
+                      })
+                    }
                   />
                   <KindCard
                     title="Variant"
@@ -522,6 +538,16 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                     </SelectContent>
                   </Select>
                 </div>
+                {(measure.type === "ratio" || measure.type === "formula") &&
+                  token &&
+                  tenant && (
+                    <DerivedMeasureEditor
+                      token={token}
+                      tenantId={tenant.id}
+                      measure={measure}
+                      onChange={(next) => setSpec("measure", next)}
+                    />
+                  )}
                 {(measure.type === "sum" ||
                   measure.type === "avg" ||
                   measure.type === "min" ||
@@ -753,24 +779,31 @@ function KindCard({
   body,
   active,
   disabled,
+  onClick,
 }: {
   title: string;
   body: string;
   active?: boolean;
   disabled?: boolean;
+  onClick?: () => void;
 }) {
+  const className = disabled
+    ? "border-border text-muted-foreground rounded-lg border p-3 opacity-60"
+    : active
+      ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
+      : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left";
+  if (disabled || !onClick) {
+    return (
+      <div className={className}>
+        <div className="font-medium">{title}</div>
+        <div className="text-muted-foreground mt-1 text-xs">{body}</div>
+      </div>
+    );
+  }
   return (
-    <div
-      className={
-        disabled
-          ? "border-border text-muted-foreground rounded-lg border p-3 opacity-60"
-          : active
-            ? "border-primary bg-primary/5 rounded-lg border p-3"
-            : "border-border rounded-lg border p-3"
-      }
-    >
+    <button type="button" className={className} onClick={onClick}>
       <div className="font-medium">{title}</div>
       <div className="text-muted-foreground mt-1 text-xs">{body}</div>
-    </div>
+    </button>
   );
 }
