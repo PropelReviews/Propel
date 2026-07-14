@@ -43,7 +43,8 @@ def compile_source() -> CompileSource:
 
 async def _mark_dirty(
     session: AsyncSession, content_hashes: list[str], reason: str
-) -> None:
+) -> list[str]:
+    marked: list[str] = []
     for h in content_hashes:
         if not h:
             continue
@@ -52,6 +53,8 @@ async def _mark_dirty(
             session.add(MetricCompileDirty(content_hash=h, reason=reason))
         else:
             existing.reason = reason
+        marked.append(h)
+    return marked
 
 
 async def enqueue_compile(
@@ -60,16 +63,49 @@ async def enqueue_compile(
     trigger: str,
     content_hashes: list[str] | None = None,
     reason: str = "enqueue",
-) -> MetricCompileRun | None:
-    """Mark hashes dirty and start a single-flight compile run if none running.
+) -> dict[str, Any]:
+    """Mark content hashes dirty for the Dagster dirty-set sensor / compile job.
 
-    Uses a nested transaction for the run insert so a conflict does not roll
-    back the caller's outer unit of work (e.g. an activation).
+    Does **not** create a ``running`` compile run — that claim happens inside
+    ``run_compile`` (single-flight). Returns a small status payload for the API.
     """
-    if content_hashes:
-        await _mark_dirty(session, content_hashes, reason)
+    _ = trigger  # retained for API/observability callers
+    hashes = list(content_hashes or [])
+    if compile_source() != "db":
+        # Still record dirtiness so flipping to db later drains the backlog.
+        marked = await _mark_dirty(session, hashes, reason) if hashes else []
+        await session.flush()
+        return {
+            "status": "deferred",
+            "source": "files",
+            "dirtied": marked,
+            "detail": "METRICS_COMPILE_SOURCE!=db; dirty recorded for later drain",
+        }
 
-    # Fast path: already running
+    marked = await _mark_dirty(session, hashes, reason) if hashes else []
+    # If no explicit hashes, mark a sentinel? No — empty dirty means "full" only
+    # via schedule. Callers that want a compile with empty dirty can pass full.
+    await session.flush()
+
+    existing = (
+        (
+            await session.execute(
+                select(MetricCompileRun).where(MetricCompileRun.status == "running")
+            )
+        )
+        .scalars()
+        .first()
+    )
+    return {
+        "status": "queued" if not existing else "already_running",
+        "source": "db",
+        "dirtied": marked,
+        "running_run_id": str(existing.id) if existing else None,
+    }
+
+
+async def _claim_run(session: AsyncSession, *, trigger: str) -> MetricCompileRun | None:
+    """Insert a single-flight running row; return None if another worker holds it."""
     existing = (
         (
             await session.execute(
@@ -80,24 +116,20 @@ async def enqueue_compile(
         .first()
     )
     if existing is not None:
-        await session.flush()
-        logger.info("compile already running; dirtied %s", content_hashes)
         return None
 
     run = MetricCompileRun(
         id=uuid.uuid4(),
         status="running",
         trigger=trigger,
-        report_json={"queued_hashes": list(content_hashes or [])},
+        report_json={},
     )
     try:
         async with session.begin_nested():
             session.add(run)
             await session.flush()
     except IntegrityError:
-        logger.info("compile race lost; dirtied %s", content_hashes)
         return None
-
     return run
 
 
@@ -127,10 +159,12 @@ async def run_compile(
     run_id: uuid.UUID | None = None,
     output_dir: Path | None = None,
     full: bool = False,
+    trigger: str = "manual",
 ) -> dict[str, Any]:
     """Resolve all orgs and regenerate dirty (or all) shared models.
 
-    No-op when ``METRICS_COMPILE_SOURCE=files`` (CI file pipeline owns SQL).
+    Claims a single-flight ``metric_compile_runs`` row. No-op (skipped) when
+    ``METRICS_COMPILE_SOURCE=files``.
     """
     if compile_source() != "db":
         report = {
@@ -140,7 +174,7 @@ async def run_compile(
         }
         if run_id is not None:
             run = await session.get(MetricCompileRun, run_id)
-            if run is not None:
+            if run is not None and run.status == "running":
                 run.status = "skipped"
                 run.finished_at = datetime.now(UTC)
                 run.report_json = report
@@ -149,46 +183,73 @@ async def run_compile(
     run: MetricCompileRun | None = None
     if run_id is not None:
         run = await session.get(MetricCompileRun, run_id)
+        if run is None or run.status != "running":
+            run = None
     if run is None:
-        run = await enqueue_compile(session, trigger="manual")
+        run = await _claim_run(session, trigger=trigger)
         if run is None:
             raise HTTPException(
                 status.HTTP_409_CONFLICT, detail="compile already running"
             )
 
-    dirty_rows = (await session.execute(select(MetricCompileDirty))).scalars().all()
-    dirty = {r.content_hash for r in dirty_rows}
-    dirty_filter = None if full else (dirty or None)
+    try:
+        dirty_rows = (await session.execute(select(MetricCompileDirty))).scalars().all()
+        dirty = {r.content_hash for r in dirty_rows}
+        # Empty dirty + not full ⇒ nothing to do (sensor may race-clear).
+        if not dirty and not full:
+            report = {
+                "skipped": False,
+                "source": "db",
+                "dirty_count": 0,
+                "full": False,
+                "models_written": [],
+                "detail": "dirty set empty",
+            }
+            run.status = "succeeded"
+            run.finished_at = datetime.now(UTC)
+            run.report_json = report
+            return report
 
-    mem = await _hydrate_all_orgs(session)
-    result = await session.execute(select(Tenant).where(Tenant.deleted_at.is_(None)))
-    tenants = list(result.scalars().all())
-    org_results = [
-        resolve_org(mem, tenant.slug, persist_enrollment=True) for tenant in tenants
-    ]
+        dirty_filter = None if full else dirty
 
-    sql = SqlAlchemyDefinitionStore(session)
-    for tenant in tenants:
-        await sql.replace_enrollments(tenant.slug, mem.list_enrollments(tenant.slug))
+        mem = await _hydrate_all_orgs(session)
+        result = await session.execute(
+            select(Tenant).where(Tenant.deleted_at.is_(None))
+        )
+        tenants = list(result.scalars().all())
+        org_results = [
+            resolve_org(mem, tenant.slug, persist_enrollment=True) for tenant in tenants
+        ]
 
-    out = output_dir or GENERATED_DIR
-    written = compile_org_results(
-        org_results, output_dir=out, dirty_hashes=dirty_filter
-    )
-    cleared = list(dirty) if dirty_filter is not None else list(dirty)
-    if cleared:
-        await sql.clear_dirty(cleared)
+        sql = SqlAlchemyDefinitionStore(session)
+        for tenant in tenants:
+            await sql.replace_enrollments(
+                tenant.slug, mem.list_enrollments(tenant.slug)
+            )
 
-    report = {
-        "skipped": False,
-        "source": "db",
-        "orgs": [t.slug for t in tenants],
-        "dirty_count": len(dirty),
-        "full": full,
-        "models_written": [str(p) for p in written],
-    }
-    run.status = "succeeded"
-    run.finished_at = datetime.now(UTC)
-    run.report_json = report
-    logger.info("metric compile finished: %s", report)
-    return report
+        out = output_dir or GENERATED_DIR
+        written = compile_org_results(
+            org_results, output_dir=out, dirty_hashes=dirty_filter
+        )
+        if dirty:
+            await sql.clear_dirty(list(dirty))
+
+        report = {
+            "skipped": False,
+            "source": "db",
+            "orgs": [t.slug for t in tenants],
+            "dirty_count": len(dirty),
+            "full": full,
+            "models_written": [str(p) for p in written],
+        }
+        run.status = "succeeded"
+        run.finished_at = datetime.now(UTC)
+        run.report_json = report
+        logger.info("metric compile finished: %s", report)
+        return report
+    except Exception as exc:
+        run.status = "failed"
+        run.finished_at = datetime.now(UTC)
+        run.report_json = {"error": str(exc), "source": "db"}
+        logger.exception("metric compile failed")
+        raise

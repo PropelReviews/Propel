@@ -82,7 +82,9 @@ class Settings(BaseSettings):
 
     # Metric compile input: "files" (CI committed SQL / propel-metrics compile)
     # or "db" (resolve orgs from metric_definitions and emit shared-hash models).
-    metrics_compile_source: str = "files"
+    # Default ``db`` after M4 parity; set METRICS_COMPILE_SOURCE=files to force
+    # the legacy file pipeline (CI still uses file compile --check).
+    metrics_compile_source: str = "db"
 
     @property
     def linear_oauth_enabled(self) -> bool:

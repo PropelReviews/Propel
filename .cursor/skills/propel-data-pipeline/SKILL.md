@@ -32,7 +32,7 @@ incremental delete+insert).
 - `transformation/propel_metrics/` — declarative Metric YAML (`propel.*`), entity catalog, IR + org resolve / params / push-pull + `propel-metrics validate|compile|import-system|pull|push|resolve-parity` (codegen into `models/metrics/generated/`, including ratio/formula/windows + shared-hash models). Definition store docs: `docs/metrics/definition-store.md`. Compile source gated by `METRICS_COMPILE_SOURCE` (`files` default; `db` for store-backed shared models).
 - `backend/app/{routers,services,schemas}/metrics.py` — tenant-scoped API over the **legacy** marts (`date_trunc` per granularity); ticket/project endpoints are tracker-agnostic. Cutover to `fct_metric_values` is not done yet
 - `backend/app/{routers,services,schemas}/metric_definitions.py` (+ `metric_compile.py`, `metric_store.py`) — M4 definition management API (`/tenants/{id}/metric-definitions…`); activation dirties content hashes for the Dagster `metrics_compile_build` job
-- `orchestration/propel_orchestration/metrics_compile.py` — non-partitioned dirty-set compile job (hourly schedule stopped by default)
+- `orchestration/propel_orchestration/metrics_compile.py` — dirty-set sensor `metrics_compile_dirty_sensor` + `metrics_compile_build` job (hourly full backstop). Default `METRICS_COMPILE_SOURCE=db`.
 
 ## Running it
 

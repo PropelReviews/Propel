@@ -66,3 +66,9 @@ def test_definitions_repository_loads() -> None:
 
     job_names = {j.name for j in repo.get_all_jobs()}
     assert "metrics_compile_build" in job_names
+
+    # Sensor is registered on the Definitions object (not only the job).
+    from propel_orchestration.definitions import defs as definitions
+
+    sensor_names = {s.name for s in definitions.sensors}
+    assert "metrics_compile_dirty_sensor" in sensor_names
