@@ -99,7 +99,12 @@ def apply_extends(
 
 
 def content_hash(spec: dict[str, Any]) -> str:
-    """Stable short hash of the semantic spec (excludes display-only keys)."""
+    """Stable short hash of the semantic spec (excludes display-only keys).
+
+    Used by the file-based compile inventory as ``definition_version``.
+    M4 shared-model / dirty tracking uses ``plan_content_hash`` (full sha256 of
+    the canonical CompiledPlan JSON) instead.
+    """
     semantic = {
         "entity": spec.get("entity"),
         "measure": spec.get("measure"),

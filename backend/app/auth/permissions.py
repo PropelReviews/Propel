@@ -110,6 +110,12 @@ PERMISSION_CATALOG: tuple[PermissionDefinition, ...] = (
         group="Data",
     ),
     PermissionDefinition(
+        key="metrics:manage",
+        label="Manage metric definitions",
+        description="Create, activate, and archive org metric definitions and sets.",
+        group="Data",
+    ),
+    PermissionDefinition(
         key="roles:manage",
         label="Manage role permissions",
         description="Edit which permissions each role grants.",

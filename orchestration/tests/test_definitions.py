@@ -63,3 +63,6 @@ def test_definitions_repository_loads() -> None:
     key_strs = {str(k) for k in asset_keys}
     assert any("reviews" in s for s in key_strs)
     assert any("fct_metric_values" in s or "metric_propel" in s for s in key_strs)
+
+    job_names = {j.name for j in repo.get_all_jobs()}
+    assert "metrics_compile_build" in job_names

@@ -1,12 +1,13 @@
-"""Canonical JSON helpers for CompiledPlan (M4 hashing will reuse)."""
+"""Canonical JSON helpers and content hashing for CompiledPlan."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
 from propel_metrics.expr.parse import BinOp, Name, Number, UnaryOp
-from propel_metrics.ir.types import CompiledPlan
+from propel_metrics.ir.types import CompiledPlan, MappedDim
 
 
 def _expr_to_json(node: Any) -> Any:
@@ -30,6 +31,15 @@ def _expr_to_json(node: Any) -> Any:
     raise TypeError(type(node))
 
 
+def _mapped_dim_to_json(dim: MappedDim) -> dict[str, Any]:
+    return {
+        "default": dim.default,
+        "from_field": dim.from_field,
+        "mapping": [[k, v] for k, v in dim.mapping],
+        "name": dim.name,
+    }
+
+
 def plan_to_canonical_dict(plan: CompiledPlan) -> dict[str, Any]:
     aggs: dict[str, Any] = {}
     for name, ap in sorted(plan.aggregations.items()):
@@ -37,12 +47,15 @@ def plan_to_canonical_dict(plan: CompiledPlan) -> dict[str, Any]:
         aggs[name] = {
             "agg": {"method": ap.agg.method, "percentile": ap.agg.percentile},
             "operand": {
-                "entity": op.entity,
                 "dbt_model": op.dbt_model,
+                "entity": op.entity,
+                "extra_where": list(op.extra_where),
                 "filters": list(op.filters),
+                "mapped_dimensions": [
+                    _mapped_dim_to_json(m) for m in op.mapped_dimensions
+                ],
                 "time_field": op.time_field,
                 "value_sql": op.value_sql,
-                "extra_where": list(op.extra_where),
             },
         }
     return {
@@ -64,3 +77,8 @@ def plan_canonical_json(plan: CompiledPlan) -> str:
     return json.dumps(
         plan_to_canonical_dict(plan), sort_keys=True, separators=(",", ":")
     )
+
+
+def plan_content_hash(plan: CompiledPlan) -> str:
+    """Full sha256 hex of the canonical plan JSON (M4 shared-model / dirty key)."""
+    return hashlib.sha256(plan_canonical_json(plan).encode()).hexdigest()

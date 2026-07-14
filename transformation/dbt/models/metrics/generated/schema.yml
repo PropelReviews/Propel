@@ -3,9 +3,10 @@ version: 2
 models:
   - name: fct_metric_values
     description: >
-      Uniform metric values view generated from declarative Metric YAML.
+      Uniform metric values table generated from declarative Metric YAML.
       Dual-runs alongside legacy fct_*_daily marts until API cutover.
       value may be NULL for ratio/formula divide-by-zero (no data vs 0).
+      Compile job swaps per-metric rows atomically (M4).
     columns:
       - name: tenant_id
         data_tests: [not_null]

@@ -23,6 +23,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends cron procps \
     && rm -rf /var/lib/apt/lists/*
 
+# propel-metrics is a path dep at ../transformation/propel_metrics from /app.
+# Must exist before `uv sync` / orchestration venv install.
+COPY transformation/propel_metrics /transformation/propel_metrics
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
@@ -52,6 +55,7 @@ COPY backend/meltano ./meltano
 COPY orchestration ./orchestration
 
 # dbt project (analytics models), at the same path the dev compose mount uses.
+# Overwrites the earlier propel_metrics-only copy with the full tree.
 # Bake the parsed manifest so dagster-dbt loads the asset definitions at boot
 # without re-parsing (`prepare_if_dev` is a no-op outside `dagster dev`).
 # `dbt parse` never connects to the database, so the profile's env-var defaults

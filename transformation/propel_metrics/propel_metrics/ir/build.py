@@ -9,6 +9,7 @@ from propel_metrics.ir.types import (
     AggregationPlan,
     AggSpec,
     CompiledPlan,
+    MappedDim,
     OperandPlan,
     Window,
 )
@@ -25,6 +26,9 @@ _SIMPLE_TYPES = {
     "percentile",
     "interval",
 }
+
+# Catalog dimensions that codegen emits as native columns (no mapping required).
+_NATIVE_DIMS = frozenset({"repo"})
 
 
 def _dbt_model(entity: str) -> str:
@@ -91,6 +95,7 @@ def _operand_from_spec(
     spec: dict[str, Any],
     *,
     extra_filters: list[dict[str, Any]] | None = None,
+    mapped_dimensions: tuple[MappedDim, ...] = (),
 ) -> OperandPlan:
     entity = spec["entity"]
     measure = spec["measure"]
@@ -106,6 +111,7 @@ def _operand_from_spec(
         time_field=spec["time"]["field"],
         value_sql=_value_sql(measure),
         extra_where=_extra_where(measure),
+        mapped_dimensions=mapped_dimensions,
     )
 
 
@@ -113,9 +119,14 @@ def _aggregation_from_spec(
     spec: dict[str, Any],
     *,
     extra_filters: list[dict[str, Any]] | None = None,
+    mapped_dimensions: tuple[MappedDim, ...] = (),
 ) -> AggregationPlan:
     return AggregationPlan(
-        operand=_operand_from_spec(spec, extra_filters=extra_filters),
+        operand=_operand_from_spec(
+            spec,
+            extra_filters=extra_filters,
+            mapped_dimensions=mapped_dimensions,
+        ),
         agg=_agg_spec(spec["measure"]),
     )
 
@@ -129,34 +140,57 @@ def _grains(spec: dict[str, Any]) -> tuple[str, ...]:
     return tuple((spec.get("time") or {}).get("grains") or [])
 
 
-def _dimensions(spec: dict[str, Any]) -> tuple[str, ...]:
+def _dimensions(
+    spec: dict[str, Any],
+    *,
+    mapped_by_name: dict[str, MappedDim] | None = None,
+) -> tuple[str, ...]:
     dims = tuple(spec.get("dimensions") or [])
+    mapped_by_name = mapped_by_name or {}
     for dim in dims:
-        if dim != "repo":
-            raise ValueError(
-                f"M3 codegen only supports dimensions=['repo'] or []; got {dims}"
-            )
+        if dim in _NATIVE_DIMS or dim in mapped_by_name:
+            continue
+        raise ValueError(
+            f"unsupported dimension {dim!r}; native={sorted(_NATIVE_DIMS)} "
+            f"mapped={sorted(mapped_by_name)}"
+        )
     return dims
+
+
+def _mappings_for_dims(
+    dimensions: tuple[str, ...],
+    mapped_by_name: dict[str, MappedDim],
+) -> tuple[MappedDim, ...]:
+    return tuple(mapped_by_name[d] for d in dimensions if d in mapped_by_name)
 
 
 def build_compiled_plan(
     metric: ResolvedMetric,
     by_id: dict[str, ResolvedMetric],
+    *,
+    mapped_dimensions: dict[str, MappedDim] | None = None,
 ) -> CompiledPlan:
-    """Construct IR; enforces derived-of-simple and dim/entity invariants."""
+    """Construct IR; enforces derived-of-simple and dim/entity invariants.
+
+    ``mapped_dimensions`` maps dimension name → MappedDim for org DimensionMappings.
+    """
     spec = metric.spec
     measure = spec.get("measure") or {}
     mtype = measure.get("type")
-    dimensions = _dimensions(spec)
+    mapped_by_name = mapped_dimensions or {}
+    dimensions = _dimensions(spec, mapped_by_name=mapped_by_name)
     grains = _grains(spec)
     windows = _windows(spec)
+    operand_maps = _mappings_for_dims(dimensions, mapped_by_name)
 
     if mtype in _SIMPLE_TYPES:
         return CompiledPlan(
             metric_id=metric.metric_id,
             definition_version=metric.definition_version,
             kind="simple",
-            aggregations={"value": _aggregation_from_spec(spec)},
+            aggregations={
+                "value": _aggregation_from_spec(spec, mapped_dimensions=operand_maps)
+            },
             expression=None,
             dimensions=dimensions,
             grains=grains,
@@ -181,15 +215,14 @@ def build_compiled_plan(
                 )
             if dimensions:
                 parent_dims = set(parent.spec.get("dimensions") or [])
+                entity_fields = _entity_dim_fields(parent.spec["entity"]) | set(
+                    mapped_by_name
+                )
                 if not set(dimensions).issubset(parent_dims) and not set(
                     dimensions
-                ).issubset(_entity_dim_fields(parent.spec["entity"])):
+                ).issubset(entity_fields):
                     # Allow dims that exist on the entity even if parent declared []
-                    missing = [
-                        d
-                        for d in dimensions
-                        if d not in _entity_dim_fields(parent.spec["entity"])
-                    ]
+                    missing = [d for d in dimensions if d not in entity_fields]
                     if missing:
                         raise ValueError(
                             f"{metric.metric_id}: dimension(s) {missing} not on "
@@ -198,7 +231,11 @@ def build_compiled_plan(
             entities.add(parent.spec["entity"])
             overrides = (op.get("overrides") or {}).get("filters") or []
             aggregations["num" if side == "numerator" else "den"] = (
-                _aggregation_from_spec(parent.spec, extra_filters=list(overrides))
+                _aggregation_from_spec(
+                    parent.spec,
+                    extra_filters=list(overrides),
+                    mapped_dimensions=operand_maps,
+                )
             )
         if dimensions and len(entities) > 1:
             raise ValueError(
@@ -240,11 +277,10 @@ def build_compiled_plan(
                     f"(got {pmeasure!r})"
                 )
             if dimensions:
-                missing = [
-                    d
-                    for d in dimensions
-                    if d not in _entity_dim_fields(parent.spec["entity"])
-                ]
+                entity_fields = _entity_dim_fields(parent.spec["entity"]) | set(
+                    mapped_by_name
+                )
+                missing = [d for d in dimensions if d not in entity_fields]
                 if missing:
                     raise ValueError(
                         f"{metric.metric_id}: dimension(s) {missing} not on "
@@ -253,7 +289,9 @@ def build_compiled_plan(
             entities.add(parent.spec["entity"])
             overrides = (op.get("overrides") or {}).get("filters") or []
             aggregations[name] = _aggregation_from_spec(
-                parent.spec, extra_filters=list(overrides)
+                parent.spec,
+                extra_filters=list(overrides),
+                mapped_dimensions=operand_maps,
             )
         if dimensions and len(entities) > 1:
             raise ValueError(

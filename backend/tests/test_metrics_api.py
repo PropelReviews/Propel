@@ -166,7 +166,7 @@ async def analytics_tables(db_engine):
             "fct_ticket_description_edits_daily",
         ):
             await conn.execute(text(f"DROP TABLE IF EXISTS analytics.{table}"))
-        await conn.execute(text("DROP SCHEMA IF EXISTS analytics"))
+        await conn.execute(text("DROP SCHEMA IF EXISTS analytics CASCADE"))
 
 
 async def _seed_activity(

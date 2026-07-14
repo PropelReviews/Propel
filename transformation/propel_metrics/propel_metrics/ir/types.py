@@ -7,6 +7,9 @@ from typing import Any, Literal
 
 from propel_metrics.expr.parse import ExprAST
 
+# Stable serving columns always present on metric models / fct_metric_values.
+KNOWN_DIM_COLUMNS: tuple[str, ...] = ("repo", "team")
+
 
 @dataclass(frozen=True, slots=True)
 class Window:
@@ -23,6 +26,16 @@ class AggSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class MappedDim:
+    """Org DimensionMapping rewritten onto an operand."""
+
+    name: str
+    from_field: str
+    default: str  # concrete default value, or the sentinel "exclude"
+    mapping: tuple[tuple[str, str], ...]  # (from_value, to_value) pairs
+
+
+@dataclass(frozen=True, slots=True)
 class OperandPlan:
     """One unaggregated row source."""
 
@@ -34,6 +47,7 @@ class OperandPlan:
     value_sql: str  # e.g. "1 as _value" or interval extract
     # Extra WHERE clauses (interval null/negative handling), already SQL
     extra_where: tuple[str, ...] = ()
+    mapped_dimensions: tuple[MappedDim, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,6 +14,7 @@ from app.routers import (
     ingestion,
     invites,
     members,
+    metric_definitions,
     metrics,
     roles,
     tenants,
@@ -62,6 +63,7 @@ app.include_router(roles.router)
 app.include_router(connections.router)
 app.include_router(ingestion.router)
 app.include_router(metrics.router)
+app.include_router(metric_definitions.router)
 app.include_router(waitlist.router)
 
 

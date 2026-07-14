@@ -67,9 +67,9 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ${PROPEL_HOST_DIR:-.}/backend:/app
+      # Path dep for propel-metrics (../transformation/propel_metrics from /app).
+      - ${PROPEL_HOST_DIR:-.}/transformation:/transformation
 
-  # Dagster ingestion scheduler (V2). Same image as `backend`, but runs the
-  # combined `dagster dev` (webserver + daemon) from a dedicated Dagster venv.
   # The daemon owns the hourly schedule that calls `app.ingestion.orchestrator`;
   # the UI is at http://localhost:3001. Trigger a run on demand from the UI
   # Launchpad, or `docker compose exec ingestion python -m app.ingestion.cli run`.
