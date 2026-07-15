@@ -3,35 +3,32 @@ import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { SectionHeading } from "@/components/ui/section-heading";
 
-const blackBox = [
-  "Numbers generated where you can't see",
-  "Scored by logic you can't read",
-  "Handed down to the people they describe",
-  "So people distrust it, dispute it, or game it",
+const mostTools = [
+  "Definitions you didn't choose",
+  "Numbers you can't see into",
+  "Handed down from above",
+  "So people distrust or game them",
 ];
 
 const propel = [
-  "Fully open source and self-hostable",
-  "Every metric is readable SQL",
-  "Trace any number to the raw event",
-  "Disagree? Fix it and open a pull request",
+  "Definitions your team writes",
+  "Every number traceable to SQL",
+  "Open source, self-hostable",
+  "Disagree? Change it.",
 ];
 
 export function WhySection() {
   return (
     <Section id="why">
-      <SectionHeading
-        title="Analytics shouldn't feel like surveillance"
-        description="When the pipeline is hidden, every metric feels like something being done to you. Propel is the opposite, by design."
-      />
+      <SectionHeading title="Nobody wants imposed metrics" />
 
       <div className="mt-16 grid gap-6 lg:grid-cols-2">
         <Card className="gap-4 p-6">
           <div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Most engineering analytics
+            Most tools
           </div>
           <ul className="space-y-3">
-            {blackBox.map((item) => (
+            {mostTools.map((item) => (
               <li key={item} className="text-muted-foreground flex items-start gap-2.5">
                 <X className="mt-0.5 size-4 shrink-0" />
                 <span>{item}</span>
@@ -56,8 +53,7 @@ export function WhySection() {
       </div>
 
       <p className="text-foreground mx-auto mt-10 max-w-2xl text-center text-lg font-medium text-balance">
-        Open measurement isn't a feature. It's the only kind developers will actually
-        trust.
+        The only metrics people trust are the ones they chose.
       </p>
     </Section>
   );

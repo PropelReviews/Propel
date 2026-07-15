@@ -1,40 +1,57 @@
-import { Check } from "lucide-react";
+import { Target, Unplug, ShieldCheck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FeatureIcon } from "@/components/ui/feature-icon";
 import { Section } from "@/components/ui/section";
 import { SectionHeading } from "@/components/ui/section-heading";
 
 const developerBenefits = [
   {
     title: "Fairer reviews",
-    detail: "Walk in with data you can inspect, not a manager's memory.",
+    detail: "Data you can inspect, not a manager's memory.",
   },
   {
     title: "A brag doc that fills itself",
-    detail: "Real commits, reviews, and shipped work, collected as you go.",
+    detail: "Your shipped work, collected as you go.",
   },
   {
     title: "Resume datapoints",
-    detail: "Concrete signal about what you actually shipped.",
+    detail: "Proof of what you actually built.",
   },
   {
     title: "Metrics you can change",
-    detail: "Every number about you is open SQL. Read it, question it, fix it.",
+    detail: "Question any number, rewrite its definition.",
   },
 ];
 
-const leaderBenefits = [
-  "See where teams are stuck and what's slowing delivery",
-  "Unblock people instead of measuring them from a distance",
-  "Trust the rollup, because every number under it is inspectable",
+type LeaderBenefit = {
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+};
+
+const leaderBenefits: LeaderBenefit[] = [
+  {
+    icon: Target,
+    title: "Measure your strategy",
+    detail: "Your goals aren't DORA's. Define metrics that match them.",
+  },
+  {
+    icon: Unplug,
+    title: "Unblock, don't surveil",
+    detail: "See where teams are stuck, then help.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Trust the rollup",
+    detail: "Every aggregate is inspectable underneath.",
+  },
 ];
 
 export function AudiencesSection() {
   return (
     <Section id="for-teams">
-      <SectionHeading
-        title="Built for developers first"
-        description="The work you already do, turned into evidence you own."
-      />
+      <SectionHeading title="Built for developers first" />
 
       <div className="mt-12 grid gap-6 sm:grid-cols-2">
         {developerBenefits.map((benefit) => (
@@ -49,33 +66,34 @@ export function AudiencesSection() {
         ))}
       </div>
 
-      <p className="text-muted-foreground mt-6 text-center text-sm">
-        Your record is yours. You see exactly how every number was made.
+      <p className="text-foreground mx-auto mt-8 max-w-2xl text-center text-base font-medium text-balance">
+        Your record is yours.
       </p>
 
       <div className="mt-24">
-        <SectionHeading
-          title="The same numbers, for leaders"
-          description="Leaders work from the exact metrics developers see, not a separate hidden scorecard."
-        />
+        <SectionHeading title="Same numbers. No hidden scorecard." />
 
-        <div className="mx-auto mt-12 max-w-2xl">
-          <Card className="gap-4 p-6">
-            <ul className="space-y-3">
-              {leaderBenefits.map((item) => (
-                <li key={item} className="flex items-start gap-2.5">
-                  <Check className="text-primary mt-0.5 size-4 shrink-0" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <p className="text-muted-foreground mt-6 text-center text-sm">
-            Defaults to aggregate signal. Drilling into one person is opt-in, never the
-            default.
-          </p>
+        <div className="mt-12 grid gap-6 lg:grid-cols-3">
+          {leaderBenefits.map((benefit) => (
+            <Card key={benefit.title} className="gap-3 p-6">
+              <FeatureIcon icon={benefit.icon} />
+              <CardHeader className="p-0">
+                <CardTitle className="text-lg">{benefit.title}</CardTitle>
+                <CardDescription className="leading-relaxed">
+                  {benefit.detail}
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          ))}
         </div>
+
+        <p className="text-muted-foreground mx-auto mt-8 max-w-2xl text-center text-sm">
+          Aggregate by default. Individual drill-down is opt-in, never automatic.
+        </p>
+
+        <blockquote className="border-primary/40 bg-primary/5 mx-auto mt-10 max-w-3xl rounded-xl border px-6 py-5 text-center text-base font-medium text-balance sm:text-lg">
+          Metrics leaders need. Metrics developers want. Only in the open.
+        </blockquote>
       </div>
     </Section>
   );

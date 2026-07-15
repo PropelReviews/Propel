@@ -1,59 +1,132 @@
-import { Activity, GitPullRequest, Timer, TrendingUp } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AreaChartWidget,
+  BarChartWidget,
+  formatCount,
+  formatDuration,
+  formatPercent,
+  formatWeekLabel,
+  LineChartWidget,
+  MetricCard,
+  MetricFiltersBar,
+  MetricFiltersProvider,
+  useResampledSeries,
+} from "@/components/charts";
 import { Section } from "@/components/ui/section";
 import { SectionHeading } from "@/components/ui/section-heading";
+import {
+  cycleTimeSeries,
+  deploySeries,
+  mockDailyCycleTime,
+  mockDailyDeploys,
+  mockDailyThroughput,
+  mockTeamComparisonData,
+  teamActivitySeries,
+  throughputSeries,
+} from "@/lib/mock-metrics";
 
-type Metric = {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-};
+const headlineMetrics = [
+  {
+    label: "Cycle time",
+    value: formatDuration(18.4),
+    delta: -12.3,
+    higherIsBetter: false,
+  },
+  {
+    label: "Throughput",
+    value: formatCount(72),
+    delta: 8.1,
+    higherIsBetter: true,
+  },
+  {
+    label: "Review latency",
+    value: formatDuration(6.2),
+    delta: -9.4,
+    higherIsBetter: false,
+  },
+  {
+    label: "Rework rate",
+    value: formatPercent(14),
+    delta: -3.1,
+    higherIsBetter: false,
+  },
+] as const;
 
-const metrics: Metric[] = [
-  {
-    icon: Timer,
-    title: "Cycle time",
-    description: "How long work takes from start to finish.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Throughput",
-    description: "How much work your team ships over time.",
-  },
-  {
-    icon: GitPullRequest,
-    title: "Review patterns",
-    description: "How code review actually flows through your process.",
-  },
-  {
-    icon: Activity,
-    title: "Tooling activity",
-    description: "Signal from the tools your team already uses.",
-  },
-];
+function LinkedDemoCharts() {
+  const cycleTime = useResampledSeries(mockDailyCycleTime, {
+    how: "avg",
+    valueKey: "median",
+  });
+  const throughput = useResampledSeries(mockDailyThroughput, { how: "sum" });
+  const deploys = useResampledSeries(mockDailyDeploys, { how: "sum" });
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <LineChartWidget
+        title="Cycle time"
+        description="Median hours to merge"
+        data={cycleTime}
+        series={cycleTimeSeries}
+        xFormatter={formatWeekLabel}
+        valueFormatter={formatDuration}
+      />
+      <LineChartWidget
+        title="Throughput"
+        description="Pull requests merged"
+        data={throughput}
+        series={throughputSeries}
+        xFormatter={formatWeekLabel}
+        valueFormatter={formatCount}
+      />
+      <BarChartWidget
+        title="PR activity by team"
+        description="Opened vs. merged in the current cycle"
+        data={mockTeamComparisonData}
+        series={teamActivitySeries}
+        xKey="category"
+        valueFormatter={formatCount}
+      />
+      <AreaChartWidget
+        title="Deploys"
+        description="Production deploys"
+        data={deploys}
+        series={deploySeries}
+        xFormatter={formatWeekLabel}
+        valueFormatter={formatCount}
+      />
+    </div>
+  );
+}
 
 export function MetricsSection() {
   return (
     <Section id="metrics">
       <SectionHeading
-        title="The data behind the story"
-        description="Propel pulls from your toolchain and surfaces the metrics that matter. The exact set evolves; every number stays inspectable, from dashboard to raw event."
+        title="Defaults, not limits"
+        description="The same chart widgets the product ships. Change the range — every chart updates."
       />
 
-      <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {metrics.map((metric) => (
-          <Card key={metric.title} className="gap-3 p-6">
-            <metric.icon className="text-primary size-5" />
-            <CardHeader className="p-0">
-              <CardTitle>{metric.title}</CardTitle>
-              <CardDescription className="leading-relaxed">
-                {metric.description}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+      <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {headlineMetrics.map((metric) => (
+          <MetricCard
+            key={metric.label}
+            label={metric.label}
+            value={metric.value}
+            delta={metric.delta}
+            higherIsBetter={metric.higherIsBetter}
+          />
         ))}
       </div>
+
+      <MetricFiltersProvider initialRange="quarter">
+        <div className="mt-8 mb-4">
+          <MetricFiltersBar />
+        </div>
+        <LinkedDemoCharts />
+      </MetricFiltersProvider>
+
+      <p className="text-foreground mx-auto mt-10 max-w-2xl text-center text-base font-medium text-balance">
+        Each one editable. None of them the ceiling.
+      </p>
     </Section>
   );
 }

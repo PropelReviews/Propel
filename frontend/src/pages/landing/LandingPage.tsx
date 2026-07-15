@@ -3,11 +3,13 @@ import { usePostHog } from "posthog-js/react";
 import { MarketingLayout } from "@/components/landing/marketing-layout";
 import { HeroSection } from "@/components/landing/hero-section";
 import { WhySection } from "@/components/landing/why-section";
+import { DefineSuccessSection } from "@/components/landing/define-success-section";
 import { AudiencesSection } from "@/components/landing/audiences-section";
 import { DifferentiatorsSection } from "@/components/landing/differentiators-section";
 import { MetricsSection } from "@/components/landing/metrics-section";
 import { HowItWorksSection } from "@/components/landing/how-it-works-section";
 import { DeploymentSection } from "@/components/landing/deployment-section";
+import { ClosingCtaSection } from "@/components/landing/closing-cta-section";
 
 export function LandingPage() {
   const posthog = usePostHog();
@@ -20,11 +22,13 @@ export function LandingPage() {
     <MarketingLayout>
       <HeroSection />
       <WhySection />
+      <DefineSuccessSection />
       <AudiencesSection />
       <DifferentiatorsSection />
       <MetricsSection />
       <HowItWorksSection />
       <DeploymentSection />
+      <ClosingCtaSection />
     </MarketingLayout>
   );
 }
