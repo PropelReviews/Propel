@@ -13,7 +13,7 @@ function FeatureIcon({
     <div
       data-slot="feature-icon"
       className={cn(
-        "bg-muted text-foreground flex size-10 items-center justify-center rounded-lg",
+        "bg-primary/10 text-primary ring-primary/20 flex size-10 items-center justify-center rounded-lg ring-1",
         className,
       )}
       {...props}

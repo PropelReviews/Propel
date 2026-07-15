@@ -21,8 +21,11 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
     <div className="bg-background text-foreground flex min-h-svh flex-col">
       <header className="border-border/60 bg-background/80 sticky top-0 z-50 border-b backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <a href="#top" className="text-lg font-semibold tracking-tight">
-            Propel
+          <a href="#top" className="flex items-center gap-2">
+            <img src="/favicon.svg" alt="" className="size-7" />
+            <span className="text-gradient-brand text-lg font-semibold tracking-tight">
+              Propel
+            </span>
           </a>
 
           <nav className="hidden items-center gap-1 md:flex">
