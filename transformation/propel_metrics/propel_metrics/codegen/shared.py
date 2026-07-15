@@ -53,10 +53,7 @@ def compile_org_results(
         _ = metric_model_filename
         path = output_dir / filename
         orgs = sorted(tenants_by_hash[digest])
-        header_note = (
-            f"-- shared_hash: {digest}\n"
-            f"-- enrolled_orgs: {','.join(orgs)}\n"
-        )
+        header_note = f"-- shared_hash: {digest}\n-- enrolled_orgs: {','.join(orgs)}\n"
         sql = render_plan_sql(
             plan,
             source=f"store:{metric.metric_id}",
