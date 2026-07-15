@@ -41,12 +41,18 @@ YAML/DB ─► validate ─► resolve(org) ─► CompiledPlan (IR) ─► cont
 - File pipeline (CI default): active `propel.*` → committed
   `models/metrics/generated/metric_propel_*.sql`
 - Store pipeline (M4): enrollment by content_hash → shared
-  `metric_<slug>__<hash12>.sql` + `metric_enrollment.sql`
+  `metric_<slug>__<hash12>.sql` + `metric_enrollment.sql` (runtime; gitignored)
 - Serving: `fct_metric_values` **table** with per-metric swap
   (`macros/swap_metric_values.sql`)
 
+**Dimensions.** Catalog entity fields with `role: dimension` (e.g. `repo`,
+`author_id`, `state`) compile as native `dim_*` columns. Virtual dims such as
+`team` still require an org DimensionMapping. Stable serving columns for the
+file-pipeline union remain `dim_repo` / `dim_team`; extra catalog dims are
+appended on plans that select them (preview / org models).
+
 See [definition-store.md](./definition-store.md) for store schema, pins, API,
-and push/pull.
+preview, and push/pull.
 
 ## Dual-run with legacy marts
 

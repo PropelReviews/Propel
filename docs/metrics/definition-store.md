@@ -80,6 +80,8 @@ Permission `metrics:manage` (admin default) for writes; `metrics:read` for reads
 - `PUT .../metric-definitions/draft` — autosave with optimistic
   `expected_version` / `expected_revision` (409 on conflict)
 - `POST .../metric-definitions:classify` — semantic vs revision dry-run
+- `POST .../metric-definitions:preview` — authoring preview (SQL + optional
+  warehouse execution; see [authoring-ui.md](./authoring-ui.md#preview-post-metric-definitionspreview))
 - `POST .../metric-definitions:activate?metric_id=`
 - `POST .../metric-definitions:repin?metric_id=`
 - `POST .../metric-definitions:archive?metric_id=`
@@ -100,6 +102,20 @@ Activation / MetricSet / mapping writes mark `metric_compile_dirty`. The Dagster
 sensor `metrics_compile_dirty_sensor` launches `metrics_compile_build`, which
 claims a single-flight `metric_compile_runs` row and drains the dirty set.
 Hourly schedule runs a full resolve backstop.
+
+### Generated SQL inventory
+
+Two kinds of files land under `transformation/dbt/models/metrics/generated/`:
+
+| Kind | Pattern | Committed? |
+|---|---|---|
+| File-pipeline (CI) | `metric_propel_*.sql`, `fct_metric_values.sql`, `schema.yml` | **Yes** — `propel-metrics compile --check` |
+| Store-pipeline (runtime) | `metric_<slug>__<hash12>.sql`, `metric_enrollment.sql` | **No** — gitignored; drift check ignores them |
+
+A local `db` compile writing into the bind-mounted repo can leave hash-suffixed
+artifacts beside the committed inventory. They are safe to delete; do not commit
+them. `propel-metrics compile --check` / `check_drift` only require the
+unversioned `metric_propel_*.sql` set to match a fresh file compile.
 
 Parity gate before relying on `db` in a new environment:
 

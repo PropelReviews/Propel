@@ -2,3 +2,8 @@
 target/
 dbt_packages/
 logs/
+
+# Runtime shared-compile artifacts (content-hash models + enrollment seed).
+# Committed inventory is unversioned metric_propel_*.sql + fct_metric_values.sql.
+models/metrics/generated/metric_enrollment.sql
+models/metrics/generated/metric_*__*.sql

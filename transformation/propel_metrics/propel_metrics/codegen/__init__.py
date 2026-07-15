@@ -195,6 +195,12 @@ def check_drift(paths: list[Path] | None = None) -> list[str]:
                 messages.append(f"drift in {name}")
 
         for name in sorted(actual_files):
+            # Shared-compile writes hash-suffixed models + enrollment into the
+            # same directory at runtime; ignore those for inventory drift.
+            if name == "metric_enrollment.sql" or re.match(
+                r"metric_.+__[0-9a-f]{12}\.sql$", name
+            ):
+                continue
             if name not in expected_files and re.match(r"metric_.*\.sql", name):
                 messages.append(f"unexpected generated file: {name}")
             if name == "fct_metric_values.sql" and name not in expected_files:
