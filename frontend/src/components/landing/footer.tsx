@@ -25,8 +25,7 @@ export function Footer() {
             Propel
           </div>
           <p className="text-muted-foreground max-w-xs text-sm">
-            Transparent analytics for engineering teams. Fully open source and
-            self-hostable.
+            Metrics your team actually wants. Open source and self-hostable.
           </p>
         </div>
 

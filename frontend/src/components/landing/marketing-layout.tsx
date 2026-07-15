@@ -8,9 +8,9 @@ import { Footer } from "./footer";
 
 const navLinks = [
   { href: "#why", label: "Why Propel" },
+  { href: "#define", label: "Define" },
   { href: "#for-teams", label: "For teams" },
-  { href: "#metrics", label: "Metrics" },
-  { href: "#how-it-works", label: "How it works" },
+  { href: "#transparency", label: "Transparency" },
   { href: "#deploy", label: "Deploy" },
 ];
 
