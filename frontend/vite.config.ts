@@ -77,6 +77,12 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+      // Guarantee a single React instance so recharts' context hooks always
+      // resolve a valid dispatcher (mirrors vite.landing.config.ts).
+      dedupe: ["react", "react-dom"],
+    },
+    optimizeDeps: {
+      include: ["react", "react-dom", "recharts"],
     },
     server: {
       host: "0.0.0.0",
