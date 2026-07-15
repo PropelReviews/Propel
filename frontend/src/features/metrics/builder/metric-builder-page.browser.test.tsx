@@ -99,12 +99,80 @@ describe("MetricBuilderPage golden create flow (mocked)", () => {
     );
 
     await waitFor(() => Boolean(result?.container.textContent?.includes("New metric")));
+    expect(result?.container.textContent).toContain("Choose a core metric");
     expect(result?.container.textContent).toContain("Basics");
-    expect(result?.container.textContent).toContain("Filters");
-    expect(result?.container.textContent).toContain("Display & visibility");
-    expect(result?.container.textContent).toContain("Activate");
+    expect(result?.container.textContent).toContain("Time");
+    expect(result?.container.textContent).toContain("Visibility");
+    expect(result?.container.textContent).toContain("Advanced");
+    expect(result?.container.textContent).not.toContain("Filters");
+    expect(result?.container.textContent).toContain("Save & publish");
     await waitFor(() =>
       Boolean(result?.container.querySelector('[data-testid="preview-panel"]')),
     );
+  });
+
+  it("applies a core metric template on click", async () => {
+    seedAuth();
+    mockApi({
+      tenants: [
+        makeTenant({
+          slug: "acme",
+          permissions: ["metrics:read", "metrics:manage", "tenant:read"],
+        }),
+      ],
+      extraHandlers: [
+        {
+          method: "GET",
+          match: /\/metric-catalog$/,
+          response: CATALOG,
+        },
+        {
+          method: "POST",
+          match: /metric-definitions:validate$/,
+          response: { ok: true, errors: [], warnings: [] },
+        },
+      ],
+    });
+
+    result = renderWithProviders(
+      <Routes>
+        <Route path="/" element={<MetricBuilderPage mode="create" />} />
+      </Routes>,
+    );
+
+    await waitFor(() =>
+      Boolean(result?.container.textContent?.includes("Merged pull requests")),
+    );
+    const card = Array.from(result!.container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Merged pull requests"),
+    );
+    card!.click();
+    await waitFor(() => {
+      const name = result?.container.querySelector<HTMLInputElement>("#metric-name");
+      return name?.value === "Merged pull requests";
+    });
+
+    // Identifier derives from the name and hides the org namespace.
+    const idDisplay = result!.container.querySelector(
+      '[data-testid="metric-id-display"]',
+    );
+    expect(idDisplay?.textContent).toBe("merged_pull_requests");
+    expect(idDisplay?.textContent).not.toContain("acme.");
+
+    // Typing a name keeps the identifier in sync (still namespace-hidden).
+    const nameInput =
+      result!.container.querySelector<HTMLInputElement>("#metric-name")!;
+    const setValue = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setValue.call(nameInput, "My Cool Metric");
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor(() => {
+      const display = result?.container.querySelector(
+        '[data-testid="metric-id-display"]',
+      );
+      return display?.textContent === "my_cool_metric";
+    });
   });
 });

@@ -52,8 +52,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="border-b">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-6">
           <div className="flex items-center gap-6">
-            <Link to="/" className="font-semibold tracking-tight">
-              Propel
+            <Link to="/" className="flex items-center gap-2">
+              <img src="/favicon.svg" alt="" className="size-6" />
+              <span className="text-gradient-brand font-semibold tracking-tight">
+                Propel
+              </span>
             </Link>
             {status === "authenticated" && (
               <nav className="flex items-center gap-4">

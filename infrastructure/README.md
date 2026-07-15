@@ -7,7 +7,7 @@ Docker, environment configuration, and Terraform IaC for Propel.
 ```
 infrastructure/
 ├── docker/
-│   ├── dev.Dockerfile          # Dev container (Python 3.12, Node 20, AWS CLI)
+│   ├── dev.Dockerfile          # Dev container (Python 3.12, Node 22, AWS CLI)
 │   ├── backend.Dockerfile      # Dev FastAPI image (bind-mount, --reload)
 │   ├── backend.prod.Dockerfile # Prod FastAPI image (baked code) -> ECR/ECS
 │   ├── frontend.Dockerfile     # Dev Vite dev-server image
@@ -52,7 +52,7 @@ On open, the host starts:
 
 | Service  | Role                                      |
 |----------|-------------------------------------------|
-| dev      | Your editor environment (Python 3.12, uv, Node 20, AWS CLI) |
+| dev      | Your editor environment (Python 3.12, uv, Node 22, AWS CLI) |
 | postgres | Database                                  |
 | backend  | FastAPI with `uvicorn --reload`           |
 | frontend | Vite dev server with HMR                  |

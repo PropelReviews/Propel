@@ -16,9 +16,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Node 20 (matches frontend.Dockerfile)
+# Node 22 LTS (matches frontend.Dockerfile; nodesource tracks latest 22.x)
 RUN export DEBIAN_FRONTEND=noninteractive \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

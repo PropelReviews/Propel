@@ -47,7 +47,7 @@ transformation/
         ├── canonical/                      # L0 entities (pull_request, release, …)
         ├── metrics/
         │   ├── dim_step_spine.sql          # shared rolling-window spine
-        │   └── generated/                  # propel-metrics compile output (committed)
+        │   └── generated/                  # file-pipeline SQL (committed) + runtime hash models (gitignored)
         └── marts/                          # legacy daily primitives (dual-run with generated)
 ```
 
@@ -60,6 +60,15 @@ uv sync --extra dev
 uv run propel-metrics validate
 uv run propel-metrics compile --check
 ```
+
+Committed inventory is unversioned `metric_propel_*.sql` + `fct_metric_values.sql`.
+Store-backed compiles may also write `metric_*__<hash>.sql` and
+`metric_enrollment.sql` into `generated/` — those are gitignored; delete them if
+`compile --check` complains about unexpected files.
+
+Authoring **preview** executes against L0 canonical relations
+(`analytics.pull_request`, …). Staging-only warehouses dry-run. Build canonical
+models with dbt (below) before expecting preview rows locally.
 
 Models land in the `analytics` Postgres schema (raw landing tables stay in `public`). The `analytics` schema is dbt-owned — like Dagster's `dagster` schema, it is not managed by Alembic.
 

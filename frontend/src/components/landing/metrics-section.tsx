@@ -44,7 +44,7 @@ export function MetricsSection() {
       <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {metrics.map((metric) => (
           <Card key={metric.title} className="gap-3 p-6">
-            <metric.icon className="text-muted-foreground size-5" />
+            <metric.icon className="text-primary size-5" />
             <CardHeader className="p-0">
               <CardTitle>{metric.title}</CardTitle>
               <CardDescription className="leading-relaxed">

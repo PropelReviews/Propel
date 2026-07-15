@@ -49,6 +49,28 @@ def test_golden_window_metric_refs_spine() -> None:
     assert "win_30d_day" in sql
 
 
+def test_catalog_author_id_dimension_compiles() -> None:
+    by_id = {m.metric_id: m for m in resolve_metrics(active_only=True)}
+    metric = by_id["propel.merged_prs"]
+    spec = dict(metric.spec)
+    spec["dimensions"] = ["author_id"]
+    patched = ResolvedMetric(
+        metric_id=metric.metric_id,
+        name=metric.name,
+        status=metric.status,
+        version=metric.version,
+        definition_version=metric.definition_version,
+        spec=spec,
+        source_path=metric.source_path,
+    )
+    plan = build_compiled_plan(patched, by_id)
+    assert plan.dimensions == ("author_id",)
+    sql = render_plan_sql(plan, source="test")
+    assert "base.author_id::text as dim_author_id" in sql
+    assert "dim_repo" in sql
+    assert "dim_team" in sql
+
+
 def test_mapped_team_dimension_emits_case() -> None:
     by_id = {m.metric_id: m for m in resolve_metrics(active_only=True)}
     metric = by_id["propel.merged_prs"]

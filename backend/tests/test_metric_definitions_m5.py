@@ -170,6 +170,21 @@ async def test_m5_preview_executes_against_stub_table(client: AsyncClient, db_en
         assert len(body["rows"]) >= 1
         cte_names = {d.get("cte") for d in body["diagnostics"]}
         assert "m_rows" in cte_names or any(c and "grain" in str(c) for c in cte_names)
+
+        # Catalog person dims (e.g. author_id) must compile — previously this
+        # raised ValueError and BaseHTTPMiddleware returned plain-text 500.
+        with_author = yaml_text.replace("dimensions: []", "dimensions: [author_id]")
+        resp2 = await client.post(
+            f"/api/v1/tenants/{tenant_id}/metric-definitions:preview",
+            headers=headers,
+            json={"yaml": with_author},
+        )
+        assert resp2.headers.get("content-type", "").startswith("application/json")
+        assert resp2.status_code == 200, resp2.text
+        body2 = resp2.json()
+        assert body2["executed"] is True, body2.get("diagnostics")
+        assert "dim_author_id" in body2["sql"]
+        assert len(body2["rows"]) >= 1
     finally:
         # Stub is not an ORM model — remove so schema-parity tests stay green.
         async with db_engine.begin() as conn:

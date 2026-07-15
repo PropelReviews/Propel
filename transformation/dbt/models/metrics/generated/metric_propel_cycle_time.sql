@@ -35,8 +35,8 @@ select
     (date_trunc('day', m_rows.t at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('day', m_rows.t at time zone 'UTC')) + interval '1 day'))::timestamptz as bucket_end,
     ((((date_trunc('day', m_rows.t at time zone 'UTC')) + interval '1 day')) <= current_timestamp) as is_complete,
-    m_rows.dim_repo as dim_repo,
-    m_rows.dim_team as dim_team,
+    ''::text as dim_repo,
+    ''::text as dim_team,
     percentile_cont(0.5) within group (order by _value)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
@@ -54,8 +54,8 @@ select
     (date_trunc('week', m_rows.t at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('week', m_rows.t at time zone 'UTC')) + interval '7 days'))::timestamptz as bucket_end,
     ((((date_trunc('week', m_rows.t at time zone 'UTC')) + interval '7 days')) <= current_timestamp) as is_complete,
-    m_rows.dim_repo as dim_repo,
-    m_rows.dim_team as dim_team,
+    ''::text as dim_repo,
+    ''::text as dim_team,
     percentile_cont(0.5) within group (order by _value)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator
@@ -73,8 +73,8 @@ select
     (date_trunc('month', m_rows.t at time zone 'UTC'))::timestamptz as bucket_start,
     (((date_trunc('month', m_rows.t at time zone 'UTC')) + interval '1 month'))::timestamptz as bucket_end,
     ((((date_trunc('month', m_rows.t at time zone 'UTC')) + interval '1 month')) <= current_timestamp) as is_complete,
-    m_rows.dim_repo as dim_repo,
-    m_rows.dim_team as dim_team,
+    ''::text as dim_repo,
+    ''::text as dim_team,
     percentile_cont(0.5) within group (order by _value)::float8 as "value",
     null::float8 as numerator,
     null::float8 as denominator

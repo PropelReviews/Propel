@@ -21,7 +21,9 @@ export function Footer() {
       <Separator />
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-12 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
-          <div className="text-lg font-semibold tracking-tight">Propel</div>
+          <div className="text-gradient-brand text-lg font-semibold tracking-tight">
+            Propel
+          </div>
           <p className="text-muted-foreground max-w-xs text-sm">
             Transparent analytics for engineering teams. Fully open source and
             self-hostable.

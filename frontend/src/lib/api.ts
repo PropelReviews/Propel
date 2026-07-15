@@ -75,14 +75,23 @@ function extractError(status: number, body: unknown): ApiError {
   let code: string | null = null;
   let reason: string | null = null;
 
+  if (typeof body === "string" && body.trim()) {
+    return new ApiError(body.trim(), status, null);
+  }
+
   if (body && typeof body === "object" && "detail" in body) {
     const detail = (body as { detail: unknown }).detail;
     if (typeof detail === "string") {
       code = detail;
     } else if (detail && typeof detail === "object") {
-      const d = detail as { code?: unknown; reason?: unknown };
+      const d = detail as {
+        code?: unknown;
+        reason?: unknown;
+        message?: unknown;
+      };
       if (typeof d.code === "string") code = d.code;
       if (typeof d.reason === "string") reason = d.reason;
+      if (typeof d.message === "string") reason = reason ?? d.message;
     }
   }
 
@@ -100,7 +109,9 @@ async function parseJson(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    return null;
+    // Non-JSON error bodies (e.g. plain-text 500) — keep the text so
+    // extractError can surface it instead of a silent empty failure.
+    return text;
   }
 }
 

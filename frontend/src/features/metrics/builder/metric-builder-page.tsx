@@ -27,8 +27,13 @@ import {
 } from "@/features/metrics/api/metric-definitions";
 import { MetricYamlEditor } from "@/features/metrics/builder/metric-yaml-editor";
 import { ActivateReviewSheet } from "@/features/metrics/builder/activate-sheet";
-import { FilterBuilder } from "@/features/metrics/builder/filter-builder";
 import { DerivedMeasureEditor } from "@/features/metrics/builder/derived-measure-editor";
+import {
+  COMBINE_TEMPLATE_ID,
+  METRIC_TEMPLATES,
+  matchTemplate,
+  type MetricTemplate,
+} from "@/features/metrics/builder/metric-templates";
 import { AdvancedBanner } from "@/features/metrics/components/metric-badges";
 import { ForkPrompt } from "@/features/metrics/catalog/customize-params-dialog";
 import { isAdvancedDocument } from "@/features/metrics/document/advanced";
@@ -59,6 +64,17 @@ const MEASURE_TYPES = [
 ] as const;
 
 const GRAINS = ["day", "week", "month", "quarter"] as const;
+
+/** Derive the local (org-scoped) identifier part from a display name. */
+function slugifyMetricName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^[_0-9]+/, "")
+    .replace(/_+$/, "")
+    .slice(0, 63);
+  return /^[a-z][a-z0-9_]{1,62}$/.test(slug) ? slug : "new_metric";
+}
 
 export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   const { metricId: rawId } = useParams<{ metricId: string }>();
@@ -205,17 +221,18 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
       .catch(() => setParentVisibility("org"));
   }, [mode, extendsParent, presetId, tenant, token]);
 
-  // Create mode: bind tenant slug into id once
+  // Create mode: bind tenant slug into id once, preserving the local part.
   useEffect(() => {
     if (mode !== "create" || !tenant || extendsParent) return;
     const id = String(meta.id ?? "");
     if (!id.startsWith(`${tenant.slug}.`)) {
+      const local = id.split(".").slice(1).join(".") || "new_metric";
       dispatch({
         type: "patch",
         patch: {
           op: "set",
           path: ["metadata", "id"],
-          value: `${tenant.slug}.new_metric`,
+          value: `${tenant.slug}.${local}`,
         },
       });
     }
@@ -225,6 +242,74 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
     dispatch({ type: "patch", patch: { op: "set", path: ["metadata", key], value } });
   const setSpec = (key: string, value: unknown) =>
     dispatch({ type: "patch", patch: { op: "set", path: ["spec", key], value } });
+
+  // The identifier is always `{org slug}.{local part}`. The namespace is fixed
+  // to the tenant, and the local part is derived from the name until the
+  // first save pins it (draft rows are stored under the id).
+  const idIsDerivable = mode === "create" && storeVersion == null && !extendsParent;
+  // Until the tenant resolves, keep whatever namespace the doc already has;
+  // the bind effect above rewrites it to the tenant slug once known.
+  const idNamespace = tenant?.slug ?? (String(meta.id ?? "").split(".")[0] || "org");
+
+  const onNameChange = (name: string) => {
+    if (!idIsDerivable) {
+      setMeta("name", name);
+      return;
+    }
+    dispatch({
+      type: "patch",
+      patch: {
+        op: "set",
+        path: [],
+        value: {
+          ...doc,
+          metadata: {
+            ...meta,
+            name,
+            id: `${idNamespace}.${slugifyMetricName(name)}`,
+          },
+        },
+      },
+    });
+  };
+
+  /** Apply a core-metric template in a single undo step. */
+  function applyTemplate(template: MetricTemplate) {
+    const currentName = String(meta.name ?? "");
+    const currentDesc = String(meta.description ?? "");
+    const nameIsDefault =
+      currentName === "" ||
+      currentName === "New metric" ||
+      METRIC_TEMPLATES.some((t) => t.defaultName === currentName);
+    const descIsDefault =
+      currentDesc === "" || METRIC_TEMPLATES.some((t) => t.description === currentDesc);
+    const nextName = nameIsDefault ? template.defaultName : currentName;
+    const nextMeta = {
+      ...meta,
+      ...(nameIsDefault ? { name: template.defaultName } : {}),
+      ...(descIsDefault ? { description: template.description } : {}),
+      ...(idIsDerivable ? { id: `${idNamespace}.${slugifyMetricName(nextName)}` } : {}),
+    };
+    dispatch({
+      type: "patch",
+      patch: {
+        op: "set",
+        path: [],
+        value: {
+          ...doc,
+          metadata: nextMeta,
+          spec: {
+            ...spec,
+            entity: template.spec.entity,
+            measure: structuredClone(template.spec.measure),
+            filters: structuredClone(template.spec.filters),
+            time: structuredClone(template.spec.time),
+            display: structuredClone(template.spec.display),
+          },
+        },
+      },
+    });
+  }
 
   const runValidate = useCallback(async () => {
     if (!token || !tenant) return;
@@ -297,7 +382,21 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
         setYamlError("YAML root must be a mapping");
         return;
       }
-      dispatch({ type: "load", doc: parsed as Record<string, unknown> });
+      const parsedDoc = parsed as Record<string, unknown>;
+      const parsedMeta = (parsedDoc.metadata ?? {}) as Record<string, unknown>;
+      // The identifier is immutable: pin it in edit mode and keep the
+      // namespace inside this org in create mode.
+      let nextId = String(parsedMeta.id ?? "");
+      if (mode === "edit" && metricIdParam) {
+        nextId = metricIdParam;
+      } else if (tenant && !nextId.startsWith(`${tenant.slug}.`)) {
+        const local = nextId.split(".").slice(1).join(".") || nextId || "new_metric";
+        nextId = `${tenant.slug}.${local}`;
+      }
+      dispatch({
+        type: "load",
+        doc: { ...parsedDoc, metadata: { ...parsedMeta, id: nextId } },
+      });
       setYamlMode(false);
       setYamlError(null);
     } catch (err) {
@@ -308,6 +407,8 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   const entity = String(spec.entity ?? "pull_request");
   const entities = catalog?.entities ?? [];
   const entityMeta = entities.find((e) => e.name === entity);
+  const activeTemplateId = matchTemplate(spec);
+  const availableEntities = new Set(entities.map((e) => e.name));
   const eventTimeFields = (entityMeta?.fields ?? []).filter(
     (f) => f.role === "event_time",
   );
@@ -316,10 +417,7 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
   );
   const dimFields = (entityMeta?.fields ?? []).filter((f) => f.role === "dimension");
 
-  const grains = useMemo(
-    () => (Array.isArray(time.grains) ? (time.grains as string[]) : []),
-    [time.grains],
-  );
+  const grains = Array.isArray(time.grains) ? (time.grains as string[]) : [];
 
   if (loading) {
     return (
@@ -376,7 +474,10 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                 {mode === "create" ? "New metric" : "Edit metric"}
               </h1>
               <p className="text-muted-foreground mt-1 text-sm">
-                Structured editor over a <code>propel/v1</code> document.
+                Pick a core metric, adjust the basics, then save &amp; publish.
+                {storeVersion != null && (
+                  <span className="text-muted-foreground ml-2">· v{storeVersion}</span>
+                )}
                 {saveState && (
                   <span className="text-muted-foreground ml-2">· {saveState}</span>
                 )}
@@ -404,7 +505,7 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                 analyticsName="metric_activate"
                 onClick={() => void onActivate()}
               >
-                Activate
+                Save &amp; publish
               </Button>
             </div>
           </header>
@@ -462,53 +563,67 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
             </div>
           ) : (
             <>
-              <section className="space-y-3">
-                <h2 className="text-lg font-medium">① What kind of metric?</h2>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <KindCard
-                    title="Measure events"
-                    body="Count, interval, or aggregate over an entity."
-                    active={
-                      !extendsParent &&
-                      measure.type !== "ratio" &&
-                      measure.type !== "formula"
-                    }
-                    onClick={() => setSpec("measure", { type: "count" })}
-                  />
-                  <KindCard
-                    title="Combine metrics"
-                    body="Ratio or formula over referencable metrics."
-                    active={measure.type === "ratio" || measure.type === "formula"}
-                    onClick={() =>
-                      setSpec("measure", {
-                        type: "ratio",
-                        numerator: { ref: "" },
-                        denominator: { ref: "" },
-                        zero_denominator: null,
-                      })
-                    }
-                  />
-                  <KindCard
-                    title="Variant"
-                    body={
-                      extendsParent
-                        ? `Extends ${extendsParent}`
-                        : "Extend an existing metric from the catalog."
-                    }
-                    active={Boolean(extendsParent)}
-                  />
-                </div>
-                {extendsParent && (
+              {!extendsParent && (
+                <section className="space-y-3">
+                  <h2 className="text-lg font-medium">① Choose a core metric</h2>
                   <p className="text-muted-foreground text-sm">
-                    Locked fields (entity, time.field, measure type) inherit from the
-                    parent. Add filters below to narrow — never widen.
+                    Start from a proven metric — everything can be fine-tuned under
+                    Advanced below.
                   </p>
-                )}
-              </section>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {METRIC_TEMPLATES.map((template) => {
+                      const unavailable =
+                        catalog != null && !availableEntities.has(template.spec.entity);
+                      return (
+                        <KindCard
+                          key={template.id}
+                          title={template.title}
+                          body={
+                            unavailable
+                              ? `Needs the ${template.spec.entity} entity, which isn't in your catalog yet.`
+                              : template.description
+                          }
+                          active={activeTemplateId === template.id}
+                          disabled={unavailable}
+                          onClick={
+                            unavailable ? undefined : () => applyTemplate(template)
+                          }
+                        />
+                      );
+                    })}
+                    <KindCard
+                      title="Combine metrics"
+                      body="Ratio or formula over existing metrics."
+                      active={activeTemplateId === COMBINE_TEMPLATE_ID}
+                      onClick={() =>
+                        setSpec("measure", {
+                          type: "ratio",
+                          numerator: { ref: "" },
+                          denominator: { ref: "" },
+                          zero_denominator: null,
+                        })
+                      }
+                    />
+                  </div>
+                  {activeTemplateId === null && (
+                    <p className="text-muted-foreground text-sm">
+                      Custom definition — the details live under Advanced below.
+                    </p>
+                  )}
+                  {activeTemplateId === COMBINE_TEMPLATE_ID && token && tenant && (
+                    <DerivedMeasureEditor
+                      token={token}
+                      tenantId={tenant.id}
+                      measure={measure}
+                      onChange={(next) => setSpec("measure", next)}
+                    />
+                  )}
+                </section>
+              )}
 
               {extendsParent && (
                 <section className="border-border space-y-2 rounded-lg border border-dashed p-4">
-                  <h2 className="text-lg font-medium">Inherited from parent</h2>
+                  <h2 className="text-lg font-medium">Variant of {extendsParent}</h2>
                   <ul className="text-muted-foreground space-y-1 text-sm">
                     <li>
                       🔒 Entity / measure type / time.field — locked (not overridable)
@@ -516,9 +631,6 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                     <li>
                       ⤴ Grains, dimensions, display, visibility — inherited; override
                       below
-                    </li>
-                    <li>
-                      ➕ Filters — parent filters stay; your additions only narrow
                     </li>
                   </ul>
                 </section>
@@ -532,18 +644,25 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                     <Input
                       id="metric-name"
                       value={String(meta.name ?? "")}
-                      onChange={(e) => setMeta("name", e.target.value)}
+                      onChange={(e) => onNameChange(e.target.value)}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="metric-id">Id</Label>
-                    <Input
-                      id="metric-id"
-                      className="font-mono"
-                      value={String(meta.id ?? "")}
-                      disabled={mode === "edit"}
-                      onChange={(e) => setMeta("id", e.target.value)}
-                    />
+                    <Label>Identifier</Label>
+                    <p
+                      className="text-muted-foreground mt-2.5 font-mono text-sm"
+                      data-testid="metric-id-display"
+                    >
+                      {String(meta.id ?? "")
+                        .split(".")
+                        .slice(1)
+                        .join(".") || String(meta.id ?? "")}
+                    </p>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {idIsDerivable
+                        ? "Set automatically from the name."
+                        : "Identifiers can't be changed."}
+                    </p>
                   </div>
                 </div>
                 <div>
@@ -557,163 +676,20 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                 </div>
               </section>
 
-              <section className="space-y-3">
-                <h2 className="text-lg font-medium">③ Data</h2>
-                {!extendsParent && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {entities.map((ent) => (
-                      <button
-                        key={ent.name}
-                        type="button"
-                        className={
-                          entity === ent.name
-                            ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
-                            : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
-                        }
-                        onClick={() => setSpec("entity", ent.name)}
-                      >
-                        <div className="font-medium">{ent.name}</div>
-                        <div className="text-muted-foreground text-xs">{ent.grain}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {extendsParent ? (
-                  <p className="text-muted-foreground text-sm">
-                    Entity and measure type are locked from the parent.
+              <section className="space-y-4">
+                <h2 className="text-lg font-medium">③ Time</h2>
+                <div className="space-y-1">
+                  <Label>Date used on the chart</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Each {entity.replace(/_/g, " ")} lands in a time bucket based on
+                    this date.
                   </p>
-                ) : (
-                  <>
-                    <div>
-                      <Label>Measure type</Label>
-                      <Select
-                        value={String(measure.type ?? "count")}
-                        onValueChange={(type) => setSpec("measure", { type })}
-                      >
-                        <SelectTrigger className="mt-1 w-56">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MEASURE_TYPES.map((t) => (
-                            <SelectItem key={t} value={t}>
-                              {t}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {(measure.type === "ratio" || measure.type === "formula") &&
-                      token &&
-                      tenant && (
-                        <DerivedMeasureEditor
-                          token={token}
-                          tenantId={tenant.id}
-                          measure={measure}
-                          onChange={(next) => setSpec("measure", next)}
-                        />
-                      )}
-                    {(measure.type === "sum" ||
-                      measure.type === "avg" ||
-                      measure.type === "min" ||
-                      measure.type === "max" ||
-                      measure.type === "percentile" ||
-                      measure.type === "count_distinct") && (
-                      <div>
-                        <Label>Field</Label>
-                        <Select
-                          value={String(measure.field ?? "")}
-                          onValueChange={(field) =>
-                            setSpec("measure", { ...measure, field })
-                          }
-                        >
-                          <SelectTrigger className="mt-1 w-56">
-                            <SelectValue placeholder="Pick field" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {measureFields.map((f) => (
-                              <SelectItem key={f.name} value={f.name}>
-                                {f.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    {measure.type === "interval" && (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <Label>From</Label>
-                          <Select
-                            value={String(measure.from ?? "")}
-                            onValueChange={(from) =>
-                              setSpec("measure", { ...measure, type: "interval", from })
-                            }
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="from" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {eventTimeFields.map((f) => (
-                                <SelectItem key={f.name} value={f.name}>
-                                  {f.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>To</Label>
-                          <Select
-                            value={String(measure.to ?? "")}
-                            onValueChange={(to) =>
-                              setSpec("measure", {
-                                ...measure,
-                                type: "interval",
-                                to,
-                                agg: measure.agg ?? "median",
-                              })
-                            }
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="to" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {eventTimeFields.map((f) => (
-                                <SelectItem key={f.name} value={f.name}>
-                                  {f.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </section>
-
-              <section className="space-y-3">
-                <h2 className="text-lg font-medium">④ Filters</h2>
-                <FilterBuilder
-                  entity={entity}
-                  catalogEntities={entities}
-                  filters={
-                    Array.isArray(spec.filters) ? (spec.filters as unknown[]) : []
-                  }
-                  onChange={(filters) => setSpec("filters", filters)}
-                />
-              </section>
-
-              <section className="space-y-3">
-                <h2 className="text-lg font-medium">⑤ Time</h2>
-                <div>
-                  <Label>Event time field</Label>
                   <Select
                     value={String(time.field ?? "")}
                     onValueChange={(field) => setSpec("time", { ...time, field })}
                   >
                     <SelectTrigger className="mt-1 w-56">
-                      <SelectValue placeholder="field" />
+                      <SelectValue placeholder="Pick a date field" />
                     </SelectTrigger>
                     <SelectContent>
                       {eventTimeFields.map((f) => (
@@ -724,226 +700,41 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-wrap gap-3">
-                  {GRAINS.map((g) => {
-                    const checked = grains.includes(g);
-                    return (
-                      <label key={g} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
+                <div className="space-y-1">
+                  <Label>Chart by</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Choose which time buckets this metric can be viewed at.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {GRAINS.map((g) => {
+                      const checked = grains.includes(g);
+                      return (
+                        <button
+                          key={g}
+                          type="button"
+                          aria-pressed={checked}
+                          className={
+                            checked
+                              ? "border-primary bg-primary/5 text-foreground rounded-full border px-3 py-1 text-sm"
+                              : "border-border text-muted-foreground hover:bg-muted/40 rounded-full border px-3 py-1 text-sm"
+                          }
+                          onClick={() => {
                             const next = checked
                               ? grains.filter((x) => x !== g)
                               : [...grains, g];
                             setSpec("time", { ...time, grains: next });
                           }}
-                        />
-                        {g}
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Rolling windows</Label>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      type="button"
-                      onClick={() => {
-                        const windows = Array.isArray(time.windows)
-                          ? [...(time.windows as object[])]
-                          : [];
-                        windows.push({ days: 30, step: "day" });
-                        setSpec("time", { ...time, windows });
-                      }}
-                    >
-                      + Add rolling window
-                    </Button>
+                        >
+                          {g.charAt(0).toUpperCase() + g.slice(1)}
+                        </button>
+                      );
+                    })}
                   </div>
-                  {(Array.isArray(time.windows)
-                    ? (time.windows as Array<{ days?: number; step?: string }>)
-                    : []
-                  ).map((w, i) => (
-                    <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
-                      <span>Trailing</span>
-                      <Input
-                        type="number"
-                        className="w-20"
-                        value={w.days ?? 30}
-                        onChange={(e) => {
-                          const windows = [
-                            ...(time.windows as Array<{
-                              days?: number;
-                              step?: string;
-                            }>),
-                          ];
-                          windows[i] = {
-                            ...windows[i],
-                            days: Number(e.target.value),
-                          };
-                          setSpec("time", { ...time, windows });
-                        }}
-                      />
-                      <span>days, computed</span>
-                      <Select
-                        value={w.step ?? "day"}
-                        onValueChange={(step) => {
-                          const windows = [
-                            ...(time.windows as Array<{
-                              days?: number;
-                              step?: string;
-                            }>),
-                          ];
-                          windows[i] = { ...windows[i], step };
-                          setSpec("time", { ...time, windows });
-                        }}
-                      >
-                        <SelectTrigger className="w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="day">daily</SelectItem>
-                          <SelectItem value="week">weekly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          const windows = (time.windows as object[]).filter(
-                            (_, j) => j !== i,
-                          );
-                          setSpec("time", { ...time, windows });
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
-                  {Array.isArray(time.windows) &&
-                    (time.windows as unknown[]).length > 0 &&
-                    Array.isArray(spec.dimensions) &&
-                    (spec.dimensions as string[]).length > 2 && (
-                      <p className="text-xs text-amber-200">
-                        Cost hint: many windows × dimensions can be expensive to
-                        compile.
-                      </p>
-                    )}
                 </div>
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-lg font-medium">⑥ Dimensions</h2>
-                <div className="flex flex-wrap gap-3">
-                  {dimFields.map((f) => {
-                    const dims = Array.isArray(spec.dimensions)
-                      ? (spec.dimensions as string[])
-                      : [];
-                    const checked = dims.includes(f.name);
-                    return (
-                      <label key={f.name} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            const next = checked
-                              ? dims.filter((x) => x !== f.name)
-                              : [...dims, f.name];
-                            setSpec("dimensions", next);
-                          }}
-                        />
-                        {f.name}
-                        {f.person ? " (person)" : ""}
-                        {f.cardinality_estimate != null
-                          ? ` · ~${f.cardinality_estimate}`
-                          : ""}
-                      </label>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <h2 className="text-lg font-medium">⑦ Display & visibility</h2>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <Label>Unit</Label>
-                    <Input
-                      className="mt-1"
-                      value={String(
-                        ((spec.display as Record<string, unknown>) ?? {}).unit ?? "",
-                      )}
-                      onChange={(e) =>
-                        setSpec("display", {
-                          ...((spec.display as object) ?? {}),
-                          unit: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label>Format</Label>
-                    <Select
-                      value={String(
-                        ((spec.display as Record<string, unknown>) ?? {}).format ??
-                          "integer",
-                      )}
-                      onValueChange={(format) =>
-                        setSpec("display", {
-                          ...((spec.display as object) ?? {}),
-                          format,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(
-                          [
-                            "integer",
-                            "decimal_1dp",
-                            "decimal_2dp",
-                            "percent_1dp",
-                            "humanize_duration",
-                          ] as const
-                        ).map((f) => (
-                          <SelectItem key={f} value={f}>
-                            {f}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Direction</Label>
-                    <Select
-                      value={String(
-                        ((spec.display as Record<string, unknown>) ?? {}).direction ??
-                          "neutral",
-                      )}
-                      onValueChange={(direction) =>
-                        setSpec("display", {
-                          ...((spec.display as object) ?? {}),
-                          direction,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="higher_is_better">
-                          higher is better
-                        </SelectItem>
-                        <SelectItem value="lower_is_better">lower is better</SelectItem>
-                        <SelectItem value="neutral">neutral</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                <h2 className="text-lg font-medium">④ Visibility</h2>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {(
                     [
@@ -1004,6 +795,354 @@ export function MetricBuilderPage({ mode }: { mode: "create" | "edit" }) {
                     </p>
                   )}
               </section>
+
+              <details className="border-border rounded-lg border">
+                <summary className="hover:bg-muted/40 cursor-pointer rounded-lg px-4 py-3 font-medium">
+                  Advanced — measure, dimensions, display
+                </summary>
+                <div className="space-y-8 px-4 pt-2 pb-4">
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium">Data</h3>
+                    {!extendsParent && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {entities.map((ent) => (
+                          <button
+                            key={ent.name}
+                            type="button"
+                            className={
+                              entity === ent.name
+                                ? "border-primary bg-primary/5 rounded-lg border p-3 text-left"
+                                : "border-border hover:bg-muted/40 rounded-lg border p-3 text-left"
+                            }
+                            onClick={() => setSpec("entity", ent.name)}
+                          >
+                            <div className="font-medium">{ent.name}</div>
+                            <div className="text-muted-foreground text-xs">
+                              {ent.grain}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {extendsParent ? (
+                      <p className="text-muted-foreground text-sm">
+                        Entity and measure type are locked from the parent.
+                      </p>
+                    ) : (
+                      <>
+                        <div>
+                          <Label>Measure type</Label>
+                          <Select
+                            value={String(measure.type ?? "count")}
+                            onValueChange={(type) => setSpec("measure", { type })}
+                          >
+                            <SelectTrigger className="mt-1 w-56">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {MEASURE_TYPES.map((t) => (
+                                <SelectItem key={t} value={t}>
+                                  {t}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {(measure.type === "sum" ||
+                          measure.type === "avg" ||
+                          measure.type === "min" ||
+                          measure.type === "max" ||
+                          measure.type === "percentile" ||
+                          measure.type === "count_distinct") && (
+                          <div>
+                            <Label>Field</Label>
+                            <Select
+                              value={String(measure.field ?? "")}
+                              onValueChange={(field) =>
+                                setSpec("measure", { ...measure, field })
+                              }
+                            >
+                              <SelectTrigger className="mt-1 w-56">
+                                <SelectValue placeholder="Pick field" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {measureFields.map((f) => (
+                                  <SelectItem key={f.name} value={f.name}>
+                                    {f.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        {measure.type === "interval" && (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <Label>From</Label>
+                              <Select
+                                value={String(measure.from ?? "")}
+                                onValueChange={(from) =>
+                                  setSpec("measure", {
+                                    ...measure,
+                                    type: "interval",
+                                    from,
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="mt-1">
+                                  <SelectValue placeholder="from" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {eventTimeFields.map((f) => (
+                                    <SelectItem key={f.name} value={f.name}>
+                                      {f.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>To</Label>
+                              <Select
+                                value={String(measure.to ?? "")}
+                                onValueChange={(to) =>
+                                  setSpec("measure", {
+                                    ...measure,
+                                    type: "interval",
+                                    to,
+                                    agg: measure.agg ?? "median",
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="mt-1">
+                                  <SelectValue placeholder="to" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {eventTimeFields.map((f) => (
+                                    <SelectItem key={f.name} value={f.name}>
+                                      {f.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Rolling windows</Label>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        onClick={() => {
+                          const windows = Array.isArray(time.windows)
+                            ? [...(time.windows as object[])]
+                            : [];
+                          windows.push({ days: 30, step: "day" });
+                          setSpec("time", { ...time, windows });
+                        }}
+                      >
+                        + Add rolling window
+                      </Button>
+                    </div>
+                    {(Array.isArray(time.windows)
+                      ? (time.windows as Array<{ days?: number; step?: string }>)
+                      : []
+                    ).map((w, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-wrap items-center gap-2 text-sm"
+                      >
+                        <span>Trailing</span>
+                        <Input
+                          type="number"
+                          className="w-20"
+                          value={w.days ?? 30}
+                          onChange={(e) => {
+                            const windows = [
+                              ...(time.windows as Array<{
+                                days?: number;
+                                step?: string;
+                              }>),
+                            ];
+                            windows[i] = {
+                              ...windows[i],
+                              days: Number(e.target.value),
+                            };
+                            setSpec("time", { ...time, windows });
+                          }}
+                        />
+                        <span>days, computed</span>
+                        <Select
+                          value={w.step ?? "day"}
+                          onValueChange={(step) => {
+                            const windows = [
+                              ...(time.windows as Array<{
+                                days?: number;
+                                step?: string;
+                              }>),
+                            ];
+                            windows[i] = { ...windows[i], step };
+                            setSpec("time", { ...time, windows });
+                          }}
+                        >
+                          <SelectTrigger className="w-28">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="day">daily</SelectItem>
+                            <SelectItem value="week">weekly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const windows = (time.windows as object[]).filter(
+                              (_, j) => j !== i,
+                            );
+                            setSpec("time", { ...time, windows });
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                    {Array.isArray(time.windows) &&
+                      (time.windows as unknown[]).length > 0 &&
+                      Array.isArray(spec.dimensions) &&
+                      (spec.dimensions as string[]).length > 2 && (
+                        <p className="text-xs text-amber-200">
+                          Cost hint: many windows × dimensions can be expensive to
+                          compile.
+                        </p>
+                      )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium">Dimensions</h3>
+                    <div className="flex flex-wrap gap-3">
+                      {dimFields.map((f) => {
+                        const dims = Array.isArray(spec.dimensions)
+                          ? (spec.dimensions as string[])
+                          : [];
+                        const checked = dims.includes(f.name);
+                        return (
+                          <label
+                            key={f.name}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                const next = checked
+                                  ? dims.filter((x) => x !== f.name)
+                                  : [...dims, f.name];
+                                setSpec("dimensions", next);
+                              }}
+                            />
+                            {f.name}
+                            {f.person ? " (person)" : ""}
+                            {f.cardinality_estimate != null
+                              ? ` · ~${f.cardinality_estimate}`
+                              : ""}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium">Display</h3>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <Label>Unit</Label>
+                        <Input
+                          className="mt-1"
+                          value={String(
+                            ((spec.display as Record<string, unknown>) ?? {}).unit ??
+                              "",
+                          )}
+                          onChange={(e) =>
+                            setSpec("display", {
+                              ...((spec.display as object) ?? {}),
+                              unit: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label>Format</Label>
+                        <Select
+                          value={String(
+                            ((spec.display as Record<string, unknown>) ?? {}).format ??
+                              "integer",
+                          )}
+                          onValueChange={(format) =>
+                            setSpec("display", {
+                              ...((spec.display as object) ?? {}),
+                              format,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(
+                              [
+                                "integer",
+                                "decimal_1dp",
+                                "decimal_2dp",
+                                "percent_1dp",
+                                "humanize_duration",
+                              ] as const
+                            ).map((f) => (
+                              <SelectItem key={f} value={f}>
+                                {f}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Direction</Label>
+                        <Select
+                          value={String(
+                            ((spec.display as Record<string, unknown>) ?? {})
+                              .direction ?? "neutral",
+                          )}
+                          onValueChange={(direction) =>
+                            setSpec("display", {
+                              ...((spec.display as object) ?? {}),
+                              direction,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="higher_is_better">
+                              higher is better
+                            </SelectItem>
+                            <SelectItem value="lower_is_better">
+                              lower is better
+                            </SelectItem>
+                            <SelectItem value="neutral">neutral</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </>
           )}
         </div>

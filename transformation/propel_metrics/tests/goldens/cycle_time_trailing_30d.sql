@@ -35,8 +35,8 @@ win_30d_day as (
  (((s.step_date + interval '1 day') - interval '30 days')::timestamptz) as bucket_start,
  ((s.step_date + interval '1 day')::timestamptz) as bucket_end,
  (((s.step_date + interval '1 day')::timestamptz) <= current_timestamp) as is_complete,
- r.dim_repo as dim_repo,
- r.dim_team as dim_team,
+ ''::text as dim_repo,
+ ''::text as dim_team,
  percentile_cont(0.5) within group (order by _value)::float8 as "value",
  null::float8 as numerator,
  null::float8 as denominator

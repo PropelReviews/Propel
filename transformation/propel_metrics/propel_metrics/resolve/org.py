@@ -97,7 +97,7 @@ def _mapping_to_mapped_dim(doc: dict[str, Any]) -> MappedDim:
     )
 
 
-def _load_org_mappings(store: DefinitionStore, org_id: str) -> dict[str, MappedDim]:
+def load_org_mappings(store: DefinitionStore, org_id: str) -> dict[str, MappedDim]:
     """Index active DimensionMappings by to_dimension name and by mapping id."""
     out: dict[str, MappedDim] = {}
     for row in store.list_definitions(org_id, kind="DimensionMapping", status="active"):
@@ -105,6 +105,10 @@ def _load_org_mappings(store: DefinitionStore, org_id: str) -> dict[str, MappedD
         out[mapped.name] = mapped
         out[row.metric_id] = mapped
     return out
+
+
+# Back-compat alias for internal call sites.
+_load_org_mappings = load_org_mappings
 
 
 def _namespace(metric_id: str) -> str:

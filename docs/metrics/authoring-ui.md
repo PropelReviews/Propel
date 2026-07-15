@@ -41,3 +41,36 @@ UI-only semantic state.
 TypeScript port of `propel_metrics.expr.parse` with a shared corpus at
 `transformation/propel_metrics/tests/fixtures/formula_corpus.json`.
 
+## Preview (`POST …/metric-definitions:preview`)
+
+The builder’s **Run preview** posts the current document YAML. The API:
+
+1. Validates YAML
+2. Builds a `CompiledPlan` (including catalog entity dimensions such as
+   `author_id`, and org DimensionMappings for virtual dims like `team`)
+3. Rewrites dbt Jinja → executable SQL (coarsest grain, 90d window, row limit)
+4. Executes against the warehouse when L0 relations exist; otherwise returns
+   **dry-run SQL** with a diagnostic
+
+| Warehouse state | Response |
+|---|---|
+| `analytics.pull_request` (or `public.…`) present | `executed: true` + sample rows |
+| L0 entity tables missing | `executed: false`, diagnostic about dry-run; SQL still returned |
+| Compile / dimension errors | JSON `400` with `code: PREVIEW_COMPILE_FAILED` (never plain-text 500) |
+
+Preview needs the **canonical** L0 models (`pull_request`, `release`, …), not
+only staging views like `stg_github_pull_requests`. Build them via dbt (see
+[transformation/README.md](../../transformation/README.md)):
+
+```bash
+docker compose exec ingestion dbt build --select pull_request \
+  --project-dir /transformation/dbt --profiles-dir /transformation/dbt
+```
+
+IC-visibility metrics filter person-dimension rows to the caller’s linked
+GitHub identity when execution succeeds.
+
+Frontend dependency: the SPA parses YAML with the `yaml` npm package
+(`frontend/package.json`). After pulling M5 changes, run `npm install` in
+`frontend/` if Vite reports `Failed to resolve import "yaml"`.
+
