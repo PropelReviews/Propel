@@ -43,3 +43,42 @@ def test_shared_compile_dedupes_identical_hashes(tmp_path) -> None:
     digest = next(iter(hashes))
     assert shared_model_filename(digest, "propel.merged_prs") in names
     assert "metric_enrollment.sql" in names
+
+
+def test_shared_model_header_lines_are_sql_comments(tmp_path) -> None:
+    """Every header line before the config block must be a `--` comment.
+
+    Regression: the enrolled_orgs header line was emitted without a comment
+    prefix, producing invalid SQL in every shared-hash model.
+    """
+    store = MemoryDefinitionStore()
+    import_system_metrics(store)
+    for org in ("acme", "beta"):
+        store.put_metric_doc(
+            org,
+            {
+                "apiVersion": "propel/v1",
+                "kind": "MetricSet",
+                "metadata": {"org": org},
+                "spec": {
+                    "standard": {
+                        "mode": "explicit",
+                        "enabled": ["propel.merged_prs"],
+                    }
+                },
+            },
+            status="active",
+        )
+        store.set_status(org, METRIC_SET_ID, 1, "active")
+
+    results = [resolve_org(store, "acme"), resolve_org(store, "beta")]
+    written = compile_org_results(results, output_dir=tmp_path)
+    shared = [p for p in written if "__" in p.name]
+    assert shared, "expected at least one shared-hash model"
+    for path in shared:
+        text = path.read_text(encoding="utf-8")
+        assert "-- enrolled_orgs:" in text
+        header = text.split("{{ config", 1)[0]
+        for line in header.splitlines():
+            if line.strip():
+                assert line.startswith("--"), f"uncommented header line: {line!r}"
