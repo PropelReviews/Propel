@@ -72,6 +72,17 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+      // Force a single React instance. Because this config uses a separate
+      // cacheDir (.vite-landing below), a second, mismatched React copy can get
+      // pre-bundled into a dependency chunk — recharts in particular — which
+      // makes React.useContext read a null dispatcher and crash the dev server
+      // with "Cannot read properties of null (reading 'useContext')".
+      dedupe: ["react", "react-dom"],
+    },
+    // Pre-bundle React and recharts together against that single React instance
+    // so recharts' context hooks resolve the same dispatcher.
+    optimizeDeps: {
+      include: ["react", "react-dom", "recharts"],
     },
     // Separate dependency cache so running the landing dev server alongside the
     // app dev server (default node_modules/.vite) doesn't clash.
