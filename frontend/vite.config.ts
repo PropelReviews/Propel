@@ -90,9 +90,14 @@ export default defineConfig(({ mode }) => {
       // Compose service name + localhost (Vite 6 host guard); devcontainer must
       // not forward :5173 — docker-compose publishes this container directly.
       allowedHosts: ["frontend", "localhost", "127.0.0.1"],
-      // Browser hits localhost:5173 on the Docker host; point HMR websocket there too.
+      // Let the HMR client derive its WebSocket host from the page the browser
+      // loaded (window.location), instead of hard-pinning it to localhost.
+      // Pinning to localhost broke HMR whenever the dev server was reached over
+      // any other host (the Compose service name `frontend`, another machine, a
+      // tunnel): the socket never opened and Vite's /@vite/client threw
+      // "WebSocket closed without opened." The port still matches the published
+      // container port, so the common localhost:5173 case is unchanged.
       hmr: {
-        host: "localhost",
         port: 5173,
         clientPort: 5173,
       },
