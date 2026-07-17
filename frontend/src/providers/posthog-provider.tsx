@@ -38,10 +38,11 @@ if (isPostHogEnabled && !posthog.__loaded) {
       // exception capture is somehow enabled in a dev-like build.
       if (event?.event === "$exception") {
         const frames = event.properties?.$exception_list ?? [];
-        const isViteClient = frames.some((entry: { stacktrace?: { frames?: { filename?: string }[] } }) =>
-          entry?.stacktrace?.frames?.some((frame) =>
-            frame?.filename?.includes("/@vite/client"),
-          ),
+        const isViteClient = frames.some(
+          (entry: { stacktrace?: { frames?: { filename?: string }[] } }) =>
+            entry?.stacktrace?.frames?.some((frame) =>
+              frame?.filename?.includes("/@vite/client"),
+            ),
         );
         if (isViteClient) {
           return null;
