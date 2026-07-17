@@ -26,7 +26,30 @@ if (isPostHogEnabled && !posthog.__loaded) {
     autocapture: true, // intentional: capture all element clicks
     capture_pageview: "history_change",
     capture_pageleave: true,
-    capture_exceptions: true,
+    // Only capture exceptions in real (built) environments. In `vite dev`,
+    // exceptions are dominated by dev-only tooling noise — most notably Vite's
+    // own HMR client (`/@vite/client`), which throws "WebSocket closed without
+    // opened." whenever the dev server is reached over a non-localhost host.
+    // Shipping those to error tracking creates false issues for the team.
+    capture_exceptions: !import.meta.env.DEV,
+    before_send: (event) => {
+      // Belt-and-suspenders: drop any exception originating from Vite's HMR
+      // client so dev tooling noise never reaches error tracking, even if
+      // exception capture is somehow enabled in a dev-like build.
+      if (event?.event === "$exception") {
+        const frames = event.properties?.$exception_list ?? [];
+        const isViteClient = frames.some(
+          (entry: { stacktrace?: { frames?: { filename?: string }[] } }) =>
+            entry?.stacktrace?.frames?.some((frame) =>
+              frame?.filename?.includes("/@vite/client"),
+            ),
+        );
+        if (isViteClient) {
+          return null;
+        }
+      }
+      return event;
+    },
     session_recording: {
       maskAllInputs: true,
     },
