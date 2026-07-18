@@ -62,7 +62,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_dashboard_preferences_user_id", table_name="dashboard_preferences")
+    op.drop_index(
+        "ix_dashboard_preferences_user_id", table_name="dashboard_preferences"
+    )
     op.drop_index(
         "ix_dashboard_preferences_tenant_id", table_name="dashboard_preferences"
     )

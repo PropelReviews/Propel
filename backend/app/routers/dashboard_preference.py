@@ -27,9 +27,7 @@ async def get_dashboard_preference(
     session: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
-    row = await svc.get_preference(
-        session, tenant_id=ctx.tenant.id, user_id=user.id
-    )
+    row = await svc.get_preference(session, tenant_id=ctx.tenant.id, user_id=user.id)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
