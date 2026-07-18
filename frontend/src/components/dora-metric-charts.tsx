@@ -18,8 +18,11 @@ import {
   getCycleTime,
   getDeploymentFrequency,
   getReviewLatency,
+  type MetricScope,
 } from "@/lib/metrics";
 import { useAuth } from "@/providers/auth-provider";
+
+type ScopedChartProps = { tenantId: string; scope?: MetricScope };
 
 type FetchState =
   | { status: "loading" }
@@ -126,18 +129,24 @@ function DeploymentFrequencyChartInner({ tenantId }: { tenantId: string }) {
  * DORA lead-time proxy: median / p90 hours from PR open to merge
  * (`analytics.fct_pr_cycle_time_daily`).
  */
-export function CycleTimeChart({ tenantId }: { tenantId: string }) {
+export function CycleTimeChart({ tenantId, scope = "org" }: ScopedChartProps) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <CycleTimeChartInner tenantId={tenantId} />
+      <CycleTimeChartInner tenantId={tenantId} scope={scope} />
     </MetricFiltersProvider>
   );
 }
 
-function CycleTimeChartInner({ tenantId }: { tenantId: string }) {
+function CycleTimeChartInner({
+  tenantId,
+  scope,
+}: {
+  tenantId: string;
+  scope: MetricScope;
+}) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -157,6 +166,7 @@ function CycleTimeChartInner({ tenantId }: { tenantId: string }) {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
+          scope,
         });
         if (cancelled) return;
         setState({
@@ -178,7 +188,7 @@ function CycleTimeChartInner({ tenantId }: { tenantId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId, granularity, startMs, endMs]);
+  }, [token, tenantId, granularity, startMs, endMs, scope]);
 
   return (
     <LineChartWidget
@@ -201,18 +211,24 @@ function CycleTimeChartInner({ tenantId }: { tenantId: string }) {
 /**
  * Time to first non-author review (`analytics.fct_review_latency_daily`).
  */
-export function ReviewLatencyChart({ tenantId }: { tenantId: string }) {
+export function ReviewLatencyChart({ tenantId, scope = "org" }: ScopedChartProps) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <ReviewLatencyChartInner tenantId={tenantId} />
+      <ReviewLatencyChartInner tenantId={tenantId} scope={scope} />
     </MetricFiltersProvider>
   );
 }
 
-function ReviewLatencyChartInner({ tenantId }: { tenantId: string }) {
+function ReviewLatencyChartInner({
+  tenantId,
+  scope,
+}: {
+  tenantId: string;
+  scope: MetricScope;
+}) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -232,6 +248,7 @@ function ReviewLatencyChartInner({ tenantId }: { tenantId: string }) {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
+          scope,
         });
         if (cancelled) return;
         setState({
@@ -258,7 +275,7 @@ function ReviewLatencyChartInner({ tenantId }: { tenantId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId, granularity, startMs, endMs]);
+  }, [token, tenantId, granularity, startMs, endMs, scope]);
 
   return (
     <LineChartWidget
@@ -282,18 +299,24 @@ function ReviewLatencyChartInner({ tenantId }: { tenantId: string }) {
  * Change-failure proxy via revert-titled merges
  * (`analytics.fct_change_failure_daily`).
  */
-export function ChangeFailureChart({ tenantId }: { tenantId: string }) {
+export function ChangeFailureChart({ tenantId, scope = "org" }: ScopedChartProps) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <ChangeFailureChartInner tenantId={tenantId} />
+      <ChangeFailureChartInner tenantId={tenantId} scope={scope} />
     </MetricFiltersProvider>
   );
 }
 
-function ChangeFailureChartInner({ tenantId }: { tenantId: string }) {
+function ChangeFailureChartInner({
+  tenantId,
+  scope,
+}: {
+  tenantId: string;
+  scope: MetricScope;
+}) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -313,6 +336,7 @@ function ChangeFailureChartInner({ tenantId }: { tenantId: string }) {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
+          scope,
         });
         if (cancelled) return;
         setState({
@@ -335,7 +359,7 @@ function ChangeFailureChartInner({ tenantId }: { tenantId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId, granularity, startMs, endMs]);
+  }, [token, tenantId, granularity, startMs, endMs, scope]);
 
   return (
     <LineChartWidget

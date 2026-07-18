@@ -11,7 +11,7 @@ import {
   type TimeSeriesPoint,
 } from "@/components/charts";
 import { ApiError } from "@/lib/api";
-import { getPullRequestActivity } from "@/lib/metrics";
+import { getPullRequestActivity, type MetricScope } from "@/lib/metrics";
 import { useAuth } from "@/providers/auth-provider";
 
 const PR_SERIES: ChartSeries[] = [
@@ -29,20 +29,33 @@ type FetchState =
  * PR activity over time (opened / merged / closed without merging), served by
  * the dbt mart `analytics.fct_pr_activity_daily` through the metrics API. The
  * shared filter bar drives range + granularity; bucketing happens server-side,
- * so every filter change refetches.
+ * so every filter change refetches. `scope="me"` restricts the series to the
+ * signed-in user's authored PRs.
  */
-export function PrActivityChart({ tenantId }: { tenantId: string }) {
+export function PrActivityChart({
+  tenantId,
+  scope = "org",
+}: {
+  tenantId: string;
+  scope?: MetricScope;
+}) {
   return (
     <MetricFiltersProvider initialRange="quarter">
       <div className="mb-4">
         <MetricFiltersBar />
       </div>
-      <PrActivityChartInner tenantId={tenantId} />
+      <PrActivityChartInner tenantId={tenantId} scope={scope} />
     </MetricFiltersProvider>
   );
 }
 
-function PrActivityChartInner({ tenantId }: { tenantId: string }) {
+function PrActivityChartInner({
+  tenantId,
+  scope,
+}: {
+  tenantId: string;
+  scope: MetricScope;
+}) {
   const { token } = useAuth();
   const { filters, dateRange } = useMetricFilters();
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -62,6 +75,7 @@ function PrActivityChartInner({ tenantId }: { tenantId: string }) {
           granularity,
           start: new Date(startMs),
           end: new Date(endMs),
+          scope,
         });
         if (cancelled) return;
         setState({
@@ -86,7 +100,7 @@ function PrActivityChartInner({ tenantId }: { tenantId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId, granularity, startMs, endMs]);
+  }, [token, tenantId, granularity, startMs, endMs, scope]);
 
   return (
     <LineChartWidget

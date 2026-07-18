@@ -69,8 +69,8 @@ export function InviteAcceptPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button asChild analyticsName="invite_accepted_view_data">
-                <Link to="/data">View data</Link>
+              <Button asChild analyticsName="invite_accepted_view_dashboard">
+                <Link to="/home">Go to your dashboard</Link>
               </Button>
             </CardContent>
           </>

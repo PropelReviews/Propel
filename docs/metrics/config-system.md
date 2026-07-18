@@ -56,8 +56,13 @@ preview, and push/pull.
 
 ## Dual-run with legacy marts
 
-Hand-written `fct_*_daily` marts and the FastAPI *values* endpoints remain the
-dashboard serving path. Definition APIs are live; values cutover is separate.
+Hand-written `fct_*_daily` marts and the FastAPI legacy endpoints
+(`…/metrics/cycle-time`, etc.) remain available. The workspace metrics
+dashboard charts enrolled definitions via
+`GET /api/v1/tenants/{id}/metrics/values`, which reads workspace-total rows
+(`is_total = true`) from `analytics.fct_metric_values`. Per-user dashboard
+layouts are local-first with a debounced backup at
+`…/dashboard-preference`.
 
 ## Visibility (push-to-pull)
 

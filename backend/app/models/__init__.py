@@ -1,4 +1,5 @@
 from app.models.connected_account import ConnectedAccount
+from app.models.dashboard_preference import DashboardPreference
 from app.models.datapoint import Datapoint
 from app.models.external_identity import ExternalIdentity
 from app.models.ingestion_run import IngestionRun
@@ -19,6 +20,7 @@ from app.models.waitlist import WaitlistSubscriber
 
 __all__ = [
     "ConnectedAccount",
+    "DashboardPreference",
     "Datapoint",
     "DefinitionNotice",
     "ExternalIdentity",

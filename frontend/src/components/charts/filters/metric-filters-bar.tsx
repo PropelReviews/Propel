@@ -3,11 +3,17 @@ import { cn } from "@/lib/utils";
 import { GranularityPicker } from "./granularity-picker";
 import { useMetricFilters } from "./metric-filters-context";
 import { RelativeRangePicker } from "./relative-range-picker";
+import type { Granularity } from "./types";
 
 export interface MetricFiltersBarProps {
   className?: string;
   /** Hide the granularity picker when only a range is relevant. */
   hideGranularity?: boolean;
+  /**
+   * Optional override for selectable granularities (e.g. intersection of
+   * metrics on a dashboard). Falls back to range-valid options from context.
+   */
+  granularityOptions?: Granularity[];
 }
 
 /**
@@ -19,9 +25,11 @@ export interface MetricFiltersBarProps {
 export function MetricFiltersBar({
   className,
   hideGranularity = false,
+  granularityOptions,
 }: MetricFiltersBarProps) {
   const { filters, availableGranularities, setRange, setGranularity } =
     useMetricFilters();
+  const options = granularityOptions ?? availableGranularities;
 
   return (
     <div
@@ -33,7 +41,7 @@ export function MetricFiltersBar({
         <GranularityPicker
           value={filters.granularity}
           onValueChange={setGranularity}
-          options={availableGranularities}
+          options={options}
         />
       )}
     </div>

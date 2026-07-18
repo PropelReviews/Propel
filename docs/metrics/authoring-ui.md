@@ -8,13 +8,12 @@ UI-only semantic state.
 
 | Path | Purpose |
 |---|---|
-| `/metrics` | Catalog (enrollment + drafts/broken) |
+| `/metrics` | Catalog (enrollment + params + drafts/broken); `/settings/metric-set` redirects here (the standalone MetricSet YAML page was removed — enable/disable + params happen from the catalog) |
 | `/metrics/new` | Builder (create / variant via `?extends=`) |
 | `/metrics/:id` | Detail — Overview / Definition / Versions |
 | `/metrics/:id/edit` | Builder (edit → draft); forks `propel.*` |
-| `/settings/metric-set` | MetricSet YAML (enable/disable + params) |
 | `/settings/dimension-mappings` | Virtual dimension list |
-| `/settings/metric-health` | Compile runs, broken, parent notices |
+| `/settings/workspace` | Metric health section (compile runs, broken, parent notices); `/settings/metric-health` redirects here |
 
 ## Permissions
 

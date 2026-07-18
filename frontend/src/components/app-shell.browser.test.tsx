@@ -45,31 +45,47 @@ async function mountShell(tenants: Tenant[]): Promise<HTMLElement> {
 }
 
 describe("AppShell", () => {
-  it("shows the Access nav link when the user has a management permission", async () => {
+  it("shows the consolidated nav for an individual with metrics:read", async () => {
     const container = await mountShell([
-      makeTenant({ permissions: ["members:assign_role"] }),
+      makeTenant({
+        role: "individual",
+        // metrics:manage included to prove the Metric set entry stayed retired.
+        permissions: ["metrics:read", "metrics:manage", "tenant:read"],
+      }),
     ]);
 
-    const link = container.querySelector('a[href="/settings/access"]');
-    expect(link).not.toBeNull();
-    expect(link!.textContent).toBe("Access");
-  });
-
-  it("shows the Access nav link with roles:manage", async () => {
-    const container = await mountShell([makeTenant({ permissions: ["roles:manage"] })]);
-
-    expect(container.querySelector('a[href="/settings/access"]')).not.toBeNull();
-  });
-
-  it("hides the Access nav link without management permissions", async () => {
-    const container = await mountShell([
-      makeTenant({ role: "individual", permissions: ["metrics:read", "tenant:read"] }),
-    ]);
-
-    // The rest of the nav renders for authenticated users.
-    expect(container.querySelector('a[href="/data"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/home"]')).not.toBeNull();
     expect(container.querySelector('a[href="/metrics"]')).not.toBeNull();
+    // Workspace hosts metric health, so metrics:read is enough to see it.
+    expect(container.querySelector('a[href="/settings/workspace"]')).not.toBeNull();
+    const account = container.querySelector('a[href="/profile"]');
+    expect(account).not.toBeNull();
+    expect(account!.textContent).toBe("Account");
+
+    // Retired standalone entries.
+    expect(container.querySelector('a[href="/data"]')).toBeNull();
+    expect(container.querySelector('a[href="/settings/metric-health"]')).toBeNull();
     expect(container.querySelector('a[href="/settings/access"]')).toBeNull();
+    expect(container.querySelector('a[href="/settings/metric-set"]')).toBeNull();
+  });
+
+  it("hides Workspace and Metrics without any qualifying permission", async () => {
+    const container = await mountShell([
+      makeTenant({ role: "individual", permissions: ["tenant:read"] }),
+    ]);
+
+    expect(container.querySelector('a[href="/settings/workspace"]')).toBeNull();
+    expect(container.querySelector('a[href="/metrics"]')).toBeNull();
+    // Account is always available to signed-in users.
+    expect(container.querySelector('a[href="/profile"]')).not.toBeNull();
+  });
+
+  it("shows Workspace for connection managers without metrics:read", async () => {
+    const container = await mountShell([
+      makeTenant({ permissions: ["connections:manage"] }),
+    ]);
+
+    expect(container.querySelector('a[href="/settings/workspace"]')).not.toBeNull();
   });
 
   it("renders the workspace switcher when the user has multiple tenants", async () => {

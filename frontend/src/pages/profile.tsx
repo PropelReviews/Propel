@@ -11,6 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AccessPanel } from "@/features/access/access-panel";
+import { useAnyPermission } from "@/hooks/use-permission";
 import { ApiError, getGithubLinkUrl } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -25,9 +27,16 @@ function formatDate(iso: string | null | undefined): string {
   }).format(date);
 }
 
+/** The Account page: your Propel identity plus workspace access management. */
 export function ProfilePage() {
   const navigate = useNavigate();
   const { status, user, token, refreshUser } = useAuth();
+  // Same gate the standalone /settings/access route used before the merge.
+  const showAccess = useAnyPermission(
+    "roles:manage",
+    "members:assign_role",
+    "invites:read",
+  );
   const [params, setParams] = useSearchParams();
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,11 +94,11 @@ export function ProfilePage() {
   const connected = Boolean(github?.connected);
 
   return (
-    <main className="bg-background mx-auto min-h-svh max-w-2xl px-6 py-12">
+    <main className="bg-background mx-auto min-h-svh max-w-6xl px-6 py-12">
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Account</h1>
         <p className="text-muted-foreground mt-2">
-          Manage your Propel account and connected identities.
+          Manage your Propel account, connected identities, and workspace access.
         </p>
       </header>
 
@@ -111,10 +120,10 @@ export function ProfilePage() {
         </p>
       )}
 
-      <div className="space-y-6">
+      <div className="max-w-2xl space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Account</CardTitle>
+            <CardTitle>You</CardTitle>
             <CardDescription>Your Propel account details.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm">
@@ -178,12 +187,18 @@ export function ProfilePage() {
             {error && <p className="text-destructive text-sm">{error}</p>}
           </CardContent>
         </Card>
+      </div>
 
-        <div>
-          <Button asChild variant="ghost" analyticsName="profile_back_home">
-            <Link to="/">← Back home</Link>
-          </Button>
+      {showAccess && (
+        <div className="mt-12">
+          <AccessPanel />
         </div>
+      )}
+
+      <div className="mt-8">
+        <Button asChild variant="ghost" analyticsName="profile_back_home">
+          <Link to="/">← Back home</Link>
+        </Button>
       </div>
     </main>
   );

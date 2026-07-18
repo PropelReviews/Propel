@@ -109,6 +109,78 @@ def _measure_type(doc: dict[str, Any] | None) -> str | None:
     return measure.get("type")
 
 
+def _display_and_grains(
+    spec: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Extract chart display metadata and supported calendar grains."""
+    raw_display = spec.get("display")
+    display: dict[str, Any] | None = None
+    if isinstance(raw_display, dict):
+        display = {
+            "unit": raw_display.get("unit"),
+            "format": raw_display.get("format"),
+            "direction": raw_display.get("direction"),
+        }
+    time_spec = spec.get("time") or {}
+    grains = list(time_spec.get("grains") or []) if isinstance(time_spec, dict) else []
+    return display, grains
+
+
+async def get_chartable_metric(
+    session: AsyncSession,
+    org_slug: str,
+    metric_id: str,
+) -> dict[str, Any] | None:
+    """Return display metadata for an active enrolled metric, or None.
+
+    Chart tiles call this per metric. Unlike ``list_resolved_summaries``,
+    this path does not re-persist the full catalog on every request (that
+    races under parallel tile loads). Fresh orgs with zero enrollments
+    sync defaults once.
+    """
+    await ensure_system_imported(session)
+    sql = SqlAlchemyDefinitionStore(session)
+    enrollments = await sql.list_enrollments(org_slug)
+    by_id = {e.metric_id: e for e in enrollments}
+
+    if metric_id not in by_id:
+        if enrollments:
+            return None
+        mem, sql = await _hydrate(session, org_slug)
+        resolve_org(mem, org_slug, persist_enrollment=True)
+        await _persist(sql, mem, [org_slug, SYSTEM_ORG])
+        await session.commit()
+        by_id = {e.metric_id: e for e in await sql.list_enrollments(org_slug)}
+        if metric_id not in by_id:
+            return None
+
+    enrollment = by_id[metric_id]
+    row = await sql.get_definition(
+        enrollment.definition_org,
+        metric_id,
+        version=enrollment.definition_version,
+        status="active",
+    )
+    if row is None:
+        row = await sql.get_definition(
+            enrollment.definition_org,
+            metric_id,
+            status="active",
+        )
+    if row is None or row.status != "active":
+        return None
+
+    spec = (row.doc or {}).get("spec") or {}
+    display, grains = _display_and_grains(spec)
+    return {
+        "metric_id": metric_id,
+        "status": "active",
+        "enrolled": True,
+        "display": display,
+        "grains": grains,
+    }
+
+
 async def list_resolved_summaries(
     session: AsyncSession,
     org_slug: str,
@@ -174,6 +246,7 @@ async def list_resolved_summaries(
             compile_error = (broken[mid].resolved_json or {}).get("compile_error")
             if isinstance(compile_error, dict):
                 compile_error = compile_error.get("message") or str(compile_error)
+        display, grains = _display_and_grains(spec)
         out.append(
             {
                 "metric_id": mid,
@@ -193,6 +266,8 @@ async def list_resolved_summaries(
                 "notices": notices_by_metric.get(mid, []),
                 "compile_error": compile_error,
                 "enrolled": True,
+                "display": display,
+                "grains": grains,
             }
         )
         seen.add(mid)
@@ -213,6 +288,7 @@ async def list_resolved_summaries(
             bound = params_root.get(mid) if isinstance(params_root, dict) else None
             if not isinstance(bound, dict):
                 bound = None
+            display, grains = _display_and_grains(spec)
             out.append(
                 {
                     "metric_id": mid,
@@ -232,6 +308,8 @@ async def list_resolved_summaries(
                     "notices": notices_by_metric.get(mid, []),
                     "compile_error": None,
                     "enrolled": False,
+                    "display": display,
+                    "grains": grains,
                 }
             )
             seen.add(mid)
@@ -248,6 +326,7 @@ async def list_resolved_summaries(
             err = (row.resolved_json or {}).get("compile_error")
             if isinstance(err, dict):
                 err = err.get("message") or str(err)
+            display, grains = _display_and_grains(spec)
             out.append(
                 {
                     "metric_id": mid,
@@ -267,6 +346,8 @@ async def list_resolved_summaries(
                     "notices": notices_by_metric.get(mid, []),
                     "compile_error": err if isinstance(err, str) else None,
                     "enrolled": False,
+                    "display": display,
+                    "grains": grains,
                 }
             )
 

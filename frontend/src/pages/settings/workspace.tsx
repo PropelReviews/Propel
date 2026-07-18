@@ -21,28 +21,38 @@ import {
   type Connection,
   type LinearConnection,
 } from "@/lib/api";
+import { MetricHealthSection } from "@/features/metrics/health/metric-health-section";
+import { usePermission } from "@/hooks/use-permission";
 import { useAuth } from "@/providers/auth-provider";
 import { useTenant } from "@/providers/tenant-provider";
 
 export function WorkspacePage() {
   const { token } = useAuth();
   const { tenant } = useTenant();
+  // The page is reachable with either capability; each section gates itself.
+  const canManageConnections = usePermission("connections:manage");
+  const canReadMetrics = usePermission("metrics:read");
 
   return (
     <main className="bg-background mx-auto min-h-svh max-w-2xl px-6 py-12">
       <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Workspace</h1>
         <p className="text-muted-foreground mt-2">
-          Manage integrations and settings for{" "}
+          Manage integrations, settings, and metric health for{" "}
           <span className="font-medium">{tenant?.name ?? "your workspace"}</span>.
         </p>
       </header>
 
-      <section className="space-y-6">
-        <h2 className="text-lg font-medium">Integrations</h2>
-        <GitHubIntegrationCard token={token} tenantId={tenant?.id ?? null} />
-        <LinearIntegrationCard token={token} tenantId={tenant?.id ?? null} />
-      </section>
+      <div className="space-y-12">
+        {canManageConnections && (
+          <section className="space-y-6">
+            <h2 className="text-lg font-medium">Integrations</h2>
+            <GitHubIntegrationCard token={token} tenantId={tenant?.id ?? null} />
+            <LinearIntegrationCard token={token} tenantId={tenant?.id ?? null} />
+          </section>
+        )}
+        {canReadMetrics && <MetricHealthSection />}
+      </div>
     </main>
   );
 }

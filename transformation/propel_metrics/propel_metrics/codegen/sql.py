@@ -160,6 +160,20 @@ def _dim_out_list(dimensions: tuple[str, ...], rows: str) -> str:
     return ",\n    ".join(parts)
 
 
+def _is_total_expr(dimensions: tuple[str, ...], alias: str) -> str:
+    """Boolean flag for the workspace-total grouping-set row.
+
+    When the plan has active dimensions, ``GROUPING SETS`` emits a rollup
+    row with NULL dims; ``GROUPING(dim) = 1`` marks that rollup. Metrics
+    with no active dims are always workspace totals.
+    """
+    active = _active_dims(dimensions)
+    if not active:
+        return "true"
+    parts = [f"grouping({alias}.{_dim_col(d)}) = 1" for d in active]
+    return "(" + " and ".join(parts) + ")"
+
+
 def _dim_alias_select(alias: str, dimensions: tuple[str, ...]) -> str:
     """Select plan dims from rows alias ``r`` into aggregation CTE."""
     active = set(dimensions)
@@ -181,6 +195,7 @@ def _join_using_dims(dimensions: tuple[str, ...], *extra: str) -> str:
     parts = [
         "tenant_id",
         *(_dim_col(n) for n in _plan_dim_columns(dimensions)),
+        "is_total",
         *extra,
     ]
     return ", ".join(parts)
@@ -285,6 +300,7 @@ def _calendar_agg_select(
     agg_sql = value_expr if value_expr is not None else _agg_sql(agg)
     dim_out = _dim_out_list(plan.dimensions, rows_alias)
     group_by = _group_by_calendar(plan.dimensions, bs, rows_alias)
+    is_total = _is_total_expr(plan.dimensions, rows_alias)
     return f"""select
     {rows_alias}.tenant_id,
     '{plan.metric_id}'::text as metric_id,
@@ -293,6 +309,7 @@ def _calendar_agg_select(
     ({bs})::timestamptz as bucket_start,
     ({be})::timestamptz as bucket_end,
     (({be}) <= current_timestamp) as is_complete,
+    {is_total} as is_total,
     {dim_out},
     {agg_sql} as "value",
     {numerator} as numerator,
@@ -322,6 +339,7 @@ def _ratio_grain_block(plan: CompiledPlan, grain: str) -> str:
     dim_select = _dim_alias_select("r", plan.dimensions)
     join_using = _join_using_dims(plan.dimensions, "bucket")
     dim_out = _den_dim_out(plan.dimensions)
+    is_total = _is_total_expr(plan.dimensions, "r")
 
     value_expr = _ratio_value_expr(plan.zero_denominator or "null")
     be = _bucket_end(grain, "den.bucket")
@@ -332,6 +350,7 @@ def _ratio_grain_block(plan: CompiledPlan, grain: str) -> str:
             r.tenant_id,
             {dim_select},
             ({bs}) as bucket,
+            {is_total} as is_total,
             {_agg_sql(plan.aggregations["num"].agg)} as v
         from num_rows r
         {num_group}
@@ -341,6 +360,7 @@ def _ratio_grain_block(plan: CompiledPlan, grain: str) -> str:
             r.tenant_id,
             {dim_select},
             ({bs}) as bucket,
+            {is_total} as is_total,
             {_agg_sql(plan.aggregations["den"].agg)} as v
         from den_rows r
         {num_group}
@@ -353,6 +373,7 @@ def _ratio_grain_block(plan: CompiledPlan, grain: str) -> str:
         den.bucket::timestamptz as bucket_start,
         ({be})::timestamptz as bucket_end,
         (({be}) <= current_timestamp) as is_complete,
+        den.is_total as is_total,
         {dim_out},
         {value_expr} as "value",
         coalesce(num.v, 0)::float8 as numerator,
@@ -370,6 +391,7 @@ def _formula_grain_block(plan: CompiledPlan, grain: str) -> str:
     group = _agg_group_from_r(plan.dimensions, bs)
     dim_select = _dim_alias_select("r", plan.dimensions)
     dims_csv = _dim_names_csv(plan.dimensions)
+    is_total = _is_total_expr(plan.dimensions, "r")
 
     input_ctes: list[str] = []
     for name in input_names:
@@ -380,6 +402,7 @@ def _formula_grain_block(plan: CompiledPlan, grain: str) -> str:
             r.tenant_id,
             {dim_select},
             ({bs}) as bucket,
+            {is_total} as is_total,
             {_agg_sql(ap.agg)} as v
         from rows_{name} r
         {group}
@@ -387,7 +410,8 @@ def _formula_grain_block(plan: CompiledPlan, grain: str) -> str:
         )
 
     bucket_parts = [
-        f"select tenant_id, {dims_csv}, bucket from in_{n}" for n in input_names
+        f"select tenant_id, {dims_csv}, is_total, bucket from in_{n}"
+        for n in input_names
     ]
     buckets_sql = "\n        union\n        ".join(bucket_parts)
 
@@ -415,6 +439,7 @@ def _formula_grain_block(plan: CompiledPlan, grain: str) -> str:
         b.bucket::timestamptz as bucket_start,
         ({be})::timestamptz as bucket_end,
         (({be}) <= current_timestamp) as is_complete,
+        b.is_total as is_total,
         {b_dims},
         {ast_sql} as "value",
         null::float8 as numerator,
@@ -450,6 +475,7 @@ def _simple_window_block(plan: CompiledPlan, window: Window) -> str:
     cte = f"win_{window.days}d_{window.step}"
     dim_out = _window_dim_out(plan.dimensions)
     group = _window_group(plan.dimensions)
+    is_total = _is_total_expr(plan.dimensions, "r")
     bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
     return f"""{cte} as (
 
@@ -461,6 +487,7 @@ def _simple_window_block(plan: CompiledPlan, window: Window) -> str:
         {bucket_start} as bucket_start,
         {bucket_end} as bucket_end,
         ({bucket_end} <= current_timestamp) as is_complete,
+        {is_total} as is_total,
         {dim_out},
         {_agg_sql(ap.agg)} as "value",
         null::float8 as numerator,
@@ -482,6 +509,7 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
     dim_select = _dim_alias_select("r", plan.dimensions)
     dim_out = _den_dim_out(plan.dimensions)
     join_using = _join_using_dims(plan.dimensions, "bucket_end")
+    is_total = _is_total_expr(plan.dimensions, "r")
 
     value_expr = _ratio_value_expr(plan.zero_denominator or "null")
     bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
@@ -493,6 +521,7 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
             {dim_select},
             {bucket_end} as bucket_end,
             {bucket_start} as bucket_start,
+            {is_total} as is_total,
             {_agg_sql(plan.aggregations["num"].agg)} as v
         from {{{{ ref('dim_step_spine') }}}} s
         inner join num_rows r
@@ -507,6 +536,7 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
             {dim_select},
             {bucket_end} as bucket_end,
             {bucket_start} as bucket_start,
+            {is_total} as is_total,
             {_agg_sql(plan.aggregations["den"].agg)} as v
         from {{{{ ref('dim_step_spine') }}}} s
         inner join den_rows r
@@ -523,6 +553,7 @@ def _ratio_window_block(plan: CompiledPlan, window: Window) -> str:
         den.bucket_start::timestamptz as bucket_start,
         den.bucket_end::timestamptz as bucket_end,
         (den.bucket_end <= current_timestamp) as is_complete,
+        den.is_total as is_total,
         {dim_out},
         {value_expr} as "value",
         coalesce(num.v, 0)::float8 as numerator,
@@ -541,6 +572,7 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
     group = _window_group(plan.dimensions)
     dim_select = _dim_alias_select("r", plan.dimensions)
     dims_csv = _dim_names_csv(plan.dimensions)
+    is_total = _is_total_expr(plan.dimensions, "r")
 
     bucket_start, bucket_end, join_lower, join_upper = _window_bound_sql(window)
     input_ctes: list[str] = []
@@ -553,6 +585,7 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
             {dim_select},
             {bucket_end} as bucket_end,
             {bucket_start} as bucket_start,
+            {is_total} as is_total,
             {_agg_sql(ap.agg)} as v
         from {{{{ ref('dim_step_spine') }}}} s
         inner join rows_{name} r
@@ -564,7 +597,7 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
         )
 
     bucket_parts = [
-        f"select tenant_id, {dims_csv}, bucket_start, bucket_end from in_{n}"
+        f"select tenant_id, {dims_csv}, is_total, bucket_start, bucket_end from in_{n}"
         for n in input_names
     ]
     buckets_sql = "\n        union\n        ".join(bucket_parts)
@@ -591,6 +624,7 @@ def _formula_window_block(plan: CompiledPlan, window: Window) -> str:
         b.bucket_start::timestamptz as bucket_start,
         b.bucket_end::timestamptz as bucket_end,
         (b.bucket_end <= current_timestamp) as is_complete,
+        b.is_total as is_total,
         {b_dims},
         {ast_sql} as "value",
         null::float8 as numerator,

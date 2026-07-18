@@ -14,6 +14,7 @@ from propel_metrics.store.protocol import (
     StoredDefinition,
 )
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.metric_definition import (
@@ -148,17 +149,33 @@ class SqlAlchemyDefinitionStore:
         await self.session.execute(
             delete(OrgMetricEnrollment).where(OrgMetricEnrollment.org_id == org_id)
         )
-        for r in rows:
-            self.session.add(
-                OrgMetricEnrollment(
-                    org_id=r.org_id,
-                    metric_id=r.metric_id,
-                    definition_org=r.definition_org,
-                    definition_version=r.definition_version,
-                    params_json=r.params_json,
-                    content_hash=r.content_hash,
-                )
-            )
+        await self.session.flush()
+        if not rows:
+            return
+        # Upsert so concurrent catalog refreshes (parallel chart/catalog
+        # loads) do not UniqueViolation on org_metric_enrollment_pkey.
+        values = [
+            {
+                "org_id": r.org_id,
+                "metric_id": r.metric_id,
+                "definition_org": r.definition_org,
+                "definition_version": r.definition_version,
+                "params_json": r.params_json,
+                "content_hash": r.content_hash,
+            }
+            for r in rows
+        ]
+        stmt = insert(OrgMetricEnrollment).values(values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["org_id", "metric_id"],
+            set_={
+                "definition_org": stmt.excluded.definition_org,
+                "definition_version": stmt.excluded.definition_version,
+                "params_json": stmt.excluded.params_json,
+                "content_hash": stmt.excluded.content_hash,
+            },
+        )
+        await self.session.execute(stmt)
         await self.session.flush()
 
     async def list_enrollments(self, org_id: str) -> list[EnrollmentRow]:

@@ -8,6 +8,13 @@ models. All queries are tenant-scoped and read-only.
 The `analytics` schema is owned by dbt, not Alembic — it may not exist yet on a
 fresh database (dbt never ran). That case degrades to an empty series rather
 than a 500 so the dashboard renders before the first analytics run.
+
+Person-scoped (`scope=me`) variants can't use the marts — those are
+(tenant, day) grain with no person column, and percentiles can't be re-filtered
+after aggregation. They query `raw_record` (the same L0 the dbt staging views
+read) row-level, filtered by the caller's GitHub login, mirroring the
+snapshot/attribution semantics of `stg_github_pull_requests` /
+`stg_github_reviews`.
 """
 
 from __future__ import annotations
@@ -16,10 +23,12 @@ import logging
 import uuid
 from datetime import date
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.enums import IntegrationProvider
+from app.models.external_identity import ExternalIdentity
 from app.schemas.metrics import (
     ChangeFailurePoint,
     ChangeFailureResponse,
@@ -28,6 +37,8 @@ from app.schemas.metrics import (
     DeploymentFrequencyPoint,
     DeploymentFrequencyResponse,
     Granularity,
+    MetricValuePoint,
+    MetricValuesResponse,
     ProjectActivityPoint,
     ProjectActivityResponse,
     PullRequestActivityPoint,
@@ -245,16 +256,298 @@ _TICKET_DESCRIPTION_EDITS_QUERY = text(
     """
 )
 
+# Workspace-total series from declarative metrics. Grain is pre-bucketed in
+# fct_metric_values (day/week/month); we only filter, never re-aggregate.
+_METRIC_VALUES_QUERY = text(
+    """
+    SELECT
+        (bucket_start AT TIME ZONE 'UTC')::date AS period_start,
+        value
+    FROM analytics.fct_metric_values
+    WHERE tenant_id = :tenant_id
+      AND metric_id = :metric_id
+      AND grain = :grain
+      AND is_total = true
+      AND (bucket_start AT TIME ZONE 'UTC')::date >= :start
+      AND (bucket_start AT TIME ZONE 'UTC')::date <= :end
+    ORDER BY 1
+    """
+)
+
+# Pre-is_total warehouses only stored workspace totals as empty dim keys.
+# Used when the column has not been rebuilt yet (expand/contract cutover).
+_METRIC_VALUES_QUERY_LEGACY = text(
+    """
+    SELECT
+        (bucket_start AT TIME ZONE 'UTC')::date AS period_start,
+        value
+    FROM analytics.fct_metric_values
+    WHERE tenant_id = :tenant_id
+      AND metric_id = :metric_id
+      AND grain = :grain
+      AND dim_repo = ''
+      AND dim_team = ''
+      AND (bucket_start AT TIME ZONE 'UTC')::date >= :start
+      AND (bucket_start AT TIME ZONE 'UTC')::date <= :end
+    ORDER BY 1
+    """
+)
+
+_GRANULARITY_TO_GRAIN: dict[str, str] = {
+    "daily": "day",
+    "weekly": "week",
+    "monthly": "month",
+}
+
+# --------------------------------------------------------------------------- #
+# Person-scoped (`scope=me`) queries
+#
+# raw_record is append-only: each re-sync of a PR/review lands a new row, so
+# DISTINCT ON (node_id) ... ORDER BY fetched_at DESC picks the current
+# snapshot — the same convention as the dbt staging views. The author filter
+# is safe inside the snapshot CTE because a PR's author never changes.
+# --------------------------------------------------------------------------- #
+
+_PR_SNAPSHOT_CTE = """
+    prs AS (
+        SELECT DISTINCT ON (payload ->> 'node_id')
+            payload ->> 'node_id' AS pr_node_id,
+            (payload ->> 'number')::int AS pr_number,
+            (payload ->> 'created_at')::timestamptz AS created_at,
+            (payload ->> 'closed_at')::timestamptz AS closed_at,
+            (payload ->> 'merged_at')::timestamptz AS merged_at,
+            payload -> 'user' ->> 'login' AS author_login,
+            COALESCE(
+                payload -> 'base' -> 'repo' ->> 'full_name',
+                NULLIF(CONCAT(payload ->> 'org', '/', payload ->> 'repo'), '/')
+            ) AS repo,
+            COALESCE(payload ->> 'title', '')
+                ~* '^revert([[:space:][:punct:]]|$)' AS is_revert,
+            CASE
+                WHEN
+                    (payload ->> 'merged_at') IS NOT NULL
+                    AND (payload ->> 'created_at') IS NOT NULL
+                    THEN EXTRACT(
+                        EPOCH FROM (
+                            (payload ->> 'merged_at')::timestamptz
+                            - (payload ->> 'created_at')::timestamptz
+                        )
+                    ) / 3600.0
+            END AS cycle_time_hours
+        FROM raw_record
+        WHERE tenant_id = :tenant_id
+          AND source = 'github'
+          AND resource_type = 'pull_requests'
+          AND payload ->> 'node_id' IS NOT NULL
+          AND payload -> 'user' ->> 'login' = :author_login
+        ORDER BY payload ->> 'node_id' ASC, fetched_at DESC
+    )
+"""
+
+_PR_ACTIVITY_ME_QUERY = text(
+    f"""
+    WITH {_PR_SNAPSHOT_CTE},
+    activity AS (
+        SELECT
+            (created_at AT TIME ZONE 'UTC')::date AS activity_date,
+            1 AS opened, 0 AS merged, 0 AS closed
+        FROM prs
+        WHERE created_at IS NOT NULL
+
+        UNION ALL
+
+        SELECT
+            (merged_at AT TIME ZONE 'UTC')::date AS activity_date,
+            0 AS opened, 1 AS merged, 0 AS closed
+        FROM prs
+        WHERE merged_at IS NOT NULL
+
+        UNION ALL
+
+        SELECT
+            (closed_at AT TIME ZONE 'UTC')::date AS activity_date,
+            0 AS opened, 0 AS merged, 1 AS closed
+        FROM prs
+        WHERE closed_at IS NOT NULL AND merged_at IS NULL
+    )
+    SELECT
+        date_trunc(:trunc_unit, activity_date)::date AS period_start,
+        COALESCE(SUM(opened), 0)::int AS opened,
+        COALESCE(SUM(merged), 0)::int AS merged,
+        COALESCE(SUM(closed), 0)::int AS closed
+    FROM activity
+    WHERE activity_date >= :start
+      AND activity_date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+# Unlike the mart path (weighted average of daily medians), row-level access
+# lets us compute true percentiles per period.
+_CYCLE_TIME_ME_QUERY = text(
+    f"""
+    WITH {_PR_SNAPSHOT_CTE}
+    SELECT
+        date_trunc(
+            :trunc_unit, (merged_at AT TIME ZONE 'UTC')::date
+        )::date AS period_start,
+        COUNT(*)::int AS prs_merged,
+        percentile_cont(0.5) WITHIN GROUP (
+            ORDER BY cycle_time_hours
+        )::float8 AS median_hours,
+        AVG(cycle_time_hours)::float8 AS avg_hours,
+        percentile_cont(0.9) WITHIN GROUP (
+            ORDER BY cycle_time_hours
+        )::float8 AS p90_hours
+    FROM prs
+    WHERE merged_at IS NOT NULL
+      AND cycle_time_hours IS NOT NULL
+      AND cycle_time_hours >= 0
+      AND (merged_at AT TIME ZONE 'UTC')::date >= :start
+      AND (merged_at AT TIME ZONE 'UTC')::date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+# scope=me semantics: latency for MY authored PRs to receive their first
+# non-self review; reviews_submitted counts reviews others left on my PRs.
+_REVIEW_LATENCY_ME_QUERY = text(
+    f"""
+    WITH {_PR_SNAPSHOT_CTE},
+    reviews AS (
+        SELECT DISTINCT ON (payload ->> 'node_id')
+            (payload ->> 'submitted_at')::timestamptz AS submitted_at,
+            payload -> 'user' ->> 'login' AS reviewer_login,
+            (payload ->> 'pull_request_number')::int AS pull_request_number,
+            NULLIF(CONCAT(payload ->> 'org', '/', payload ->> 'repo'), '/') AS repo
+        FROM raw_record
+        WHERE tenant_id = :tenant_id
+          AND source = 'github'
+          AND resource_type = 'reviews'
+          AND payload ->> 'node_id' IS NOT NULL
+          AND payload ->> 'submitted_at' IS NOT NULL
+          AND COALESCE(payload ->> 'state', '') <> 'PENDING'
+        ORDER BY payload ->> 'node_id' ASC, fetched_at DESC
+    ),
+    pr_reviews AS (
+        SELECT
+            prs.pr_node_id,
+            prs.created_at,
+            reviews.submitted_at
+        FROM prs
+        INNER JOIN reviews
+            ON reviews.repo IS NOT DISTINCT FROM prs.repo
+            AND reviews.pull_request_number = prs.pr_number
+            AND reviews.reviewer_login IS DISTINCT FROM prs.author_login
+        WHERE prs.created_at IS NOT NULL
+    ),
+    first_review AS (
+        SELECT
+            pr_node_id,
+            MIN(submitted_at) AS first_reviewed_at,
+            EXTRACT(
+                EPOCH FROM (MIN(submitted_at) - created_at)
+            ) / 3600.0 AS hours_to_first_review
+        FROM pr_reviews
+        GROUP BY pr_node_id, created_at
+    ),
+    first_reviewed_period AS (
+        SELECT
+            date_trunc(
+                :trunc_unit, (first_reviewed_at AT TIME ZONE 'UTC')::date
+            )::date AS period_start,
+            COUNT(*)::int AS prs_first_reviewed,
+            percentile_cont(0.5) WITHIN GROUP (
+                ORDER BY hours_to_first_review
+            )::float8 AS median_hours_to_first_review
+        FROM first_review
+        WHERE hours_to_first_review IS NOT NULL
+          AND hours_to_first_review >= 0
+          AND (first_reviewed_at AT TIME ZONE 'UTC')::date >= :start
+          AND (first_reviewed_at AT TIME ZONE 'UTC')::date <= :end
+        GROUP BY 1
+    ),
+    reviews_period AS (
+        SELECT
+            date_trunc(
+                :trunc_unit, (submitted_at AT TIME ZONE 'UTC')::date
+            )::date AS period_start,
+            COUNT(*)::int AS reviews_submitted
+        FROM pr_reviews
+        WHERE (submitted_at AT TIME ZONE 'UTC')::date >= :start
+          AND (submitted_at AT TIME ZONE 'UTC')::date <= :end
+        GROUP BY 1
+    )
+    SELECT
+        period_start,
+        COALESCE(f.prs_first_reviewed, 0)::int AS prs_first_reviewed,
+        f.median_hours_to_first_review,
+        COALESCE(r.reviews_submitted, 0)::int AS reviews_submitted
+    FROM first_reviewed_period AS f
+    FULL OUTER JOIN reviews_period AS r USING (period_start)
+    ORDER BY 1
+    """
+)
+
+# Caveat inherited from the mart: attribution is the author of the
+# revert-titled PR, not the author of the original failing change.
+_CHANGE_FAILURE_ME_QUERY = text(
+    f"""
+    WITH {_PR_SNAPSHOT_CTE}
+    SELECT
+        date_trunc(
+            :trunc_unit, (merged_at AT TIME ZONE 'UTC')::date
+        )::date AS period_start,
+        COUNT(*)::int AS prs_merged,
+        COUNT(*) FILTER (WHERE is_revert)::int AS prs_reverted,
+        CASE
+            WHEN COUNT(*) = 0 THEN NULL
+            ELSE (COUNT(*) FILTER (WHERE is_revert))::float8 / COUNT(*)::float8
+        END AS change_failure_rate
+    FROM prs
+    WHERE merged_at IS NOT NULL
+      AND (merged_at AT TIME ZONE 'UTC')::date >= :start
+      AND (merged_at AT TIME ZONE 'UTC')::date <= :end
+    GROUP BY 1
+    ORDER BY 1
+    """
+)
+
+
+async def resolve_github_login(
+    session: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> str | None:
+    """The caller's GitHub @login in this tenant, or None when unlinked."""
+    return await session.scalar(
+        select(ExternalIdentity.external_login)
+        .where(
+            ExternalIdentity.tenant_id == tenant_id,
+            ExternalIdentity.propel_user_id == user_id,
+            ExternalIdentity.provider == IntegrationProvider.github,
+            ExternalIdentity.external_login.is_not(None),
+        )
+        .limit(1)
+    )
+
 
 def _bind(
-    granularity: Granularity, tenant_id: uuid.UUID, start: date, end: date
+    granularity: Granularity,
+    tenant_id: uuid.UUID,
+    start: date,
+    end: date,
+    author_login: str | None = None,
 ) -> dict:
-    return {
+    params = {
         "trunc_unit": _GRANULARITY_TO_TRUNC[granularity],
         "tenant_id": tenant_id,
         "start": start,
         "end": end,
     }
+    if author_login is not None:
+        params["author_login"] = author_login
+    return params
 
 
 async def _safe_query(session: AsyncSession, query, params: dict, mart: str):
@@ -274,12 +567,17 @@ async def pull_request_activity(
     granularity: Granularity,
     start: date,
     end: date,
+    author_login: str | None = None,
 ) -> PullRequestActivityResponse:
+    if author_login is not None:
+        query, mart = _PR_ACTIVITY_ME_QUERY, "raw_record"
+    else:
+        query, mart = _PR_ACTIVITY_QUERY, "analytics.fct_pr_activity_daily"
     rows = await _safe_query(
         session,
-        _PR_ACTIVITY_QUERY,
-        _bind(granularity, tenant_id, start, end),
-        "analytics.fct_pr_activity_daily",
+        query,
+        _bind(granularity, tenant_id, start, end, author_login),
+        mart,
     )
     return PullRequestActivityResponse(
         granularity=granularity,
@@ -326,12 +624,17 @@ async def cycle_time(
     granularity: Granularity,
     start: date,
     end: date,
+    author_login: str | None = None,
 ) -> CycleTimeResponse:
+    if author_login is not None:
+        query, mart = _CYCLE_TIME_ME_QUERY, "raw_record"
+    else:
+        query, mart = _CYCLE_TIME_QUERY, "analytics.fct_pr_cycle_time_daily"
     rows = await _safe_query(
         session,
-        _CYCLE_TIME_QUERY,
-        _bind(granularity, tenant_id, start, end),
-        "analytics.fct_pr_cycle_time_daily",
+        query,
+        _bind(granularity, tenant_id, start, end, author_login),
+        mart,
     )
     return CycleTimeResponse(
         granularity=granularity,
@@ -355,12 +658,17 @@ async def review_latency(
     granularity: Granularity,
     start: date,
     end: date,
+    author_login: str | None = None,
 ) -> ReviewLatencyResponse:
+    if author_login is not None:
+        query, mart = _REVIEW_LATENCY_ME_QUERY, "raw_record"
+    else:
+        query, mart = _REVIEW_LATENCY_QUERY, "analytics.fct_review_latency_daily"
     rows = await _safe_query(
         session,
-        _REVIEW_LATENCY_QUERY,
-        _bind(granularity, tenant_id, start, end),
-        "analytics.fct_review_latency_daily",
+        query,
+        _bind(granularity, tenant_id, start, end, author_login),
+        mart,
     )
     return ReviewLatencyResponse(
         granularity=granularity,
@@ -388,12 +696,17 @@ async def change_failure(
     granularity: Granularity,
     start: date,
     end: date,
+    author_login: str | None = None,
 ) -> ChangeFailureResponse:
+    if author_login is not None:
+        query, mart = _CHANGE_FAILURE_ME_QUERY, "raw_record"
+    else:
+        query, mart = _CHANGE_FAILURE_QUERY, "analytics.fct_change_failure_daily"
     rows = await _safe_query(
         session,
-        _CHANGE_FAILURE_QUERY,
-        _bind(granularity, tenant_id, start, end),
-        "analytics.fct_change_failure_daily",
+        query,
+        _bind(granularity, tenant_id, start, end, author_login),
+        mart,
     )
     return ChangeFailureResponse(
         granularity=granularity,
@@ -568,5 +881,57 @@ async def ticket_description_edits(
                 description_edits=count,
             )
             for period_start, count in rows
+        ],
+    )
+
+
+async def metric_values(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    metric_id: str,
+    granularity: Granularity,
+    start: date,
+    end: date,
+    unit: str | None = None,
+    format: str | None = None,
+) -> MetricValuesResponse:
+    """Read workspace-total points for one enrolled declarative metric."""
+    params = {
+        "tenant_id": tenant_id,
+        "metric_id": metric_id,
+        "grain": _GRANULARITY_TO_GRAIN[granularity],
+        "start": start,
+        "end": end,
+    }
+    try:
+        result = await session.execute(_METRIC_VALUES_QUERY, params)
+        rows = result.all()
+    except ProgrammingError as exc:
+        await session.rollback()
+        if "is_total" not in str(exc):
+            logger.warning(
+                "analytics.fct_metric_values missing; returning empty series"
+            )
+            rows = []
+        else:
+            logger.warning(
+                "analytics.fct_metric_values.is_total missing; "
+                "falling back to empty-dim totals"
+            )
+            rows = await _safe_query(
+                session,
+                _METRIC_VALUES_QUERY_LEGACY,
+                params,
+                "analytics.fct_metric_values",
+            )
+    return MetricValuesResponse(
+        metric_id=metric_id,
+        granularity=granularity,
+        unit=unit,
+        format=format,
+        points=[
+            MetricValuePoint(period_start=period_start, value=value)
+            for period_start, value in rows
         ],
     )
