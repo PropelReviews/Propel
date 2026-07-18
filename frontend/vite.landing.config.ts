@@ -4,12 +4,25 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 
 // The entry is landing.html, but Vite's dev/preview servers serve the root
-// index.html (the app) for "/". This middleware rewrites "/" to landing.html so
-// the dev server (and `preview`) serve the landing page at the root, matching
-// the production CloudFront default_root_object.
+// index.html (the app) for "/". This middleware rewrites "/" (and SPA client
+// routes like /blog) to landing.html so the dev server (and `preview`) match
+// the production CloudFront default_root_object + 403/404 SPA fallback.
 function serveLandingAtRoot(): Plugin {
   const rewrite = (req: { url?: string }) => {
-    if (req.url === "/" || req.url === "/index.html") {
+    if (!req.url) return;
+    const pathOnly = req.url.split("?")[0] ?? req.url;
+    if (pathOnly === "/" || pathOnly === "/index.html") {
+      req.url = "/landing.html";
+      return;
+    }
+    // Client-side routes have no file extension and are not Vite internals.
+    if (
+      !pathOnly.includes(".") &&
+      !pathOnly.startsWith("/@") &&
+      !pathOnly.startsWith("/node_modules") &&
+      !pathOnly.startsWith("/src") &&
+      !pathOnly.startsWith("/content")
+    ) {
       req.url = "/landing.html";
     }
   };

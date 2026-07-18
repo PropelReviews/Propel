@@ -101,6 +101,8 @@ stable. Feature flags and distinct IDs are also bootstrapped from
 | Flag | Controls |
 |---|---|
 | `signup-signin` | Whether the sign up / sign in surface (`/signin`, `/signup` routes and homepage auth CTAs) is shown. On the landing site it gates the cloud CTAs: when **on**, "Open app" / "Try Propel Cloud" links render; when **off**, they are replaced by the email waitlist form ([`waitlist-form.tsx`](../../frontend/src/components/landing/waitlist-form.tsx)). Read via [`use-auth-flag.ts`](../../frontend/src/hooks/use-auth-flag.ts). When PostHog is disabled (no key), it falls back to `VITE_AUTH_ENABLED === "true"` (default off). |
+| `landing-blog` | Whether the marketing blog (`/blog`, `/blog/:slug`, and Blog nav/footer links) is shown on the landing site. Read via [`use-landing-blog-flag.ts`](../../frontend/src/hooks/use-landing-blog-flag.ts). When PostHog is disabled (no key), falls back to `VITE_LANDING_BLOG_ENABLED === "true"` (default off). Create the boolean flag in PostHog with default **false**. |
+| `landing-careers` | Whether the marketing careers page (`/careers` and Careers nav/footer links) is shown on the landing site. Read via [`use-landing-careers-flag.ts`](../../frontend/src/hooks/use-landing-careers-flag.ts). When PostHog is disabled (no key), falls back to `VITE_LANDING_CAREERS_ENABLED === "true"` (default off). Create the boolean flag in PostHog with default **false**. |
 
 ## Error tracking
 
