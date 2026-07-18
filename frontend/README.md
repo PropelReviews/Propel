@@ -55,15 +55,17 @@ full event taxonomy.
 
 Optional build-time env vars (all default sensibly):
 
-| Var                                      | Purpose                                                                |
-| ---------------------------------------- | ---------------------------------------------------------------------- |
-| `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` | Enable PostHog and point it at a host                                  |
-| `VITE_APP_ENV`                           | Environment label (defaults to Vite mode)                              |
-| `VITE_APP_VERSION`                       | App version (defaults to `package.json` version)                       |
-| `VITE_GIT_SHA`                           | Build commit SHA (defaults to `dev`)                                   |
-| `VITE_API_URL`                           | Backend API base URL (defaults to `http://localhost:8000`)             |
-| `VITE_AUTH_ENABLED`                      | Fallback to show auth when PostHog is disabled (default off)           |
-| `VITE_CHART_DEMO_ENABLED`                | Fallback to show the chart demo when PostHog is disabled (default off) |
+| Var                                      | Purpose                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` | Enable PostHog and point it at a host                                    |
+| `VITE_APP_ENV`                           | Environment label (defaults to Vite mode)                                |
+| `VITE_APP_VERSION`                       | App version (defaults to `package.json` version)                         |
+| `VITE_GIT_SHA`                           | Build commit SHA (defaults to `dev`)                                     |
+| `VITE_API_URL`                           | Backend API base URL (defaults to `http://localhost:8000`)               |
+| `VITE_AUTH_ENABLED`                      | Fallback to show auth when PostHog is disabled (default off)             |
+| `VITE_CHART_DEMO_ENABLED`                | Fallback to show the chart demo when PostHog is disabled (default off)   |
+| `VITE_LANDING_BLOG_ENABLED`              | Fallback to show the landing blog when PostHog is disabled (default off) |
+| `VITE_LANDING_CAREERS_ENABLED`           | Fallback to show landing careers when PostHog is disabled (default off)  |
 
 PostHog error tracking and session replay are enabled in code when a key is set.
 Session replay must also be turned on in your PostHog project settings. Production
@@ -91,6 +93,19 @@ picker that drives every chart on the page).
   Enable it in PostHog to expose the route and the homepage link. When PostHog
   runs without a key (keyless self-host), set `VITE_CHART_DEMO_ENABLED=true`
   instead.
+
+## Landing blog & careers
+
+The marketing landing build (`npm run dev:landing` / `npm run build:landing`)
+includes optional `/blog` and `/careers` routes:
+
+- **Blog:** Markdown posts in [`content/blog/`](content/blog/) (YAML frontmatter
+  - body). See that folder's README for the post format. Gated by PostHog flag
+    **`landing-blog`** (env fallback `VITE_LANDING_BLOG_ENABLED`).
+- **Careers:** Static page with a mailto to `sam@propel.ninja`. Gated by
+  PostHog flag **`landing-careers`** (env fallback `VITE_LANDING_CAREERS_ENABLED`).
+
+Both flags default **off**. Create them as boolean flags in PostHog to soft-launch.
 
 ## Related
 

@@ -1,5 +1,8 @@
+import { Link } from "react-router-dom";
 import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useLandingBlogFlag } from "@/hooks/use-landing-blog-flag";
+import { useLandingCareersFlag } from "@/hooks/use-landing-careers-flag";
 import { cn } from "@/lib/utils";
 import { GithubIcon } from "./github-icon";
 import { contributingUrl, docsUrl, githubUrl, licenseUrl } from "./links";
@@ -10,12 +13,15 @@ const footerLinkClass = cn(
 );
 
 const footerLinks = [
-  { href: docsUrl, label: "Docs", external: false },
-  { href: contributingUrl, label: "Contributing", external: false },
-  { href: licenseUrl, label: "License", external: false },
+  { href: docsUrl, label: "Docs", external: true },
+  { href: contributingUrl, label: "Contributing", external: true },
+  { href: licenseUrl, label: "License", external: true },
 ];
 
 export function Footer() {
+  const blogEnabled = useLandingBlogFlag();
+  const careersEnabled = useLandingCareersFlag();
+
   return (
     <footer>
       <Separator />
@@ -35,6 +41,16 @@ export function Footer() {
               {link.label}
             </a>
           ))}
+          {blogEnabled && (
+            <Link to="/blog" className={footerLinkClass}>
+              Blog
+            </Link>
+          )}
+          {careersEnabled && (
+            <Link to="/careers" className={footerLinkClass}>
+              Careers
+            </Link>
+          )}
           <a
             href={githubUrl}
             target="_blank"
