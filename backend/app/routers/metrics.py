@@ -9,6 +9,11 @@ Endpoints map onto DORA-aligned primitives computed in transformation/dbt:
   GET .../metrics/cycle-time            lead-time-for-changes proxy
   GET .../metrics/review-latency        review-flow / lead-time breakdown
   GET .../metrics/change-failure        change-fail-rate proxy (reverts)
+
+The four PR-based endpoints accept `?scope=me`, which restricts the series to
+the caller's own authored work. The GitHub login is resolved server-side from
+the caller's linked identity; an unlinked user gets an empty series.
+Deployment frequency stays org-scoped — releases aren't IC-attributable.
   GET .../metrics/review-comments       PR review-comment throughput
   GET .../metrics/workflow-runs         GitHub Actions run activity
   GET .../metrics/tickets               ticket activity (all trackers)
@@ -30,6 +35,7 @@ from app.schemas.metrics import (
     CycleTimeResponse,
     DeploymentFrequencyResponse,
     Granularity,
+    MetricScope,
     ProjectActivityResponse,
     PullRequestActivityResponse,
     ReviewCommentsResponse,
@@ -56,6 +62,25 @@ def _resolve_range(
     return resolved_start, resolved_end
 
 
+async def _resolve_scope_login(
+    session: AsyncSession, ctx, scope: MetricScope
+) -> tuple[str | None, bool]:
+    """(author_login, is_unlinked_me) for a metrics request.
+
+    scope=org → (None, False). scope=me with a linked GitHub identity →
+    (login, False). scope=me while unlinked → (None, True): callers should
+    return an empty series rather than fall back to org-wide data.
+    """
+    if scope != "me":
+        return None, False
+    login = await metrics_service.resolve_github_login(
+        session,
+        tenant_id=ctx.tenant.id,
+        user_id=ctx.membership.user_id,
+    )
+    return login, login is None
+
+
 @router.get(
     "/tenants/{tenant_id}/metrics/pull-requests",
     response_model=PullRequestActivityResponse,
@@ -64,16 +89,21 @@ async def get_pull_request_activity(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
+    scope: MetricScope = Query(default="org"),
     ctx=Depends(require_permission("metrics:read")),
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
+    author_login, unlinked = await _resolve_scope_login(session, ctx, scope)
+    if unlinked:
+        return PullRequestActivityResponse(granularity=granularity, points=[])
     return await metrics_service.pull_request_activity(
         session,
         ctx.tenant.id,
         granularity=granularity,
         start=resolved_start,
         end=resolved_end,
+        author_login=author_login,
     )
 
 
@@ -106,16 +136,21 @@ async def get_cycle_time(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
+    scope: MetricScope = Query(default="org"),
     ctx=Depends(require_permission("metrics:read")),
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
+    author_login, unlinked = await _resolve_scope_login(session, ctx, scope)
+    if unlinked:
+        return CycleTimeResponse(granularity=granularity, points=[])
     return await metrics_service.cycle_time(
         session,
         ctx.tenant.id,
         granularity=granularity,
         start=resolved_start,
         end=resolved_end,
+        author_login=author_login,
     )
 
 
@@ -127,16 +162,21 @@ async def get_review_latency(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
+    scope: MetricScope = Query(default="org"),
     ctx=Depends(require_permission("metrics:read")),
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
+    author_login, unlinked = await _resolve_scope_login(session, ctx, scope)
+    if unlinked:
+        return ReviewLatencyResponse(granularity=granularity, points=[])
     return await metrics_service.review_latency(
         session,
         ctx.tenant.id,
         granularity=granularity,
         start=resolved_start,
         end=resolved_end,
+        author_login=author_login,
     )
 
 
@@ -148,16 +188,21 @@ async def get_change_failure(
     granularity: Granularity = Query(default="daily"),
     start: date_type | None = Query(default=None),
     end: date_type | None = Query(default=None),
+    scope: MetricScope = Query(default="org"),
     ctx=Depends(require_permission("metrics:read")),
     session: AsyncSession = Depends(get_async_session),
 ):
     resolved_start, resolved_end = _resolve_range(start, end)
+    author_login, unlinked = await _resolve_scope_login(session, ctx, scope)
+    if unlinked:
+        return ChangeFailureResponse(granularity=granularity, points=[])
     return await metrics_service.change_failure(
         session,
         ctx.tenant.id,
         granularity=granularity,
         start=resolved_start,
         end=resolved_end,
+        author_login=author_login,
     )
 
 

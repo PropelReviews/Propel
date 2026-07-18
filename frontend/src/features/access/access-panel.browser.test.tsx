@@ -13,7 +13,7 @@ import {
 } from "@/test/access-test-utils";
 import { waitFor, type RenderResult } from "@/test/render-browser";
 
-import { AccessPage } from "./access";
+import { AccessPanel } from "./access-panel";
 
 import type { Invite } from "@/lib/invites";
 import type { PermissionKey } from "@/lib/permissions";
@@ -105,7 +105,7 @@ async function mountAccess(
 ) {
   seedAuth();
   const { calls } = mockApi({ tenants: [makeTenant({ permissions })], ...options });
-  result = renderWithProviders(<AccessPage />);
+  result = renderWithProviders(<AccessPanel />);
   const { container } = result;
   await waitFor(() => container.textContent!.includes("Access"));
   return { container, calls };
@@ -133,7 +133,7 @@ async function openTab(container: HTMLElement, label: string) {
   await userEvent.click(trigger);
 }
 
-describe("AccessPage members tab", () => {
+describe("AccessPanel members tab", () => {
   it("renders member rows with name, email, and role", async () => {
     const { container } = await mountAccess(
       ["members:read", "members:assign_role", "members:remove"],
@@ -226,7 +226,7 @@ describe("AccessPage members tab", () => {
   });
 });
 
-describe("AccessPage invites tab", () => {
+describe("AccessPanel invites tab", () => {
   it("hides the invite form for users who can only read invites", async () => {
     const { container } = await mountAccess(["members:read", "invites:read"], {
       members: [selfAdmin],
@@ -303,7 +303,7 @@ describe("AccessPage invites tab", () => {
   });
 });
 
-describe("AccessPage roles tab", () => {
+describe("AccessPanel roles tab", () => {
   const ROLES_TAB_PERMS: PermissionKey[] = ["members:read", "roles:manage"];
 
   it("renders the permission matrix grouped by catalog group", async () => {

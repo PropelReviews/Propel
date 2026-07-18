@@ -25,6 +25,10 @@ from pydantic import BaseModel
 
 Granularity = Literal["daily", "weekly", "monthly"]
 
+# `org` reads tenant-wide marts; `me` filters to the caller's linked GitHub
+# identity (resolved server-side — clients never pass an author).
+MetricScope = Literal["org", "me"]
+
 
 class PullRequestActivityPoint(BaseModel):
     """PR activity bucketed to one period (day/week/month start)."""
