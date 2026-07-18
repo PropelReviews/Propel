@@ -1,4 +1,4 @@
-import matter from "gray-matter";
+import { parse as parseYaml } from "yaml";
 
 export type BlogPostMeta = {
   title: string;
@@ -17,9 +17,22 @@ const postModules = import.meta.glob("../../content/blog/*.md", {
   eager: true,
 }) as Record<string, string>;
 
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
+
 function slugFromPath(path: string): string {
   const file = path.split("/").pop() ?? path;
   return file.replace(/\.md$/, "");
+}
+
+function asTrimmedString(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return "";
 }
 
 /**
@@ -28,13 +41,14 @@ function slugFromPath(path: string): string {
  * {@link getPostBySlug}.
  */
 export function parsePost(raw: string, fallbackSlug: string): BlogPost {
-  const { data, content } = matter(raw);
-  const title = typeof data.title === "string" ? data.title.trim() : "";
-  const date = typeof data.date === "string" ? data.date.trim() : "";
-  const description =
-    typeof data.description === "string" ? data.description.trim() : "";
-  const slug =
-    typeof data.slug === "string" && data.slug.trim() ? data.slug.trim() : fallbackSlug;
+  const match = FRONTMATTER_RE.exec(raw);
+  const data = match ? (parseYaml(match[1] ?? "") as Record<string, unknown>) : {};
+  const body = match ? (match[2] ?? "") : raw;
+
+  const title = asTrimmedString(data.title);
+  const date = asTrimmedString(data.date);
+  const description = asTrimmedString(data.description);
+  const slug = asTrimmedString(data.slug) || fallbackSlug;
 
   if (!title || !date || !slug) {
     throw new Error(
@@ -47,14 +61,14 @@ export function parsePost(raw: string, fallbackSlug: string): BlogPost {
     date,
     description,
     slug,
-    content: content.trim(),
+    content: body.trim(),
   };
 }
 
 function loadPosts(): BlogPost[] {
-  return Object.entries(postModules).map(([path, raw]) =>
-    parsePost(raw, slugFromPath(path)),
-  );
+  return Object.entries(postModules)
+    .filter(([path]) => !slugFromPath(path).toLowerCase().startsWith("readme"))
+    .map(([path, raw]) => parsePost(raw, slugFromPath(path)));
 }
 
 /** All posts newest-first (by `date` frontmatter, ISO YYYY-MM-DD). */
