@@ -11,13 +11,94 @@ import {
 } from "@/test/access-test-utils";
 import { waitFor, type RenderResult } from "@/test/render-browser";
 
+import { myMetricsStorageKey } from "./dashboard-layout";
 import { MyMetricsDashboard } from "./my-metrics-dashboard";
-import { myMetricsStorageKey } from "./use-my-metrics-layout";
-import { WIDGET_CATALOG } from "./widget-catalog";
 
 const STORAGE_KEY = myMetricsStorageKey(TEST_USER.id, "tenant-1");
+const EMPTY_SERIES = {
+  metric_id: "propel.cycle_time",
+  granularity: "weekly",
+  unit: "duration",
+  format: "humanize_duration",
+  points: [],
+};
 
-const EMPTY_SERIES = { granularity: "daily", points: [] };
+const CATALOG = [
+  {
+    metric_id: "propel.cycle_time",
+    name: "PR Cycle Time",
+    version: 1,
+    revision: 1,
+    status: "active",
+    content_hash: "abc",
+    visibility: "ic",
+    description: "Median time from PR open to merge.",
+    tags: ["dora"],
+    entity: "pull_request",
+    source: "standard",
+    extends: null,
+    params_bound: null,
+    draft_pending: false,
+    notices: [],
+    compile_error: null,
+    updated_at: null,
+    enrolled: true,
+    display: {
+      unit: "duration",
+      format: "humanize_duration",
+      direction: "lower_is_better",
+    },
+    grains: ["day", "week", "month"],
+  },
+  {
+    metric_id: "propel.merged_prs",
+    name: "Merged PRs",
+    version: 1,
+    revision: 1,
+    status: "active",
+    content_hash: "def",
+    visibility: "team",
+    description: "Count of merged pull requests.",
+    tags: [],
+    entity: "pull_request",
+    source: "standard",
+    extends: null,
+    params_bound: null,
+    draft_pending: false,
+    notices: [],
+    compile_error: null,
+    updated_at: null,
+    enrolled: true,
+    display: { unit: "count", format: null, direction: null },
+    grains: ["day", "week", "month"],
+  },
+  {
+    metric_id: "propel.change_failure_rate",
+    name: "Change Failure Rate",
+    version: 1,
+    revision: 1,
+    status: "active",
+    content_hash: "ghi",
+    visibility: "org",
+    description: "Share of merges that look like reverts.",
+    tags: ["dora"],
+    entity: null,
+    source: "standard",
+    extends: null,
+    params_bound: null,
+    draft_pending: false,
+    notices: [],
+    compile_error: null,
+    updated_at: null,
+    enrolled: true,
+    display: {
+      unit: "percent",
+      format: "percent_1dp",
+      direction: "lower_is_better",
+    },
+    grains: ["day", "week", "month"],
+  },
+];
 
 let result: RenderResult | undefined;
 
@@ -27,17 +108,58 @@ afterEach(() => {
   cleanupAuthAndFetch();
 });
 
-function mountDashboard(user = TEST_USER) {
+function baseHandlers(
+  overrides: Array<{
+    method?: string;
+    match: RegExp;
+    response: unknown | (() => unknown);
+    status?: number;
+  }> = [],
+) {
+  return [
+    {
+      match: /\/metric-definitions(\?|$)/,
+      response: CATALOG,
+    },
+    {
+      match: /\/metrics\/values\?/,
+      response: EMPTY_SERIES,
+    },
+    {
+      method: "GET",
+      match: /\/dashboard-preference$/,
+      status: 404,
+      response: { detail: "No dashboard preference saved" },
+    },
+    {
+      method: "PUT",
+      match: /\/dashboard-preference$/,
+      response: {
+        layout: { version: 2, tiles: [] },
+        updated_at: new Date().toISOString(),
+      },
+    },
+    ...overrides,
+  ];
+}
+
+function mountDashboard(
+  handlers = baseHandlers(),
+  user = {
+    ...TEST_USER,
+    github: {
+      connected: true,
+      account_id: "1",
+      account_email: null,
+      login: "sam-self",
+    },
+  },
+) {
   seedAuth();
   mockApi({
     user,
     tenants: [makeTenant({ role: "individual", permissions: ["metrics:read"] })],
-    extraHandlers: [
-      {
-        match: /\/metrics\/(pull-requests|cycle-time|review-latency|change-failure)$/,
-        response: EMPTY_SERIES,
-      },
-    ],
+    extraHandlers: handlers,
   });
   result = renderWithProviders(
     <MyMetricsDashboard userId={TEST_USER.id} tenantId="tenant-1" />,
@@ -45,9 +167,9 @@ function mountDashboard(user = TEST_USER) {
   return result.container;
 }
 
-function sections(container: HTMLElement): string[] {
-  return [...container.querySelectorAll("section[aria-label]")].map(
-    (s) => s.getAttribute("aria-label")!,
+function tileLabels(container: HTMLElement): string[] {
+  return [...container.querySelectorAll("[data-testid^='dashboard-tile-']")].map(
+    (el) => el.getAttribute("aria-label") ?? "",
   );
 }
 
@@ -58,74 +180,43 @@ function findButton(root: ParentNode, text: string): HTMLButtonElement | undefin
 }
 
 describe("MyMetricsDashboard", () => {
-  it("renders every default chart section on first visit", async () => {
+  it("renders default preferred metrics from the catalog", async () => {
     const container = mountDashboard();
-    await waitFor(() => sections(container).length === WIDGET_CATALOG.length);
+    await waitFor(() => tileLabels(container).includes("PR Cycle Time"));
 
-    expect(sections(container)).toEqual(WIDGET_CATALOG.map((w) => w.title));
-    // Everything is already visible, so there is nothing left to add.
-    expect(findButton(container, "Add chart")!.disabled).toBe(true);
+    const labels = tileLabels(container);
+    expect(labels).toContain("PR Cycle Time");
+    expect(labels).toContain("Merged PRs");
+    expect(labels).toContain("Change Failure Rate");
+    expect(container.querySelector("[data-slot='metric-filters-bar']")).toBeTruthy();
   });
 
-  it("shows the GitHub connect prompt only while unlinked", async () => {
+  it("removes a chart and persists the choice locally", async () => {
     const container = mountDashboard();
-    await waitFor(() => sections(container).length > 0);
-    expect(container.textContent).toContain("Connect GitHub to see your metrics");
+    await waitFor(() => tileLabels(container).includes("PR Cycle Time"));
 
-    result?.unmount();
-    cleanupAuthAndFetch();
+    await userEvent.click(findButton(container, "Remove PR Cycle Time")!);
+    await waitFor(() => !tileLabels(container).includes("PR Cycle Time"));
 
-    const linked = mountDashboard({
-      ...TEST_USER,
-      github: {
-        connected: true,
-        account_id: "1",
-        account_email: null,
-        login: "sam-self",
-      },
-    });
-    // The prompt clears once /auth/me resolves with a linked GitHub login.
-    await waitFor(
-      () =>
-        sections(linked).length === WIDGET_CATALOG.length &&
-        !linked.textContent!.includes("Connect GitHub to see your metrics"),
-    );
-  });
-
-  it("removes a chart and persists the choice", async () => {
-    const container = mountDashboard();
-    await waitFor(() => sections(container).length === WIDGET_CATALOG.length);
-
-    await userEvent.click(findButton(container, "Remove Pull request activity")!);
-    await waitFor(() => sections(container).length === WIDGET_CATALOG.length - 1);
-
-    expect(sections(container)).not.toContain("Pull request activity");
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual([
-      "cycle-time",
-      "review-latency",
-      "change-failure",
-    ]);
-
-    // A fresh mount for the same user + workspace keeps the saved layout.
-    result?.unmount();
-    const remounted = renderWithProviders(
-      <MyMetricsDashboard userId={TEST_USER.id} tenantId="tenant-1" />,
-    );
-    result = remounted;
-    await waitFor(
-      () =>
-        sections(remounted.container as HTMLElement).length ===
-        WIDGET_CATALOG.length - 1,
-    );
-    expect(sections(remounted.container as HTMLElement)).not.toContain(
-      "Pull request activity",
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(stored.version).toBe(2);
+    expect(stored.tiles.map((t: { i: string }) => t.i)).not.toContain(
+      "propel.cycle_time",
     );
   });
 
   it("adds a removed chart back through the Add chart dialog", async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(["cycle-time"]));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        range: "quarter",
+        granularity: "weekly",
+        tiles: [{ i: "propel.cycle_time", x: 0, y: 0, w: 6, h: 4 }],
+      }),
+    );
     const container = mountDashboard();
-    await waitFor(() => sections(container).length === 1);
+    await waitFor(() => tileLabels(container).length === 1);
 
     await userEvent.click(findButton(container, "Add chart")!);
     await waitFor(
@@ -136,31 +227,63 @@ describe("MyMetricsDashboard", () => {
     );
 
     const dialog = document.body.querySelector('[data-slot="dialog-content"]')!;
-    // Only charts not already on the dashboard are offered.
-    expect(dialog.textContent).not.toContain("Cycle time");
+    expect(dialog.textContent).not.toContain("PR Cycle Time");
     const row = [...dialog.querySelectorAll("li")].find((li) =>
-      li.textContent!.includes("Change failure rate"),
+      li.textContent!.includes("Change Failure Rate"),
     )!;
     await userEvent.click(findButton(row, "Add")!);
 
-    await waitFor(() => sections(container).includes("Change failure rate"));
-    // Added charts append to the end of the layout.
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual([
-      "cycle-time",
-      "change-failure",
+    await waitFor(() => tileLabels(container).includes("Change Failure Rate"));
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(stored.tiles.map((t: { i: string }) => t.i)).toEqual([
+      "propel.cycle_time",
+      "propel.change_failure_rate",
     ]);
   });
 
   it("shows an empty state and resets to defaults", async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, tiles: [] }));
     const container = mountDashboard();
     await waitFor(() => container.textContent!.includes("No charts on your dashboard"));
-    expect(sections(container)).toEqual([]);
+    expect(tileLabels(container)).toEqual([]);
 
     await userEvent.click(findButton(container, "Reset to defaults")!);
-    await waitFor(() => sections(container).length === WIDGET_CATALOG.length);
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual(
-      WIDGET_CATALOG.map((w) => w.id),
-    );
+    await waitFor(() => tileLabels(container).includes("PR Cycle Time"));
+  });
+
+  it("restores from the server when local storage is empty", async () => {
+    const container = mountDashboard([
+      {
+        match: /\/metric-definitions(\?|$)/,
+        response: CATALOG,
+      },
+      {
+        match: /\/metrics\/values\?/,
+        response: EMPTY_SERIES,
+      },
+      {
+        method: "GET",
+        match: /\/dashboard-preference$/,
+        response: {
+          layout: {
+            version: 2,
+            range: "month",
+            granularity: "daily",
+            tiles: [{ i: "propel.merged_prs", x: 0, y: 0, w: 12, h: 4 }],
+          },
+          updated_at: "2026-07-18T00:00:00Z",
+        },
+      },
+      {
+        method: "PUT",
+        match: /\/dashboard-preference$/,
+        response: {
+          layout: { version: 2, tiles: [] },
+          updated_at: "2026-07-18T00:00:00Z",
+        },
+      },
+    ]);
+    await waitFor(() => tileLabels(container).includes("Merged PRs"));
+    expect(tileLabels(container)).toEqual(["Merged PRs"]);
   });
 });

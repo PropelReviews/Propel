@@ -177,3 +177,20 @@ class TicketDescriptionEditsPoint(BaseModel):
 class TicketDescriptionEditsResponse(BaseModel):
     granularity: Granularity
     points: list[TicketDescriptionEditsPoint]
+
+
+class MetricValuePoint(BaseModel):
+    """One workspace-total bucket from ``analytics.fct_metric_values``."""
+
+    period_start: date
+    value: float | None
+
+
+class MetricValuesResponse(BaseModel):
+    """Generic chart series for a declarative metric definition."""
+
+    metric_id: str
+    granularity: Granularity
+    unit: str | None = None
+    format: str | None = None
+    points: list[MetricValuePoint]

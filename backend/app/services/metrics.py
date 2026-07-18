@@ -37,6 +37,8 @@ from app.schemas.metrics import (
     DeploymentFrequencyPoint,
     DeploymentFrequencyResponse,
     Granularity,
+    MetricValuePoint,
+    MetricValuesResponse,
     ProjectActivityPoint,
     ProjectActivityResponse,
     PullRequestActivityPoint,
@@ -253,6 +255,49 @@ _TICKET_DESCRIPTION_EDITS_QUERY = text(
     ORDER BY 1
     """
 )
+
+# Workspace-total series from declarative metrics. Grain is pre-bucketed in
+# fct_metric_values (day/week/month); we only filter, never re-aggregate.
+_METRIC_VALUES_QUERY = text(
+    """
+    SELECT
+        (bucket_start AT TIME ZONE 'UTC')::date AS period_start,
+        value
+    FROM analytics.fct_metric_values
+    WHERE tenant_id = :tenant_id
+      AND metric_id = :metric_id
+      AND grain = :grain
+      AND is_total = true
+      AND (bucket_start AT TIME ZONE 'UTC')::date >= :start
+      AND (bucket_start AT TIME ZONE 'UTC')::date <= :end
+    ORDER BY 1
+    """
+)
+
+# Pre-is_total warehouses only stored workspace totals as empty dim keys.
+# Used when the column has not been rebuilt yet (expand/contract cutover).
+_METRIC_VALUES_QUERY_LEGACY = text(
+    """
+    SELECT
+        (bucket_start AT TIME ZONE 'UTC')::date AS period_start,
+        value
+    FROM analytics.fct_metric_values
+    WHERE tenant_id = :tenant_id
+      AND metric_id = :metric_id
+      AND grain = :grain
+      AND dim_repo = ''
+      AND dim_team = ''
+      AND (bucket_start AT TIME ZONE 'UTC')::date >= :start
+      AND (bucket_start AT TIME ZONE 'UTC')::date <= :end
+    ORDER BY 1
+    """
+)
+
+_GRANULARITY_TO_GRAIN: dict[str, str] = {
+    "daily": "day",
+    "weekly": "week",
+    "monthly": "month",
+}
 
 # --------------------------------------------------------------------------- #
 # Person-scoped (`scope=me`) queries
@@ -836,5 +881,57 @@ async def ticket_description_edits(
                 description_edits=count,
             )
             for period_start, count in rows
+        ],
+    )
+
+
+async def metric_values(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    metric_id: str,
+    granularity: Granularity,
+    start: date,
+    end: date,
+    unit: str | None = None,
+    format: str | None = None,
+) -> MetricValuesResponse:
+    """Read workspace-total points for one enrolled declarative metric."""
+    params = {
+        "tenant_id": tenant_id,
+        "metric_id": metric_id,
+        "grain": _GRANULARITY_TO_GRAIN[granularity],
+        "start": start,
+        "end": end,
+    }
+    try:
+        result = await session.execute(_METRIC_VALUES_QUERY, params)
+        rows = result.all()
+    except ProgrammingError as exc:
+        await session.rollback()
+        if "is_total" not in str(exc):
+            logger.warning(
+                "analytics.fct_metric_values missing; returning empty series"
+            )
+            rows = []
+        else:
+            logger.warning(
+                "analytics.fct_metric_values.is_total missing; "
+                "falling back to empty-dim totals"
+            )
+            rows = await _safe_query(
+                session,
+                _METRIC_VALUES_QUERY_LEGACY,
+                params,
+                "analytics.fct_metric_values",
+            )
+    return MetricValuesResponse(
+        metric_id=metric_id,
+        granularity=granularity,
+        unit=unit,
+        format=format,
+        points=[
+            MetricValuePoint(period_start=period_start, value=value)
+            for period_start, value in rows
         ],
     )

@@ -11,6 +11,7 @@ from app.otel_logging import setup_logging, shutdown_logging
 from app.routers import (
     auth,
     connections,
+    dashboard_preference,
     ingestion,
     invites,
     members,
@@ -64,6 +65,7 @@ app.include_router(connections.router)
 app.include_router(ingestion.router)
 app.include_router(metrics.router)
 app.include_router(metric_definitions.router)
+app.include_router(dashboard_preference.router)
 app.include_router(waitlist.router)
 
 

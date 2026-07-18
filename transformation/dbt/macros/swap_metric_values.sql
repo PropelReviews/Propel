@@ -28,12 +28,12 @@
 
   insert into {{ ref('fct_metric_values') }} (
     tenant_id, metric_id, definition_version, grain,
-    bucket_start, bucket_end, is_complete,
+    bucket_start, bucket_end, is_complete, is_total,
     dim_repo, dim_team, value, numerator, denominator
   )
   select
     tenant_id, metric_id, definition_version, grain,
-    bucket_start, bucket_end, is_complete,
+    bucket_start, bucket_end, is_complete, is_total,
     dim_repo, dim_team, value, numerator, denominator
   from {{ source_relation }};
   commit;

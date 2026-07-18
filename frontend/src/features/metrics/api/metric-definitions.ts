@@ -7,6 +7,12 @@ import { authedGet, authedRequest } from "@/lib/api";
 
 export type MetricSource = "standard" | "standard_customized" | "custom" | "variant";
 
+export type MetricDisplay = {
+  unit: string | null;
+  format: string | null;
+  direction: string | null;
+};
+
 export type MetricCatalogItem = {
   metric_id: string;
   name: string;
@@ -26,6 +32,8 @@ export type MetricCatalogItem = {
   compile_error: string | null;
   updated_at: string | null;
   enrolled: boolean;
+  display?: MetricDisplay | null;
+  grains?: string[];
 };
 
 export type MetricDefinitionDetail = {

@@ -1248,3 +1248,226 @@ async def test_scope_rejects_arbitrary_values(client: AsyncClient):
         headers=auth_headers(token),
     )
     assert resp.status_code == 422, resp.text
+
+
+@pytest.fixture
+async def fct_metric_values_table(db_engine):
+    """Create analytics.fct_metric_values with the is_total serving contract."""
+    async with db_engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS analytics"))
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS analytics.fct_metric_values (
+                    tenant_id uuid NOT NULL,
+                    metric_id text NOT NULL,
+                    definition_version text NOT NULL,
+                    grain text NOT NULL,
+                    bucket_start timestamptz NOT NULL,
+                    bucket_end timestamptz,
+                    is_complete boolean,
+                    is_total boolean NOT NULL DEFAULT true,
+                    dim_repo text NOT NULL DEFAULT '',
+                    dim_team text NOT NULL DEFAULT '',
+                    value float8,
+                    numerator float8,
+                    denominator float8
+                )
+                """
+            )
+        )
+        await conn.execute(text("TRUNCATE analytics.fct_metric_values"))
+    yield
+    async with db_engine.begin() as conn:
+        await conn.execute(text("DROP TABLE IF EXISTS analytics.fct_metric_values"))
+
+
+async def _seed_metric_value(
+    tenant_id: uuid.UUID,
+    *,
+    metric_id: str,
+    grain: str,
+    bucket_start: datetime,
+    value: float | None,
+    is_total: bool = True,
+    dim_repo: str = "",
+) -> None:
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO analytics.fct_metric_values
+                (tenant_id, metric_id, definition_version, grain, bucket_start,
+                 is_total, dim_repo, dim_team, value)
+                VALUES
+                (:tenant_id, :metric_id, 'test', :grain, :bucket_start,
+                 :is_total, :dim_repo, '', :value)
+                """
+            ),
+            {
+                "tenant_id": tenant_id,
+                "metric_id": metric_id,
+                "grain": grain,
+                "bucket_start": bucket_start,
+                "is_total": is_total,
+                "dim_repo": dim_repo,
+                "value": value,
+            },
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_metric_values_workspace_total(
+    client: AsyncClient, fct_metric_values_table
+):
+    token, tenant = await _setup_tenant(client, email="values@example.com")
+    tenant_id = uuid.UUID(tenant["id"])
+
+    await _seed_metric_value(
+        tenant_id,
+        metric_id="propel.cycle_time",
+        grain="day",
+        bucket_start=datetime(2026, 6, 1, tzinfo=UTC),
+        value=7200.0,
+        is_total=True,
+    )
+    # Dimension breakdown rows must not appear in workspace totals.
+    await _seed_metric_value(
+        tenant_id,
+        metric_id="propel.cycle_time",
+        grain="day",
+        bucket_start=datetime(2026, 6, 1, tzinfo=UTC),
+        value=9999.0,
+        is_total=False,
+        dim_repo="acme/api",
+    )
+    await _seed_metric_value(
+        uuid.uuid4(),
+        metric_id="propel.cycle_time",
+        grain="day",
+        bucket_start=datetime(2026, 6, 1, tzinfo=UTC),
+        value=1.0,
+        is_total=True,
+    )
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/values",
+        params={
+            "metric_id": "propel.cycle_time",
+            "granularity": "daily",
+            "start": "2026-06-01",
+            "end": "2026-06-30",
+        },
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["metric_id"] == "propel.cycle_time"
+    assert body["granularity"] == "daily"
+    assert body["unit"] == "duration"
+    assert body["points"] == [{"period_start": "2026-06-01", "value": 7200.0}]
+
+
+@pytest.mark.asyncio
+async def test_metric_values_unknown_metric_404(
+    client: AsyncClient, fct_metric_values_table
+):
+    token, tenant = await _setup_tenant(client, email="unknown-metric@example.com")
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/values",
+        params={"metric_id": "org.does_not_exist"},
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 404, resp.text
+
+
+@pytest.fixture
+async def fct_metric_values_table_legacy(db_engine):
+    """Pre-is_total warehouse shape (empty dims = workspace total)."""
+    async with db_engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS analytics"))
+        await conn.execute(text("DROP TABLE IF EXISTS analytics.fct_metric_values"))
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE analytics.fct_metric_values (
+                    tenant_id uuid NOT NULL,
+                    metric_id text NOT NULL,
+                    definition_version text NOT NULL,
+                    grain text NOT NULL,
+                    bucket_start timestamptz NOT NULL,
+                    bucket_end timestamptz,
+                    is_complete boolean,
+                    dim_repo text NOT NULL DEFAULT '',
+                    dim_team text NOT NULL DEFAULT '',
+                    value float8,
+                    numerator float8,
+                    denominator float8
+                )
+                """
+            )
+        )
+    yield
+    async with db_engine.begin() as conn:
+        await conn.execute(text("DROP TABLE IF EXISTS analytics.fct_metric_values"))
+
+
+@pytest.mark.asyncio
+async def test_metric_values_legacy_schema_without_is_total(
+    client: AsyncClient, fct_metric_values_table_legacy
+):
+    token, tenant = await _setup_tenant(client, email="legacy-values@example.com")
+    tenant_id = uuid.UUID(tenant["id"])
+
+    async with async_session_maker() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO analytics.fct_metric_values
+                (tenant_id, metric_id, definition_version, grain, bucket_start,
+                 dim_repo, dim_team, value)
+                VALUES
+                (:tenant_id, 'propel.cycle_time', 'test', 'week',
+                 :bucket_start, '', '', 3600.0)
+                """
+            ),
+            {
+                "tenant_id": tenant_id,
+                "bucket_start": datetime(2026, 6, 2, tzinfo=UTC),
+            },
+        )
+        await session.commit()
+
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/values",
+        params={
+            "metric_id": "propel.cycle_time",
+            "granularity": "weekly",
+            "start": "2026-06-01",
+            "end": "2026-06-30",
+        },
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["points"] == [{"period_start": "2026-06-02", "value": 3600.0}]
+
+
+@pytest.mark.asyncio
+async def test_metric_values_missing_table_empty(client: AsyncClient):
+    token, tenant = await _setup_tenant(client, email="no-fct@example.com")
+    resp = await client.get(
+        f"/api/v1/tenants/{tenant['id']}/metrics/values",
+        params={
+            "metric_id": "propel.cycle_time",
+            "granularity": "weekly",
+            "start": "2026-06-01",
+            "end": "2026-06-30",
+        },
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["metric_id"] == "propel.cycle_time"
+    assert body["points"] == []

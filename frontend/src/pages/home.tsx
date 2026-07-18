@@ -71,8 +71,8 @@ export function HomePage() {
 
   return (
     <Page
-      title="My metrics"
-      subtitle="Your personal contribution metrics — add or remove charts to taste."
+      title="Metrics dashboard"
+      subtitle="Arrange enrolled workspace metrics as tiles. Timeframe and granularity apply to the whole dashboard."
       greeting={firstName ? `Welcome back, ${firstName}.` : undefined}
     >
       {user && (

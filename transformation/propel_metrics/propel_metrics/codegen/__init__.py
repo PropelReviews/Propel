@@ -81,6 +81,7 @@ select
     null::timestamptz as bucket_start,
     null::timestamptz as bucket_end,
     null::boolean as is_complete,
+    null::boolean as is_total,
     ''::text as dim_repo,
     ''::text as dim_team,
     null::float8 as value,
@@ -118,6 +119,8 @@ def _render_schema_yml(metrics: list[ResolvedMetric]) -> str:
         "      - name: grain",
         "        data_tests: [not_null]",
         "      - name: bucket_start",
+        "        data_tests: [not_null]",
+        "      - name: is_total",
         "        data_tests: [not_null]",
     ]
     for metric in metrics:

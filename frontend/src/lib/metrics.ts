@@ -1,6 +1,6 @@
 // Shapes mirror the backend analytics metrics API (app/schemas/metrics.py),
 // which serves the dbt-built DORA primitive marts (transformation/dbt). Used by
-// the dashboard chart components (home page, My metrics).
+// the dashboard chart components (home page metrics dashboard).
 
 import { toIsoDate, type Granularity } from "@/components/charts";
 import { authedGet } from "@/lib/api";
@@ -279,6 +279,34 @@ export function getTicketDescriptionEdits(
   const params = rangeParams(options);
   return authedGet<TicketDescriptionEditsResponse>(
     `/api/v1/tenants/${tenantId}/metrics/ticket-description-edits?${params}`,
+    token,
+  );
+}
+
+export type MetricValuePoint = {
+  period_start: string;
+  value: number | null;
+};
+
+export type MetricValuesResponse = {
+  metric_id: string;
+  granularity: Granularity;
+  unit: string | null;
+  format: string | null;
+  points: MetricValuePoint[];
+};
+
+/** Workspace-total series for one enrolled declarative metric. */
+export function getMetricValues(
+  token: string,
+  tenantId: string,
+  metricId: string,
+  options: MetricRange,
+): Promise<MetricValuesResponse> {
+  const params = rangeParams(options);
+  params.set("metric_id", metricId);
+  return authedGet<MetricValuesResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/values?${params}`,
     token,
   );
 }

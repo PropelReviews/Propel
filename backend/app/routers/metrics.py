@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_permission
@@ -36,6 +37,7 @@ from app.schemas.metrics import (
     DeploymentFrequencyResponse,
     Granularity,
     MetricScope,
+    MetricValuesResponse,
     ProjectActivityResponse,
     PullRequestActivityResponse,
     ReviewCommentsResponse,
@@ -45,6 +47,7 @@ from app.schemas.metrics import (
     TicketDescriptionEditsResponse,
     WorkflowRunsResponse,
 )
+from app.services import metric_definitions as metric_definitions_service
 from app.services import metrics as metrics_service
 
 router = APIRouter(prefix="/api/v1", tags=["metrics"])
@@ -329,4 +332,45 @@ async def get_ticket_description_edits(
         granularity=granularity,
         start=resolved_start,
         end=resolved_end,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/metrics/values",
+    response_model=MetricValuesResponse,
+)
+async def get_metric_values(
+    metric_id: str = Query(..., description="Full namespaced metric id"),
+    granularity: Granularity = Query(default="daily"),
+    start: date_type | None = Query(default=None),
+    end: date_type | None = Query(default=None),
+    ctx=Depends(require_permission("metrics:read")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Workspace-total series from ``analytics.fct_metric_values``.
+
+    Only active, enrolled metrics are chartable. Missing analytics tables
+    degrade to an empty series (same as the legacy mart endpoints).
+    """
+    resolved_start, resolved_end = _resolve_range(start, end)
+    match = await metric_definitions_service.get_chartable_metric(
+        session,
+        ctx.tenant.slug,
+        metric_id,
+    )
+    if match is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Metric {metric_id!r} is not active for this workspace",
+        )
+    display = match.get("display") or {}
+    return await metrics_service.metric_values(
+        session,
+        ctx.tenant.id,
+        metric_id=metric_id,
+        granularity=granularity,
+        start=resolved_start,
+        end=resolved_end,
+        unit=display.get("unit") if isinstance(display, dict) else None,
+        format=display.get("format") if isinstance(display, dict) else None,
     )
