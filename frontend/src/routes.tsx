@@ -8,7 +8,6 @@ import { RequirePermission } from "@/components/require-permission";
 import { useAuthFlag } from "@/hooks/use-auth-flag";
 import { useChartDemoFlag } from "@/hooks/use-chart-demo-flag";
 import { ChartDemoPage } from "@/pages/chart-demo";
-import { DataPage } from "@/pages/data";
 import { GithubCallbackPage } from "@/pages/github-callback";
 import { HomePage } from "@/pages/home";
 import { InviteAcceptPage } from "@/pages/invites/accept";
@@ -17,10 +16,7 @@ import { MetricsPage } from "@/pages/metrics";
 import { MetricDetailRoute } from "@/pages/metrics/detail";
 import { MetricEditPage } from "@/pages/metrics/edit";
 import { MetricNewPage } from "@/pages/metrics/new";
-import { AccessPage } from "@/pages/settings/access";
 import { DimensionMappingsSettingsPage } from "@/pages/settings/dimension-mappings";
-import { MetricHealthSettingsPage } from "@/pages/settings/metric-health";
-import { MetricSetPage } from "@/pages/settings/metric-set";
 import { WorkspacePage } from "@/pages/settings/workspace";
 import { SignInPage } from "@/pages/sign-in";
 import { SignUpPage } from "@/pages/sign-up";
@@ -54,7 +50,8 @@ export function AppRoutes() {
       <Route path="/" element={<App />} />
       <Route element={<ShellLayout />}>
         <Route path="/home" element={<HomePage />} />
-        <Route path="/data" element={<DataPage />} />
+        {/* The Data page is gone; keep old bookmarks working. */}
+        <Route path="/data" element={<Navigate to="/home" replace />} />
         <Route
           path="/metrics"
           element={
@@ -95,37 +92,25 @@ export function AppRoutes() {
             </RequireAuth>
           }
         />
-        <Route
-          path="/settings/access"
-          element={
-            <RequireAuth>
-              <RequirePermission
-                anyOf={["roles:manage", "members:assign_role", "invites:read"]}
-              >
-                <AccessPage />
-              </RequirePermission>
-            </RequireAuth>
-          }
-        />
+        {/* Access management now lives on the Account page. */}
+        <Route path="/settings/access" element={<Navigate to="/profile" replace />} />
         <Route
           path="/settings/workspace"
           element={
             <RequireAuth>
-              <RequirePermission anyOf={["connections:manage"]}>
+              {/* Hosts integrations (connections:manage) and metric health
+                  (metrics:read); sections gate themselves. */}
+              <RequirePermission anyOf={["connections:manage", "metrics:read"]}>
                 <WorkspacePage />
               </RequirePermission>
             </RequireAuth>
           }
         />
+        {/* The Metric set page is gone; enable/disable + params now happen
+            from the Metrics catalog. */}
         <Route
           path="/settings/metric-set"
-          element={
-            <RequireAuth>
-              <RequirePermission anyOf={["metrics:read"]}>
-                <MetricSetPage />
-              </RequirePermission>
-            </RequireAuth>
-          }
+          element={<Navigate to="/metrics" replace />}
         />
         <Route
           path="/settings/dimension-mappings"
@@ -137,15 +122,10 @@ export function AppRoutes() {
             </RequireAuth>
           }
         />
+        {/* Metric health merged into the Workspace page. */}
         <Route
           path="/settings/metric-health"
-          element={
-            <RequireAuth>
-              <RequirePermission anyOf={["metrics:read"]}>
-                <MetricHealthSettingsPage />
-              </RequirePermission>
-            </RequireAuth>
-          }
+          element={<Navigate to="/settings/workspace" replace />}
         />
         <Route
           path="/profile"

@@ -8,6 +8,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class MetricDisplayRead(BaseModel):
+    """Resolved chart display hints from Metric YAML ``spec.display``."""
+
+    unit: str | None = None
+    format: str | None = None
+    direction: str | None = None
+
+
 class MetricSummaryRead(BaseModel):
     """Enriched catalog row (M5)."""
 
@@ -29,6 +37,8 @@ class MetricSummaryRead(BaseModel):
     compile_error: str | None = None
     updated_at: datetime | None = None
     enrolled: bool = True
+    display: MetricDisplayRead | None = None
+    grains: list[str] = Field(default_factory=list)
 
 
 class MetricDefinitionRead(BaseModel):

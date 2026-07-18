@@ -24,3 +24,4 @@ def test_swap_macro_is_transactional_delete_insert() -> None:
     # Shared vs per-org scoping
     assert "tenant_ids" in text
     assert "dim_team" in text
+    assert "is_total" in text

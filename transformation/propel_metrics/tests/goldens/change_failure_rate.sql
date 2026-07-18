@@ -44,6 +44,7 @@ grain_day as (
  ''::text as dim_repo,
  ''::text as dim_team,
  (date_trunc('day', r.t at time zone 'UTC')) as bucket,
+ true as is_total,
  count(*)::float8 as v
  from num_rows r
  group by r.tenant_id, (date_trunc('day', r.t at time zone 'UTC')), r.dim_repo, r.dim_team
@@ -54,6 +55,7 @@ grain_day as (
  ''::text as dim_repo,
  ''::text as dim_team,
  (date_trunc('day', r.t at time zone 'UTC')) as bucket,
+ true as is_total,
  count(*)::float8 as v
  from den_rows r
  group by r.tenant_id, (date_trunc('day', r.t at time zone 'UTC')), r.dim_repo, r.dim_team
@@ -66,13 +68,14 @@ grain_day as (
  den.bucket::timestamptz as bucket_start,
  (((den.bucket) + interval '1 day'))::timestamptz as bucket_end,
  ((((den.bucket) + interval '1 day')) <= current_timestamp) as is_complete,
+ den.is_total as is_total,
  den.dim_repo as dim_repo,
  den.dim_team as dim_team,
  coalesce(num.v, 0)::float8 / nullif(den.v, 0) as "value",
  coalesce(num.v, 0)::float8 as numerator,
  den.v::float8 as denominator
  from den
- left join num using (tenant_id, dim_repo, dim_team, bucket)
+ left join num using (tenant_id, dim_repo, dim_team, is_total, bucket)
 
 ),
 grain_week as (
@@ -83,6 +86,7 @@ grain_week as (
  ''::text as dim_repo,
  ''::text as dim_team,
  (date_trunc('week', r.t at time zone 'UTC')) as bucket,
+ true as is_total,
  count(*)::float8 as v
  from num_rows r
  group by r.tenant_id, (date_trunc('week', r.t at time zone 'UTC')), r.dim_repo, r.dim_team
@@ -93,6 +97,7 @@ grain_week as (
  ''::text as dim_repo,
  ''::text as dim_team,
  (date_trunc('week', r.t at time zone 'UTC')) as bucket,
+ true as is_total,
  count(*)::float8 as v
  from den_rows r
  group by r.tenant_id, (date_trunc('week', r.t at time zone 'UTC')), r.dim_repo, r.dim_team
@@ -105,13 +110,14 @@ grain_week as (
  den.bucket::timestamptz as bucket_start,
  (((den.bucket) + interval '7 days'))::timestamptz as bucket_end,
  ((((den.bucket) + interval '7 days')) <= current_timestamp) as is_complete,
+ den.is_total as is_total,
  den.dim_repo as dim_repo,
  den.dim_team as dim_team,
  coalesce(num.v, 0)::float8 / nullif(den.v, 0) as "value",
  coalesce(num.v, 0)::float8 as numerator,
  den.v::float8 as denominator
  from den
- left join num using (tenant_id, dim_repo, dim_team, bucket)
+ left join num using (tenant_id, dim_repo, dim_team, is_total, bucket)
 
 ),
 grain_month as (
@@ -122,6 +128,7 @@ grain_month as (
  ''::text as dim_repo,
  ''::text as dim_team,
  (date_trunc('month', r.t at time zone 'UTC')) as bucket,
+ true as is_total,
  count(*)::float8 as v
  from num_rows r
  group by r.tenant_id, (date_trunc('month', r.t at time zone 'UTC')), r.dim_repo, r.dim_team
@@ -132,6 +139,7 @@ grain_month as (
  ''::text as dim_repo,
  ''::text as dim_team,
  (date_trunc('month', r.t at time zone 'UTC')) as bucket,
+ true as is_total,
  count(*)::float8 as v
  from den_rows r
  group by r.tenant_id, (date_trunc('month', r.t at time zone 'UTC')), r.dim_repo, r.dim_team
@@ -144,13 +152,14 @@ grain_month as (
  den.bucket::timestamptz as bucket_start,
  (((den.bucket) + interval '1 month'))::timestamptz as bucket_end,
  ((((den.bucket) + interval '1 month')) <= current_timestamp) as is_complete,
+ den.is_total as is_total,
  den.dim_repo as dim_repo,
  den.dim_team as dim_team,
  coalesce(num.v, 0)::float8 / nullif(den.v, 0) as "value",
  coalesce(num.v, 0)::float8 as numerator,
  den.v::float8 as denominator
  from den
- left join num using (tenant_id, dim_repo, dim_team, bucket)
+ left join num using (tenant_id, dim_repo, dim_team, is_total, bucket)
 
 ),
 

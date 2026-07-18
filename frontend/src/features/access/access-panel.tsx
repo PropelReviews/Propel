@@ -74,7 +74,12 @@ function formatDate(iso: string): string {
   }).format(date);
 }
 
-export function AccessPage() {
+/**
+ * Access management (members / invites / roles), embedded as a section of the
+ * Account page (it used to be its own /settings/access page). Callers gate
+ * rendering on management permissions.
+ */
+export function AccessPanel() {
   const { token } = useAuth();
   const { tenant, refresh } = useTenant();
   const canManageRoles = usePermission("roles:manage");
@@ -85,14 +90,14 @@ export function AccessPage() {
   if (!token || !tenant) return null;
 
   return (
-    <main className="mx-auto min-h-svh max-w-6xl px-6 py-12">
-      <header className="mb-10">
-        <h1 className="text-3xl font-semibold tracking-tight">Access</h1>
-        <p className="text-muted-foreground mt-2 max-w-2xl">
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-lg font-medium">Access</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
           Manage who belongs to {tenant.name}, what role they hold, and what each role
           can do.
         </p>
-      </header>
+      </div>
 
       <Tabs defaultValue="members">
         <TabsList>
@@ -120,7 +125,7 @@ export function AccessPage() {
           </TabsContent>
         )}
       </Tabs>
-    </main>
+    </section>
   );
 }
 

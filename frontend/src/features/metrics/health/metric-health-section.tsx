@@ -15,7 +15,11 @@ type LoadState =
   | { status: "ready"; health: MetricHealthSummary }
   | { status: "error"; message: string };
 
-export function MetricHealthPage() {
+/**
+ * Metric compile/run health, embedded as a section of the Workspace page
+ * (it used to be its own /settings/metric-health page).
+ */
+export function MetricHealthSection() {
   const { token } = useAuth();
   const { tenant } = useTenant();
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -40,13 +44,13 @@ export function MetricHealthPage() {
   }, [token, tenant]);
 
   return (
-    <main className="bg-background mx-auto min-h-svh max-w-3xl px-6 py-12">
-      <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Metric health</h1>
-        <p className="text-muted-foreground mt-2 text-sm">
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-lg font-medium">Metric health</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
           Compile runs, broken metrics, and parent-version notices.
         </p>
-      </header>
+      </div>
 
       {state.status === "loading" && <Skeleton className="h-32 w-full" />}
       {state.status === "error" && (
@@ -65,8 +69,8 @@ export function MetricHealthPage() {
             />
           </div>
 
-          <section>
-            <h2 className="mb-3 text-lg font-medium">Broken metrics</h2>
+          <div>
+            <h3 className="mb-3 font-medium">Broken metrics</h3>
             {state.health.broken_metrics.length === 0 ? (
               <p className="text-muted-foreground text-sm">None.</p>
             ) : (
@@ -84,10 +88,10 @@ export function MetricHealthPage() {
                 ))}
               </ul>
             )}
-          </section>
+          </div>
 
-          <section>
-            <h2 className="mb-3 text-lg font-medium">Recent compile runs</h2>
+          <div>
+            <h3 className="mb-3 font-medium">Recent compile runs</h3>
             {state.health.recent_compile_runs.length === 0 ? (
               <p className="text-muted-foreground text-sm">No runs yet.</p>
             ) : (
@@ -108,10 +112,10 @@ export function MetricHealthPage() {
                 ))}
               </ul>
             )}
-          </section>
+          </div>
         </div>
       )}
-    </main>
+    </section>
   );
 }
 

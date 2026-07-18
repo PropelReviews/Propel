@@ -1,9 +1,15 @@
 // Shapes mirror the backend analytics metrics API (app/schemas/metrics.py),
 // which serves the dbt-built DORA primitive marts (transformation/dbt). Used by
-// the /data page.
+// the dashboard chart components (home page metrics dashboard).
 
 import { toIsoDate, type Granularity } from "@/components/charts";
 import { authedGet } from "@/lib/api";
+
+/**
+ * `org` reads tenant-wide series; `me` restricts PR-based metrics to the
+ * signed-in user's authored work (GitHub login resolved server-side).
+ */
+export type MetricScope = "org" | "me";
 
 export type PullRequestActivityPoint = {
   period_start: string;
@@ -133,19 +139,22 @@ export type TicketDescriptionEditsResponse = {
 };
 
 type MetricRange = { granularity: Granularity; start: Date; end: Date };
+type ScopedMetricRange = MetricRange & { scope?: MetricScope };
 
-function rangeParams(options: MetricRange): URLSearchParams {
-  return new URLSearchParams({
+function rangeParams(options: ScopedMetricRange): URLSearchParams {
+  const params = new URLSearchParams({
     granularity: options.granularity,
     start: toIsoDate(options.start),
     end: toIsoDate(options.end),
   });
+  if (options.scope && options.scope !== "org") params.set("scope", options.scope);
+  return params;
 }
 
 export function getPullRequestActivity(
   token: string,
   tenantId: string,
-  options: MetricRange,
+  options: ScopedMetricRange,
 ): Promise<PullRequestActivityResponse> {
   const params = rangeParams(options);
   return authedGet<PullRequestActivityResponse>(
@@ -157,7 +166,7 @@ export function getPullRequestActivity(
 export function getCycleTime(
   token: string,
   tenantId: string,
-  options: MetricRange,
+  options: ScopedMetricRange,
 ): Promise<CycleTimeResponse> {
   const params = rangeParams(options);
   return authedGet<CycleTimeResponse>(
@@ -169,7 +178,7 @@ export function getCycleTime(
 export function getReviewLatency(
   token: string,
   tenantId: string,
-  options: MetricRange,
+  options: ScopedMetricRange,
 ): Promise<ReviewLatencyResponse> {
   const params = rangeParams(options);
   return authedGet<ReviewLatencyResponse>(
@@ -181,7 +190,7 @@ export function getReviewLatency(
 export function getChangeFailure(
   token: string,
   tenantId: string,
-  options: MetricRange,
+  options: ScopedMetricRange,
 ): Promise<ChangeFailureResponse> {
   const params = rangeParams(options);
   return authedGet<ChangeFailureResponse>(
@@ -270,6 +279,34 @@ export function getTicketDescriptionEdits(
   const params = rangeParams(options);
   return authedGet<TicketDescriptionEditsResponse>(
     `/api/v1/tenants/${tenantId}/metrics/ticket-description-edits?${params}`,
+    token,
+  );
+}
+
+export type MetricValuePoint = {
+  period_start: string;
+  value: number | null;
+};
+
+export type MetricValuesResponse = {
+  metric_id: string;
+  granularity: Granularity;
+  unit: string | null;
+  format: string | null;
+  points: MetricValuePoint[];
+};
+
+/** Workspace-total series for one enrolled declarative metric. */
+export function getMetricValues(
+  token: string,
+  tenantId: string,
+  metricId: string,
+  options: MetricRange,
+): Promise<MetricValuesResponse> {
+  const params = rangeParams(options);
+  params.set("metric_id", metricId);
+  return authedGet<MetricValuesResponse>(
+    `/api/v1/tenants/${tenantId}/metrics/values?${params}`,
     token,
   );
 }

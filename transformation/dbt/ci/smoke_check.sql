@@ -324,7 +324,7 @@ begin
             tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
             and metric_id = 'propel.cycle_time'
             and grain = 'day'
-            and dim_repo = ''
+            and is_total = true
     ),
     expected (bucket_day, median_seconds) as (
         values
@@ -359,7 +359,7 @@ begin
             tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
             and metric_id = 'propel.change_failure_rate'
             and grain = 'day'
-            and dim_repo = ''
+            and is_total = true
     ),
     expected (bucket_day, cfr, numerator, denominator) as (
         values
@@ -395,7 +395,7 @@ begin
             tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001'::uuid
             and metric_id = 'propel.cycle_time_trailing_30d'
             and grain = 'rolling_30d'
-            and dim_repo = ''
+            and is_total = true
             and (bucket_end - interval '1 day')::date = '2026-01-06'::date
     ),
     expected (report_day, median_seconds) as (

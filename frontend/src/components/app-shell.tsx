@@ -31,21 +31,16 @@ function TopNavLink({ to, children }: { to: string; children: ReactNode }) {
 }
 
 /**
- * Lightweight header shared by authenticated app pages: brand, nav (with the
- * Access link gated by management permissions), and a workspace switcher when
- * the user belongs to more than one tenant.
+ * Lightweight header shared by authenticated app pages: brand, nav, and a
+ * workspace switcher when the user belongs to more than one tenant. Workspace
+ * hosts integrations + metric health, so it shows for either capability;
+ * Account (/profile) hosts the user's own settings plus access management.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { status, signOut } = useAuth();
   const { tenants, tenant, setTenant } = useTenant();
-  const showAccess = useAnyPermission(
-    "roles:manage",
-    "members:assign_role",
-    "invites:read",
-  );
-  const showWorkspace = useAnyPermission("connections:manage");
+  const showWorkspace = useAnyPermission("connections:manage", "metrics:read");
   const showMetrics = useAnyPermission("metrics:read");
-  const showMetricAdmin = useAnyPermission("metrics:manage");
 
   return (
     <div className="bg-background min-h-svh">
@@ -61,19 +56,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             {status === "authenticated" && (
               <nav className="flex items-center gap-4">
                 <TopNavLink to="/home">Home</TopNavLink>
-                <TopNavLink to="/data">Data</TopNavLink>
                 {showMetrics && <TopNavLink to="/metrics">Metrics</TopNavLink>}
                 {showWorkspace && (
                   <TopNavLink to="/settings/workspace">Workspace</TopNavLink>
                 )}
-                {showMetricAdmin && (
-                  <TopNavLink to="/settings/metric-set">Metric set</TopNavLink>
-                )}
-                {showMetrics && (
-                  <TopNavLink to="/settings/metric-health">Health</TopNavLink>
-                )}
-                {showAccess && <TopNavLink to="/settings/access">Access</TopNavLink>}
-                <TopNavLink to="/profile">Profile</TopNavLink>
+                <TopNavLink to="/profile">Account</TopNavLink>
               </nav>
             )}
           </div>
